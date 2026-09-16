@@ -192,9 +192,16 @@ export function DocumentsPage() {
               <ul className="mt-2 space-y-2">
                 {docs.map((doc) => (
                   <li key={doc.id}>
-                    <Card className="flex items-center justify-between !py-3">
-                      <span className="font-medium text-gray-900 dark:text-gray-100">{doc.title}</span>
-                      <Button size="sm" onClick={() => handleDownload(doc.id)} disabled={downloadingId === doc.id}>
+                    <Card className="flex flex-wrap items-center justify-between gap-2 !py-3">
+                      <span className="min-w-0 break-words font-medium text-gray-900 dark:text-gray-100">
+                        {doc.title}
+                      </span>
+                      <Button
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => handleDownload(doc.id)}
+                        disabled={downloadingId === doc.id}
+                      >
                         {downloadingId === doc.id ? 'Preparing…' : 'Download'}
                       </Button>
                     </Card>

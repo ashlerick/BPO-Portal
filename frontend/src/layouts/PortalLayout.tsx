@@ -103,7 +103,7 @@ export function PortalLayout() {
             </span>
             <ThemeToggle />
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-3 text-sm sm:gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm sm:gap-4">
             <RoleSwitcher />
             <span className="max-w-[40vw] truncate text-gray-500 dark:text-gray-400 sm:max-w-none">
               {user?.email}

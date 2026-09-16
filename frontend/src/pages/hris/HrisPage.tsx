@@ -633,7 +633,7 @@ export function HrisPage() {
       <PageHeader title="HRIS" />
 
       {tabs.length > 1 && (
-        <div className="mb-4 flex gap-1 border-b border-black/5 dark:border-white/10">
+        <div className="mb-4 flex gap-1 overflow-x-auto border-b border-black/5 dark:border-white/10">
           {tabs.map((t) => (
             <button
               key={t.key}
