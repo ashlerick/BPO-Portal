@@ -46,16 +46,41 @@ function RoleSwitcher() {
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
+  const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
 
   return (
-    <Button
-      size="sm"
-      onClick={toggleTheme}
-      className="shrink-0"
-      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-    >
-      {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-    </Button>
+    <>
+      {/* Phones: icon-only, same square size as the burger next to it —
+          the icon shows what you'd switch TO (sun in dark mode, moon in
+          light), and the emoji is replaced with a drawn icon so it
+          looks the same on every Android vendor's emoji set. */}
+      <Button onClick={toggleTheme} className="shrink-0 !px-2.5 md:hidden" aria-label={label} title={label}>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={theme === 'dark' ? 'text-gold-400' : 'text-brand-700'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </>
+          ) : (
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          )}
+        </svg>
+      </Button>
+      {/* md and up: the labeled button, unchanged. */}
+      <Button size="sm" onClick={toggleTheme} className="shrink-0 max-md:hidden" title={label}>
+        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+      </Button>
+    </>
   )
 }
 
