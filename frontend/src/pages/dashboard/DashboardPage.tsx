@@ -78,7 +78,7 @@ export function DashboardPage() {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Quick Links
           </h2>
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-2 grid grid-cols-2 gap-2 md:block md:space-y-2">
             {quickLinks.map((link) => (
               <li key={link.to}>
                 <Link

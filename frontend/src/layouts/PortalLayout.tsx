@@ -46,41 +46,48 @@ function RoleSwitcher() {
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
-  const label = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
 
   return (
-    <>
-      {/* Phones: icon-only, same square size as the burger next to it —
-          the icon shows what you'd switch TO (sun in dark mode, moon in
-          light), and the emoji is replaced with a drawn icon so it
-          looks the same on every Android vendor's emoji set. */}
-      <Button onClick={toggleTheme} className="shrink-0 !px-2.5 md:hidden" aria-label={label} title={label}>
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={theme === 'dark' ? 'text-gold-400' : 'text-brand-700'}
-        >
-          {theme === 'dark' ? (
-            <>
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </>
-          ) : (
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          )}
-        </svg>
-      </Button>
-      {/* md and up: the labeled button, unchanged. */}
-      <Button size="sm" onClick={toggleTheme} className="shrink-0 max-md:hidden" title={label}>
-        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-      </Button>
-    </>
+    // md and up only — on phones the switch lives in the burger menu
+    // (ThemeSwitchRow) so it isn't a permanent fixture in the header.
+    <Button
+      size="sm"
+      onClick={toggleTheme}
+      className="shrink-0 max-md:hidden"
+      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+    </Button>
+  )
+}
+
+// Phone version: a full-width row with an on/off switch, the standard
+// Android settings pattern. The whole row is the tap target.
+function ThemeSwitchRow() {
+  const { theme, toggleTheme } = useTheme()
+  const dark = theme === 'dark'
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={dark}
+      onClick={toggleTheme}
+      className="flex w-full items-center justify-between gap-3 py-1.5 text-left text-gray-700 dark:text-gray-300"
+    >
+      Dark mode
+      <span
+        className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors ${
+          dark ? 'border-brand-500 bg-brand-600' : 'border-gray-300 bg-gray-200'
+        }`}
+      >
+        <span
+          className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            dark ? 'translate-x-5' : ''
+          }`}
+        />
+      </span>
+    </button>
   )
 }
 
@@ -138,7 +145,21 @@ export function PortalLayout() {
     if (!menuOpen) return
     const onKeyDown = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+
+    // While the menu is open the page behind it must not scroll — only
+    // the menu itself. Also close it if the window grows to the desktop
+    // layout (e.g. rotating a tablet), so the lock can't get stuck on.
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const onBreakpoint = () => desktop.matches && setMenuOpen(false)
+    desktop.addEventListener('change', onBreakpoint)
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      desktop.removeEventListener('change', onBreakpoint)
+      document.body.style.overflow = previousOverflow
+    }
   }, [menuOpen])
 
   // One set of links, rendered twice: a horizontal strip from md up, a
@@ -191,10 +212,11 @@ export function PortalLayout() {
         {menuOpen && (
           <div
             id="mobile-menu"
-            className="max-h-[calc(100svh-4.5rem)] overflow-y-auto border-t border-black/5 px-4 pb-4 md:hidden dark:border-white/10"
+            className="max-h-[calc(100svh-4.5rem)] overflow-y-auto overscroll-contain border-t border-black/5 px-4 pb-4 md:hidden dark:border-white/10"
           >
             <nav className="mx-auto flex max-w-6xl flex-col gap-1 pt-2 text-sm">{navLinks(true)}</nav>
             <div className="mx-auto mt-3 flex max-w-6xl flex-col gap-3 border-t border-black/5 pt-3 text-sm dark:border-white/10">
+              <ThemeSwitchRow />
               <RoleSwitcher />
               <span className="truncate text-gray-500 dark:text-gray-400">{user?.email}</span>
               <div className="flex gap-2">
@@ -207,6 +229,12 @@ export function PortalLayout() {
           </div>
         )}
       </header>
+      {/* Dims the page behind the open menu; tapping it closes the menu.
+          A sibling of the header, not a child — the header's backdrop-blur
+          would otherwise become the containing block for this fixed layer. */}
+      {menuOpen && (
+        <div aria-hidden="true" onClick={() => setMenuOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
+      )}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         <Outlet />
       </main>

@@ -64,8 +64,12 @@ export function AdminWidgets() {
           </h3>
           <ul className="mt-2 divide-y divide-black/5 text-sm dark:divide-white/10">
             {recentActions.map((log) => (
-              <li key={log.id} className="py-1.5 text-gray-600 first:pt-0 last:pb-0 dark:text-gray-400">
-                <span className="text-gray-400 dark:text-gray-500">{dateFormatter.format(new Date(log.createdAt))}</span>{' '}
+              <li key={log.id} className="py-2 text-gray-600 first:pt-0 last:pb-0 dark:text-gray-400 sm:py-1.5">
+                {/* Own line on phones so the sentence below reads cleanly
+                    instead of running on from the timestamp. */}
+                <span className="block text-xs text-gray-400 dark:text-gray-500 sm:inline sm:text-sm">
+                  {dateFormatter.format(new Date(log.createdAt))}
+                </span>{' '}
                 <span className="text-gray-900 dark:text-gray-200">{log.user}</span> — {humanize(log.action)}{' '}
                 {humanize(log.resource)}
               </li>

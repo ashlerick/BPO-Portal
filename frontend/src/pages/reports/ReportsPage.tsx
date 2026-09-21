@@ -153,6 +153,7 @@ function ReportCard({ report, onUpdated }: { report: WeeklyReport; onUpdated: (r
 
   const isReviewer = effectiveRoles.some((r) => r === 'manager' || r === 'hr' || r === 'admin')
   const canEdit = report.status === 'draft' || report.status === 'rejected'
+  const hasActions = canEdit || (isReviewer && (report.status === 'submitted' || report.status === 'reviewed'))
 
   function transition(action: string, extra?: Record<string, unknown>) {
     const requiredRoles =
@@ -266,7 +267,14 @@ function ReportCard({ report, onUpdated }: { report: WeeklyReport; onUpdated: (r
               Reject
             </Button>
           )}
-          <span className="mx-1 self-center text-gray-300 dark:text-gray-700">|</span>
+          {/* Export gets its own row on phones (a full-width empty item
+              forces the wrap); the "|" divider only makes sense inline. */}
+          {hasActions && <span aria-hidden="true" className="basis-full sm:hidden" />}
+          {hasActions && (
+            <span aria-hidden="true" className="mx-1 hidden self-center text-gray-300 dark:text-gray-700 sm:inline">
+              |
+            </span>
+          )}
           {(['csv', 'xlsx', 'pdf'] as const).map((format) => (
             <Button
               key={format}
