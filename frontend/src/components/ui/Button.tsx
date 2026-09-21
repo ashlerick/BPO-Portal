@@ -15,8 +15,10 @@ const variants: Record<Variant, string> = {
 }
 
 const sizes: Record<Size, string> = {
-  sm: 'px-2.5 py-1.5 text-xs',
-  md: 'px-4 py-2 text-sm',
+  // Taller on phones (closer to a comfortable touch target), back to
+  // the compact desktop size from the sm breakpoint up.
+  sm: 'px-3 py-2 text-xs sm:px-2.5 sm:py-1.5',
+  md: 'px-4 py-2.5 text-sm sm:py-2',
 }
 
 export function Button({

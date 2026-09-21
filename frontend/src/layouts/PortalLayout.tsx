@@ -31,7 +31,7 @@ function RoleSwitcher() {
       <select
         value={viewAsRole ?? ''}
         onChange={(e) => setViewAsRole(e.target.value ? (e.target.value as Role) : null)}
-        className="rounded-md border border-gray-300 bg-white/70 px-1.5 py-1 text-sm dark:border-white/15 dark:bg-white/5"
+        className="rounded-md border border-gray-300 bg-white/70 px-1.5 py-1 text-base sm:text-sm dark:border-white/15 dark:bg-white/5"
       >
         <option value="">My role (Admin)</option>
         {roleOptions.map((r) => (
