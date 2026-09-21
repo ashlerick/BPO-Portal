@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABELS, type Role } from '../auth/types'
@@ -26,12 +26,12 @@ function RoleSwitcher() {
   if (!user?.roles.includes('admin')) return null
 
   return (
-    <label className="flex shrink-0 items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+    <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
       View as:
       <select
         value={viewAsRole ?? ''}
         onChange={(e) => setViewAsRole(e.target.value ? (e.target.value as Role) : null)}
-        className="rounded-md border border-gray-300 bg-white/70 px-1.5 py-1 text-base sm:text-sm dark:border-white/15 dark:bg-white/5"
+        className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white/70 px-1.5 py-1 text-base sm:text-sm dark:border-white/15 dark:bg-white/5"
       >
         <option value="">My role (Admin)</option>
         {roleOptions.map((r) => (
@@ -86,51 +86,101 @@ function CheckOutButton() {
   )
 }
 
+function BurgerButton({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <Button
+      onClick={onClick}
+      className="shrink-0 !px-2.5 md:hidden"
+      aria-label={open ? 'Close menu' : 'Open menu'}
+      aria-expanded={open}
+      aria-controls="mobile-menu"
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        {open ? <path d="M4 4l12 12M16 4L4 16" /> : <path d="M3 5h14M3 10h14M3 15h14" />}
+      </svg>
+    </Button>
+  )
+}
+
 export function PortalLayout() {
   const { user, logout, effectiveRoles } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
   const visibleNavItems = navItems.filter(
     (item) => item.roles?.some((r) => effectiveRoles.includes(r)) ?? true,
   )
 
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKeyDown = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [menuOpen])
+
+  // One set of links, rendered twice: a horizontal strip from md up, a
+  // vertical list inside the burger menu below it. Picking a link
+  // closes the menu.
+  function navLinks(mobile: boolean) {
+    return visibleNavItems.map((item) => (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.to === '/'}
+        onClick={() => setMenuOpen(false)}
+        className={({ isActive }) =>
+          'shrink-0 rounded-md px-3 font-medium transition ' +
+          (mobile ? 'py-2.5 ' : 'py-1.5 ') +
+          (isActive
+            ? 'bg-brand-600/10 text-brand-700 dark:bg-brand-400/10 dark:text-brand-400'
+            : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white')
+        }
+      >
+        {item.label}
+      </NavLink>
+    ))
+  }
+
   return (
     <div className="min-h-svh flex flex-col">
       <header className="sticky top-0 z-40 border-b border-black/5 bg-white/75 backdrop-blur-md dark:border-white/10 dark:bg-brand-950/75">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
-          <div className="flex min-w-0 shrink-0 items-center gap-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-x-4 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
             <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-7 w-7 shrink-0" />
             <span className="min-w-0 truncate text-lg font-bold tracking-tight text-gold-600 dark:text-gold-400">
               BPO Portal
             </span>
             <ThemeToggle />
           </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm sm:gap-4">
+          <div className="hidden min-w-0 flex-wrap items-center gap-4 text-sm md:flex">
             <RoleSwitcher />
-            <span className="max-w-[40vw] truncate text-gray-500 dark:text-gray-400 sm:max-w-none">
-              {user?.email}
-            </span>
+            <span className="truncate text-gray-500 dark:text-gray-400">{user?.email}</span>
             <CheckOutButton />
             <Button size="sm" onClick={logout} className="shrink-0">
               Log out
             </Button>
           </div>
+          <BurgerButton open={menuOpen} onClick={() => setMenuOpen((o) => !o)} />
         </div>
-        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-2 text-sm">
-          {visibleNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                'shrink-0 rounded-md px-3 py-1.5 font-medium transition ' +
-                (isActive
-                  ? 'bg-brand-600/10 text-brand-700 dark:bg-brand-400/10 dark:text-brand-400'
-                  : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white')
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="mx-auto hidden max-w-6xl gap-1 overflow-x-auto px-4 pb-2 text-sm md:flex">
+          {navLinks(false)}
         </nav>
+        {menuOpen && (
+          <div
+            id="mobile-menu"
+            className="max-h-[calc(100svh-4.5rem)] overflow-y-auto border-t border-black/5 px-4 pb-4 md:hidden dark:border-white/10"
+          >
+            <nav className="mx-auto flex max-w-6xl flex-col gap-1 pt-2 text-sm">{navLinks(true)}</nav>
+            <div className="mx-auto mt-3 flex max-w-6xl flex-col gap-3 border-t border-black/5 pt-3 text-sm dark:border-white/10">
+              <RoleSwitcher />
+              <span className="truncate text-gray-500 dark:text-gray-400">{user?.email}</span>
+              <div className="flex gap-2">
+                <CheckOutButton />
+                <Button size="sm" onClick={logout} className="shrink-0">
+                  Log out
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
         <Outlet />
