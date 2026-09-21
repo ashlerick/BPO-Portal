@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, useAuth } from '../../auth/AuthContext'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 import { useTheme } from '../../theme/ThemeContext'
 
 export function LoginPage() {
@@ -66,13 +67,12 @@ export function LoginPage() {
             <label htmlFor="password" className="text-sm text-gray-600 dark:text-gray-400">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="field"
             />
             <div className="text-right">
               <Link to="/forgot-password" className="text-sm text-brand-600 hover:underline dark:text-brand-400">

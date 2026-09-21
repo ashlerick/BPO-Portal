@@ -8,6 +8,10 @@ export interface MyEmployeeProfile {
   status: string
   dateHired: string | null
   silBalance: number
+  phone: string | null
+  address: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
 }
 
 export interface EmployeeRecord {
@@ -22,6 +26,10 @@ export interface EmployeeRecord {
   status: string
   dateHired: string | null
   silBalance: number
+  phone: string | null
+  address: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
 }
 
 export interface Team {

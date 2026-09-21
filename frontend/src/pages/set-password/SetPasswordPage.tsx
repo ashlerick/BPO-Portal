@@ -5,6 +5,7 @@ import type { AuthUser } from '../../auth/types'
 import { api, ApiError } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 
 export function SetPasswordPage() {
   const [searchParams] = useSearchParams()
@@ -64,28 +65,26 @@ export function SetPasswordPage() {
             <label htmlFor="password" className="text-sm text-gray-600 dark:text-gray-400">
               New password
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               required
               minLength={8}
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="field"
             />
           </div>
           <div className="space-y-1">
             <label htmlFor="confirm" className="text-sm text-gray-600 dark:text-gray-400">
               Confirm password
             </label>
-            <input
+            <PasswordInput
               id="confirm"
-              type="password"
               required
               minLength={8}
+              autoComplete="new-password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              className="field"
             />
           </div>
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

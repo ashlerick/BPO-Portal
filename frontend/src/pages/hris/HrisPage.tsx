@@ -5,6 +5,7 @@ import { api, ApiError } from '../../services/api'
 import { Card, CardForm } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 import { humanize } from '../../utils/text'
 import type { Department, EmployeeRecord, MyEmployeeProfile, Team } from './types'
 
@@ -14,6 +15,281 @@ import type { Department, EmployeeRecord, MyEmployeeProfile, Team } from './type
 // Sep 6 evening in e.g. US timezones).
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' })
 const statusOptions = ['active', 'on_leave', 'terminated'] as const
+
+// Label/value pairs for the four self-service contact fields, in display
+// order. Callers decide how to show an empty one ('—' on your own profile,
+// omitted in HR's compact view).
+function contactFields(c: {
+  phone: string | null
+  address: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
+}): [string, string | null][] {
+  return [
+    ['Phone', c.phone],
+    ['Address', c.address],
+    ['Emergency contact', c.emergencyContactName],
+    ['Emergency contact phone', c.emergencyContactPhone],
+  ]
+}
+
+// Phones: one label/value row per field (a long email or address has the
+// full width to itself). sm and up: a multi-column grid.
+function DetailList({ rows, wide = false }: { rows: [string, string][]; wide?: boolean }) {
+  return (
+    <dl
+      className={`mt-2 divide-y divide-black/5 text-sm dark:divide-white/10 sm:mt-3 sm:grid sm:gap-x-4 sm:gap-y-3 sm:divide-y-0 ${
+        wide ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+      }`}
+    >
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex items-baseline justify-between gap-4 py-2 sm:block sm:py-0">
+          <dt className="shrink-0 text-xs text-gray-500 dark:text-gray-400">{label}</dt>
+          <dd className="min-w-0 whitespace-pre-line break-words text-right text-gray-900 dark:text-gray-200 sm:mt-0.5 sm:text-left">
+            {value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function ContactDetailsCard({
+  profile,
+  onSaved,
+}: {
+  profile: MyEmployeeProfile
+  onSaved: (updated: MyEmployeeProfile) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [emergencyContactName, setEmergencyContactName] = useState('')
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState('')
+
+  function startEditing() {
+    setPhone(profile.phone ?? '')
+    setAddress(profile.address ?? '')
+    setEmergencyContactName(profile.emergencyContactName ?? '')
+    setEmergencyContactPhone(profile.emergencyContactPhone ?? '')
+    setError(null)
+    setSaved(false)
+    setEditing(true)
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      const updated = await api.put<MyEmployeeProfile>('/employees/me', {
+        phone,
+        address,
+        emergencyContactName,
+        emergencyContactPhone,
+      })
+      onSaved(updated)
+      setEditing(false)
+      setSaved(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save your contact details')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-medium text-gray-900 dark:text-gray-100">Contact details</h3>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Only you and HR/Admin can see these.</p>
+        </div>
+        {!editing && (
+          <Button size="sm" className="shrink-0" onClick={startEditing}>
+            Edit
+          </Button>
+        )}
+      </div>
+
+      {editing ? (
+        <form onSubmit={save} className="mt-3 space-y-3 sm:max-w-md">
+          <div className="space-y-1">
+            <label htmlFor="contact-phone" className="text-sm text-gray-600 dark:text-gray-400">
+              Phone
+            </label>
+            <input
+              id="contact-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="field"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="contact-address" className="text-sm text-gray-600 dark:text-gray-400">
+              Address
+            </label>
+            <textarea
+              id="contact-address"
+              rows={2}
+              maxLength={300}
+              autoComplete="street-address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="field"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="contact-emergency-name" className="text-sm text-gray-600 dark:text-gray-400">
+              Emergency contact name
+            </label>
+            <input
+              id="contact-emergency-name"
+              maxLength={100}
+              autoComplete="off"
+              value={emergencyContactName}
+              onChange={(e) => setEmergencyContactName(e.target.value)}
+              className="field"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="contact-emergency-phone" className="text-sm text-gray-600 dark:text-gray-400">
+              Emergency contact phone
+            </label>
+            <input
+              id="contact-emergency-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              value={emergencyContactPhone}
+              onChange={(e) => setEmergencyContactPhone(e.target.value)}
+              className="field"
+            />
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+            <Button type="button" onClick={() => setEditing(false)} disabled={saving}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <DetailList rows={contactFields(profile).map(([label, value]) => [label, value ?? '—'])} />
+          {saved && (
+            <p role="status" className="mt-2 text-sm text-brand-700 dark:text-brand-400">
+              Contact details saved.
+            </p>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
+
+function ChangePasswordCard() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [changed, setChanged] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setChanged(false)
+
+    if (next.length < 8) return setError('New password must be at least 8 characters')
+    if (next !== confirm) return setError('New passwords do not match')
+    if (next === current) return setError('New password must be different from your current password')
+
+    setSaving(true)
+    try {
+      await api.post('/auth/change-password', { currentPassword: current, newPassword: next })
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      setChanged(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change your password')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <CardForm onSubmit={submit}>
+      <h3 className="font-medium text-gray-900 dark:text-gray-100">Change password</h3>
+      <div className="mt-3 space-y-3 sm:max-w-sm">
+        <div className="space-y-1">
+          <label htmlFor="current-password" className="text-sm text-gray-600 dark:text-gray-400">
+            Current password
+          </label>
+          <PasswordInput
+            id="current-password"
+            required
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="new-password" className="text-sm text-gray-600 dark:text-gray-400">
+            New password
+          </label>
+          <PasswordInput
+            id="new-password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="confirm-new-password" className="text-sm text-gray-600 dark:text-gray-400">
+            Confirm new password
+          </label>
+          <PasswordInput
+            id="confirm-new-password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+        {changed && (
+          <p role="status" className="text-sm text-brand-700 dark:text-brand-400">
+            Password changed.
+          </p>
+        )}
+        <Button type="submit" variant="primary" disabled={saving} className="w-full sm:w-auto">
+          {saving ? 'Changing…' : 'Change password'}
+        </Button>
+      </div>
+    </CardForm>
+  )
+}
 
 function MyProfile() {
   const [profile, setProfile] = useState<MyEmployeeProfile | null>(null)
@@ -37,37 +313,37 @@ function MyProfile() {
 
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
-  if (notFound) {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">No employee profile on file for your account yet.</p>
-  }
-  if (!profile) return null
 
-  const fields: [string, string][] = [
-    ['Position', profile.position ?? '—'],
-    ['Department', profile.department ?? '—'],
-    ['Team', profile.team ?? '—'],
-    ['Status', humanize(profile.status)],
-    ['Date Hired', profile.dateHired ? dateFormatter.format(new Date(profile.dateHired)) : '—'],
-    ['Work Email', profile.email],
-    ['SIL Balance', `${profile.silBalance} day${profile.silBalance === 1 ? '' : 's'}`],
-  ]
+  const fields: [string, string][] = profile
+    ? [
+        ['Position', profile.position ?? '—'],
+        ['Department', profile.department ?? '—'],
+        ['Team', profile.team ?? '—'],
+        ['Status', humanize(profile.status)],
+        ['Date Hired', profile.dateHired ? dateFormatter.format(new Date(profile.dateHired)) : '—'],
+        ['Work Email', profile.email],
+        ['SIL Balance', `${profile.silBalance} day${profile.silBalance === 1 ? '' : 's'}`],
+      ]
+    : []
 
+  // Changing your own password doesn't depend on having an employee
+  // record, so it's shown either way.
   return (
-    <Card>
-      <h3 className="font-medium text-gray-900 dark:text-gray-100">{profile.name}</h3>
-      {/* Phones: one label/value row per field (a long email or position
-          has the full width to itself). sm and up: the 3-column grid. */}
-      <dl className="mt-2 divide-y divide-black/5 text-sm dark:divide-white/10 sm:mt-3 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-3 sm:divide-y-0">
-        {fields.map(([label, value]) => (
-          <div key={label} className="flex items-baseline justify-between gap-4 py-2 sm:block sm:py-0">
-            <dt className="shrink-0 text-xs text-gray-500 dark:text-gray-400">{label}</dt>
-            <dd className="min-w-0 break-words text-right text-gray-900 dark:text-gray-200 sm:mt-0.5 sm:text-left">
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </Card>
+    <div className="space-y-4">
+      {notFound && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">No employee profile on file for your account yet.</p>
+      )}
+      {profile && (
+        <>
+          <Card>
+            <h3 className="font-medium text-gray-900 dark:text-gray-100">{profile.name}</h3>
+            <DetailList rows={fields} wide />
+          </Card>
+          <ContactDetailsCard profile={profile} onSaved={setProfile} />
+        </>
+      )}
+      <ChangePasswordCard />
+    </div>
   )
 }
 
@@ -130,6 +406,21 @@ function EmployeeRow({
         <td data-primary className="py-2.5 pl-4 pr-4">
           <div className="font-medium text-gray-900 dark:text-gray-100">{employee.name}</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">{employee.email}</div>
+          {contactFields(employee).some(([, v]) => v) && (
+            <details className="mt-1 text-xs">
+              <summary className="cursor-pointer select-none text-brand-700 dark:text-brand-400">Contact details</summary>
+              <dl className="mt-1 space-y-0.5 whitespace-pre-line break-words text-gray-600 dark:text-gray-400">
+                {contactFields(employee)
+                  .filter(([, v]) => v)
+                  .map(([label, v]) => (
+                    <div key={label}>
+                      <dt className="inline text-gray-500 dark:text-gray-500">{label}: </dt>
+                      <dd className="inline">{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </details>
+          )}
         </td>
         <td data-label="Position" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.position ?? '—'}</td>
         <td data-label="Department" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.department ?? '—'}</td>

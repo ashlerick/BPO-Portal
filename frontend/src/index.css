@@ -148,6 +148,14 @@ body {
     letter-spacing: -0.01em;
   }
 
+  /* Edge draws its own "reveal password" eye inside password inputs;
+     PasswordInput has its own toggle, so hide the native one rather than
+     show two. */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
+  }
+
   /* The popup list a <select> opens is a native, browser-drawn surface
      — and critically, Chromium on Windows just ignores author
      background-color on <option> in that popup while still honoring

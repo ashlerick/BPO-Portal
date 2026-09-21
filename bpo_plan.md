@@ -1200,13 +1200,35 @@ on what already exists, and what would benefit from a piece built earlier in thi
 priority. Treat the ordering as a reasonable default to reconsider once real usage tells us what
 actually matters, per section 39's guiding principle.
 
-## Phase 9 — Self-Service & Mobile
+## Phase 9 — Self-Service & Mobile ✅ (built)
 
 Cross-cutting enhancements to what's already built (auth, HRIS, core portal UI) rather than new
 domains — the natural next step since nothing here needs a new subsystem.
 
-* [ ] Mobile-friendly/PWA support
-* [ ] Employee self-service (HRIS section 11 already lists this as a "future" HRIS feature)
+* [x] Mobile-friendly/PWA support
+  * Responsive from 320px up: burger menu on phones (with the light/dark switch inside it, page
+    scroll locked while it's open), tables become stacked cards, compact date filters with quick
+    ranges, reworked HRIS/Dashboard/Reports layouts, 16px inputs so iOS doesn't zoom on focus.
+  * Installable to the home screen: web manifest, icons, theme-color. **Deliberately no service
+    worker / offline mode** — the app needs live data anyway, and a caching worker on GitHub Pages
+    risks serving stale builds.
+  * Light theme redesigned for lower glare (softer surfaces, higher-contrast muted text); dark mode
+    untouched.
+* [x] Employee self-service (HRIS section 11 already lists this as a "future" HRIS feature)
+  * My Profile tab: employees edit their own **contact details** (phone, address, emergency
+    contact) — visible only to that employee and HR/Admin (HR sees them under the employee's name
+    in the Employees tab) — and **change their own password** in-app (requires the current one).
+    Backed by `PUT /employees/me` and `POST /auth/change-password`, both folded into existing
+    serverless functions (Vercel Hobby's 12-function cap). Contact changes and password changes are
+    audit-logged (without the values).
+  * Self-service can only touch those fields: HR-controlled ones (position, status, team, SIL
+    balance) use a separate schema and can't be reached through the self-service route.
+  * Every password field in the app has a show/hide toggle (shared `PasswordInput`).
+  * Adds a database migration (`add_employee_contact_details`: four nullable columns on
+    `employees`) — **apply it to production (`prisma migrate deploy`, which the backend's build
+    already runs) before/with the frontend deploy**, or My Profile's new cards will error.
+  * Not built: employee-submitted change requests that HR approves — a better fit for the Phase 15
+    request system than a one-off flow.
 
 ---
 
