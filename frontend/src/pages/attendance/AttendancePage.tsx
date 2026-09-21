@@ -122,9 +122,10 @@ export function AttendancePage() {
       />
 
       <Card className="mb-4 space-y-3">
-        {/* Quick ranges — the handful people actually want — scroll
-            sideways on a narrow screen rather than wrapping. */}
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {/* Quick ranges — the handful people actually want. Equal-width
+            2x2 on phones, one row of four from 480px, natural-width
+            chips from md. Never scrolls. */}
+        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 md:flex md:flex-wrap">
           {rangePresets().map((p) => {
             const active = p.from === from && p.to === to
             return (
@@ -132,7 +133,7 @@ export function AttendancePage() {
                 key={p.label}
                 size="sm"
                 aria-pressed={active}
-                className={`shrink-0 whitespace-nowrap ${active ? '!border-brand-500 !bg-brand-600/15 !text-brand-700 dark:!text-brand-300' : ''}`}
+                className={`w-full whitespace-nowrap md:w-auto ${active ? '!border-brand-500 !bg-brand-600/15 !text-brand-700 dark:!text-brand-300' : ''}`}
                 onClick={() => {
                   setFrom(p.from)
                   setTo(p.to)

@@ -55,11 +55,15 @@ function MyProfile() {
   return (
     <Card>
       <h3 className="font-medium text-gray-900 dark:text-gray-100">{profile.name}</h3>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+      {/* Phones: one label/value row per field (a long email or position
+          has the full width to itself). sm and up: the 3-column grid. */}
+      <dl className="mt-2 divide-y divide-black/5 text-sm dark:divide-white/10 sm:mt-3 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-3 sm:divide-y-0">
         {fields.map(([label, value]) => (
-          <div key={label}>
-            <dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt>
-            <dd className="mt-0.5 text-gray-900 dark:text-gray-200">{value}</dd>
+          <div key={label} className="flex items-baseline justify-between gap-4 py-2 sm:block sm:py-0">
+            <dt className="shrink-0 text-xs text-gray-500 dark:text-gray-400">{label}</dt>
+            <dd className="min-w-0 break-words text-right text-gray-900 dark:text-gray-200 sm:mt-0.5 sm:text-left">
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -266,19 +270,19 @@ function CreateTeamOrDepartment({
 
   return (
     <CardForm onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1">
+      <div className="w-full space-y-1 md:w-auto">
         <label className="text-sm text-gray-600 dark:text-gray-400">Type</label>
         <select value={kind} onChange={(e) => setKind(e.target.value as 'department' | 'team')} className="field">
           <option value="department">Department</option>
           <option value="team">Team</option>
         </select>
       </div>
-      <div className="space-y-1">
+      <div className="w-full space-y-1 md:w-auto">
         <label className="text-sm text-gray-600 dark:text-gray-400">Name</label>
         <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
       </div>
       {kind === 'team' && (
-        <div className="space-y-1">
+        <div className="w-full space-y-1 md:w-auto">
           <label className="text-sm text-gray-600 dark:text-gray-400">Department</label>
           <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} className="field">
             <option value="">Select…</option>
@@ -291,7 +295,7 @@ function CreateTeamOrDepartment({
         </div>
       )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <Button type="submit" variant="primary" disabled={submitting}>
+      <Button type="submit" variant="primary" disabled={submitting} className="w-full md:w-auto">
         {submitting ? 'Creating…' : 'Create'}
       </Button>
     </CardForm>
@@ -348,7 +352,7 @@ function DepartmentRow({
     <li className="flex flex-wrap items-center gap-2 py-1.5">
       {editing ? (
         <>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="field w-40 py-1" />
+          <input value={name} onChange={(e) => setName(e.target.value)} className="field w-full py-1 md:w-40" />
           <Button size="sm" variant="primary" onClick={save} disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
           </Button>
@@ -364,7 +368,7 @@ function DepartmentRow({
         </>
       ) : (
         <>
-          <span className="flex-1 text-gray-900 dark:text-gray-100">{department.name}</span>
+          <span className="min-w-0 flex-1 break-words text-gray-900 dark:text-gray-100">{department.name}</span>
           <Button size="sm" onClick={() => setEditing(true)}>
             Rename
           </Button>
@@ -428,7 +432,7 @@ function TeamRow({
     <li className="flex flex-wrap items-center gap-2 py-1.5">
       {editing ? (
         <>
-          <input value={name} onChange={(e) => setName(e.target.value)} className="field w-40 py-1" />
+          <input value={name} onChange={(e) => setName(e.target.value)} className="field w-full py-1 md:w-40" />
           <Button size="sm" variant="primary" onClick={save} disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
           </Button>
@@ -444,7 +448,7 @@ function TeamRow({
         </>
       ) : (
         <>
-          <span className="flex-1 text-gray-900 dark:text-gray-100">{team.name}</span>
+          <span className="min-w-0 flex-1 break-words text-gray-900 dark:text-gray-100">{team.name}</span>
           <Button size="sm" onClick={() => setEditing(true)}>
             Rename
           </Button>
@@ -633,12 +637,15 @@ export function HrisPage() {
       <PageHeader title="HRIS" />
 
       {tabs.length > 1 && (
-        <div className="mb-4 flex gap-1 overflow-x-auto border-b border-black/5 dark:border-white/10">
+        // Phones: equal-width tabs that share the row (a long label wraps
+        // to two lines instead of the bar scrolling). md and up: compact
+        // tabs at their natural width, as before.
+        <div className="mb-4 grid auto-cols-fr grid-flow-col gap-1 border-b border-black/5 dark:border-white/10 md:flex">
           {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition ${
+              className={`flex items-center justify-center border-b-2 px-1.5 py-2 text-center text-sm font-medium leading-tight transition md:px-3 ${
                 tab === t.key
                   ? 'border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-400'
                   : 'border-transparent text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
