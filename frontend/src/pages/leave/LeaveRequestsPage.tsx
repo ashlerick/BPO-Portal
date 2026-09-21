@@ -54,14 +54,14 @@ function CreateForm({ onCreated }: { onCreated: (r: LeaveRequest) => void }) {
 
   return (
     <CardForm onSubmit={handleSubmit} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
+      <div className="grid grid-cols-2 gap-3 max-[359px]:grid-cols-1">
+        <div className="min-w-0 space-y-1">
           <label className="text-sm text-gray-600 dark:text-gray-400">Start date</label>
-          <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="field" />
+          <input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} className="field px-2.5 md:px-3" />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <label className="text-sm text-gray-600 dark:text-gray-400">End date</label>
-          <input type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} className="field" />
+          <input type="date" required value={endDate} onChange={(e) => setEndDate(e.target.value)} className="field px-2.5 md:px-3" />
         </div>
       </div>
       <div className="space-y-1">

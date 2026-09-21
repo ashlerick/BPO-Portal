@@ -4,7 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncStat
 import { useApiData } from '../../hooks/useApiData'
 import { api, ApiError } from '../../services/api'
 import type { EmployeeRecord } from '../hris/types'
-import { formatDateOnly, formatManilaTime, todayInManilaIso } from '../../utils/dates'
+import { addDaysIso, formatDateOnly, formatManilaTime, startOfMonthIso, todayInManilaIso } from '../../utils/dates'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -43,11 +43,30 @@ function MarkAbsentRowButton({ record, onMarked }: { record: AttendanceRecord; o
   )
 }
 
-function EmployeeFilter({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+function rangePresets() {
+  const today = todayInManilaIso()
+  const yesterday = addDaysIso(today, -1)
+  return [
+    { label: 'Today', from: today, to: today },
+    { label: 'Yesterday', from: yesterday, to: yesterday },
+    { label: 'Last 7 days', from: addDaysIso(today, -6), to: today },
+    { label: 'This month', from: startOfMonthIso(today), to: today },
+  ]
+}
+
+function EmployeeFilter({
+  value,
+  onChange,
+  className = '',
+}: {
+  value: string
+  onChange: (id: string) => void
+  className?: string
+}) {
   const { data: employees } = useApiData<EmployeeRecord[]>('/employees')
 
   return (
-    <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+    <label className={`flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400 ${className}`}>
       Employee
       <select value={value} onChange={(e) => onChange(e.target.value)} className="field mt-1">
         <option value="">All employees</option>
@@ -102,29 +121,51 @@ export function AttendancePage() {
         description={isReviewer ? 'All employees.' : 'Your check-in/check-out history.'}
       />
 
-      <Card className="mb-4 flex flex-wrap items-end gap-3">
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          From
-          <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="field mt-1" />
-        </label>
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          To
-          <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="field mt-1" />
-        </label>
-        {isReviewer && <EmployeeFilter value={employeeId} onChange={setEmployeeId} />}
-        <Button
-          size="sm"
-          onClick={() => {
-            const t = todayInManilaIso()
-            setFrom(t)
-            setTo(t)
-          }}
-        >
-          Today
-        </Button>
-        <Button size="sm" variant="primary" onClick={handleExport} disabled={exporting || rangeInvalid}>
-          {exporting ? 'Exporting…' : 'Export to Excel'}
-        </Button>
+      <Card className="mb-4 space-y-3">
+        {/* Quick ranges — the handful people actually want — scroll
+            sideways on a narrow screen rather than wrapping. */}
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {rangePresets().map((p) => {
+            const active = p.from === from && p.to === to
+            return (
+              <Button
+                key={p.label}
+                size="sm"
+                aria-pressed={active}
+                className={`shrink-0 whitespace-nowrap ${active ? '!border-brand-500 !bg-brand-600/15 !text-brand-700 dark:!text-brand-300' : ''}`}
+                onClick={() => {
+                  setFrom(p.from)
+                  setTo(p.to)
+                }}
+              >
+                {p.label}
+              </Button>
+            )
+          })}
+        </div>
+        {/* Phones: From/To share a row (stacking below 360px), Employee
+            and Export get full-width rows. md+: one wrapping row. */}
+        <div className="grid grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:flex md:flex-wrap md:items-end">
+          <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
+            From
+            <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+          </label>
+          <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
+            To
+            <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+          </label>
+          {isReviewer && (
+            <EmployeeFilter value={employeeId} onChange={setEmployeeId} className="col-span-full md:col-auto" />
+          )}
+          <Button
+            variant="primary"
+            onClick={handleExport}
+            disabled={exporting || rangeInvalid}
+            className="col-span-full w-full md:col-auto md:w-auto"
+          >
+            {exporting ? 'Exporting…' : 'Export to Excel'}
+          </Button>
+        </div>
       </Card>
       {rangeInvalid && <p className="mb-2 text-sm text-red-600 dark:text-red-400">"To" can't be before "From".</p>}
       {exportError && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{exportError}</p>}
@@ -135,7 +176,7 @@ export function AttendancePage() {
 
       {data && data.length > 0 && (
         <Card className="overflow-x-auto !p-0">
-          <table className="w-full text-left text-sm">
+          <table className="stack-table w-full text-left text-sm">
             <thead>
               <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
                 {isReviewer && <th className="py-3 pl-4 pr-4 font-medium">Employee</th>}
@@ -153,30 +194,52 @@ export function AttendancePage() {
                   className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]"
                 >
                   {isReviewer && (
-                    <td className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">{r.employeeName}</td>
+                    <td data-primary className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">
+                      {r.employeeName}
+                    </td>
                   )}
-                  <td className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">{formatDateOnly(r.date)}</td>
+                  <td
+                    {...(isReviewer ? { 'data-label': 'Date' } : { 'data-primary': true })}
+                    className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300"
+                  >
+                    {formatDateOnly(r.date)}
+                  </td>
                   {r.status === 'absent' ? (
                     <>
-                      <td colSpan={isReviewer ? 3 : 2} className="py-2.5 pr-4 text-amber-700 dark:text-amber-500">
+                      <td
+                        data-label="Status"
+                        colSpan={isReviewer ? 3 : 2}
+                        className="py-2.5 pr-4 text-amber-700 dark:text-amber-500"
+                      >
                         Absent
                       </td>
-                      {isReviewer && <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">—</td>}
+                      {isReviewer && (
+                        <td data-hide-mobile className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                          —
+                        </td>
+                      )}
                     </>
                   ) : (
                     <>
-                      <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{timeFmt(r.checkInAt)}</td>
-                      <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{timeFmt(r.checkOutAt)}</td>
+                      <td data-label="Check In" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                        {timeFmt(r.checkInAt)}
+                      </td>
+                      <td data-label="Check Out" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                        {timeFmt(r.checkOutAt)}
+                      </td>
                       {isReviewer && (
                         <td
+                          data-label="Check-in IP"
                           className={`py-2.5 pr-4 ${r.checkInOffSite ? 'text-amber-700 dark:text-amber-500' : 'text-gray-700 dark:text-gray-300'}`}
                         >
-                          {r.checkInIp ?? '—'}
-                          {r.checkInOffSite && <span className="ml-1 text-xs">(off-site)</span>}
+                          <span>
+                            {r.checkInIp ?? '—'}
+                            {r.checkInOffSite && <span className="ml-1 whitespace-nowrap text-xs">(off-site)</span>}
+                          </span>
                         </td>
                       )}
                       {isReviewer && (
-                        <td className="py-2.5 pr-4">
+                        <td data-actions className="py-2.5 pr-4">
                           <MarkAbsentRowButton record={r} onMarked={() => setReloadToken((t) => t + 1)} />
                         </td>
                       )}

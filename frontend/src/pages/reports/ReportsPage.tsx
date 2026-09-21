@@ -102,7 +102,7 @@ function CreateReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (r: 
 
   return (
     <CardForm onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1">
+      <div className="w-full space-y-1 md:w-auto">
         <label className="text-sm text-gray-600 dark:text-gray-400">Team</label>
         <select required value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field">
           <option value="">Select…</option>
@@ -113,22 +113,30 @@ function CreateReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (r: 
           ))}
         </select>
       </div>
-      <div className="space-y-1">
-        <label className="text-sm text-gray-600 dark:text-gray-400">Period start</label>
-        <input
-          type="date"
-          required
-          value={periodStart}
-          onChange={(e) => setPeriodStart(e.target.value)}
-          className="field"
-        />
-      </div>
-      <div className="space-y-1">
-        <label className="text-sm text-gray-600 dark:text-gray-400">Period end</label>
-        <input type="date" required value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="field" />
+      <div className="grid w-full grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:contents">
+        <div className="min-w-0 space-y-1">
+          <label className="text-sm text-gray-600 dark:text-gray-400">Period start</label>
+          <input
+            type="date"
+            required
+            value={periodStart}
+            onChange={(e) => setPeriodStart(e.target.value)}
+            className="field px-2.5 md:px-3"
+          />
+        </div>
+        <div className="min-w-0 space-y-1">
+          <label className="text-sm text-gray-600 dark:text-gray-400">Period end</label>
+          <input
+            type="date"
+            required
+            value={periodEnd}
+            onChange={(e) => setPeriodEnd(e.target.value)}
+            className="field px-2.5 md:px-3"
+          />
+        </div>
       </div>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <Button type="submit" variant="primary" disabled={submitting}>
+      <Button type="submit" variant="primary" disabled={submitting} className="w-full md:w-auto">
         {submitting ? 'Creating…' : 'New report'}
       </Button>
     </CardForm>

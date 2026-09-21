@@ -29,6 +29,18 @@ export function todayInManilaIso(): string {
   return `${manila.getUTCFullYear()}-${String(manila.getUTCMonth() + 1).padStart(2, '0')}-${String(manila.getUTCDate()).padStart(2, '0')}`
 }
 
+// Pure calendar math on YYYY-MM-DD strings (UTC, so no DST/timezone
+// surprises) — for building ranges relative to todayInManilaIso().
+export function addDaysIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+export function startOfMonthIso(iso: string): string {
+  return `${iso.slice(0, 7)}-01`
+}
+
 // Check-in/check-out timestamps should always read as Manila wall-clock
 // time, not the viewer's browser/OS timezone — otherwise the same
 // check-in shows a different time to a reviewer in a different zone

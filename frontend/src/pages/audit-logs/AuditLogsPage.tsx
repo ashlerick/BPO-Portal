@@ -20,7 +20,7 @@ export function AuditLogsPage() {
 
       {data && data.length > 0 && (
         <Card className="overflow-x-auto !p-0">
-          <table className="w-full text-left text-sm">
+          <table className="stack-table w-full text-left text-sm">
             <thead>
               <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
                 <th className="py-3 pl-4 pr-4 font-medium">When</th>
@@ -36,18 +36,20 @@ export function AuditLogsPage() {
                   key={log.id}
                   className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]"
                 >
-                  <td className="py-2.5 pl-4 pr-4 text-gray-500 dark:text-gray-400">
+                  <td data-primary className="py-2.5 pl-4 pr-4 text-gray-500 dark:text-gray-400">
                     {dateFormatter.format(new Date(log.createdAt))}
                   </td>
-                  <td className="py-2.5 pr-4 text-gray-900 dark:text-gray-200">{log.user}</td>
-                  <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{humanize(log.action)}</td>
-                  <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                    {humanize(log.resource)}
-                    {log.resourceId && (
-                      <span className="text-gray-400 dark:text-gray-500"> #{log.resourceId.slice(0, 8)}</span>
-                    )}
+                  <td data-label="User" className="py-2.5 pr-4 text-gray-900 dark:text-gray-200">{log.user}</td>
+                  <td data-label="Action" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{humanize(log.action)}</td>
+                  <td data-label="Resource" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                    <span>
+                      {humanize(log.resource)}
+                      {log.resourceId && (
+                        <span className="text-gray-400 dark:text-gray-500"> #{log.resourceId.slice(0, 8)}</span>
+                      )}
+                    </span>
                   </td>
-                  <td className="py-2.5 pr-4">
+                  <td data-label="Result" className="py-2.5 pr-4">
                     <span
                       className={
                         log.result === 'success'

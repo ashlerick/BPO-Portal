@@ -123,21 +123,21 @@ function EmployeeRow({
   if (!editing) {
     return (
       <tr className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]">
-        <td className="py-2.5 pl-4 pr-4">
+        <td data-primary className="py-2.5 pl-4 pr-4">
           <div className="font-medium text-gray-900 dark:text-gray-100">{employee.name}</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">{employee.email}</div>
         </td>
-        <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.position ?? '—'}</td>
-        <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.department ?? '—'}</td>
-        <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.team ?? '—'}</td>
-        <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{humanize(employee.status)}</td>
-        <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+        <td data-label="Position" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.position ?? '—'}</td>
+        <td data-label="Department" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.department ?? '—'}</td>
+        <td data-label="Team" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.team ?? '—'}</td>
+        <td data-label="Status" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{humanize(employee.status)}</td>
+        <td data-label="Date Hired" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
           {employee.dateHired ? dateFormatter.format(new Date(employee.dateHired)) : '—'}
         </td>
-        <td className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+        <td data-label="SIL Balance" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
           {employee.silBalance} day{employee.silBalance === 1 ? '' : 's'}
         </td>
-        <td className="py-2.5 pr-4">
+        <td data-actions className="py-2.5 pr-4">
           <Button size="sm" onClick={() => setEditing(true)}>
             Edit
           </Button>
@@ -148,14 +148,14 @@ function EmployeeRow({
 
   return (
     <tr className="border-b border-black/5 dark:border-white/5">
-      <td className="py-2.5 pl-4 pr-4 align-top">
+      <td data-primary className="py-2.5 pl-4 pr-4 align-top">
         <div className="font-medium text-gray-900 dark:text-gray-100">{employee.name}</div>
         <div className="text-xs text-gray-500 dark:text-gray-400">{employee.email}</div>
       </td>
-      <td className="py-2.5 pr-4 align-top">
+      <td data-label="Position" className="py-2.5 pr-4 align-top">
         <input value={position} onChange={(e) => setPosition(e.target.value)} className="field w-32 py-1" />
       </td>
-      <td className="py-2.5 pr-4 align-top">
+      <td data-label="Department" className="py-2.5 pr-4 align-top">
         <select
           value={departmentId}
           onChange={(e) => {
@@ -172,7 +172,7 @@ function EmployeeRow({
           ))}
         </select>
       </td>
-      <td className="py-2.5 pr-4 align-top">
+      <td data-label="Team" className="py-2.5 pr-4 align-top">
         <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field py-1">
           <option value="">—</option>
           {teamsInDepartment.map((t) => (
@@ -182,7 +182,7 @@ function EmployeeRow({
           ))}
         </select>
       </td>
-      <td className="py-2.5 pr-4 align-top">
+      <td data-label="Status" className="py-2.5 pr-4 align-top">
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="field py-1">
           {statusOptions.map((s) => (
             <option key={s} value={s}>
@@ -191,7 +191,7 @@ function EmployeeRow({
           ))}
         </select>
       </td>
-      <td className="py-2.5 pr-4 align-top">
+      <td data-label="Date Hired" className="py-2.5 pr-4 align-top">
         <input
           type="date"
           value={dateHired}
@@ -199,7 +199,7 @@ function EmployeeRow({
           className="field py-1"
         />
       </td>
-      <td className="py-2.5 pr-4 align-top">
+      <td data-label="SIL Balance" className="py-2.5 pr-4 align-top">
         <input
           type="number"
           min={0}
@@ -209,8 +209,8 @@ function EmployeeRow({
           className="field w-20 py-1"
         />
       </td>
-      <td className="py-2.5 pr-4 align-top">
-        <div className="flex flex-col gap-1">
+      <td data-actions className="py-2.5 pr-4 align-top">
+        <div className="flex flex-wrap gap-1 md:flex-col">
           <Button size="sm" variant="primary" onClick={save} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
@@ -537,7 +537,7 @@ function EmployeeDirectory() {
 
   return (
     <Card className="overflow-x-auto !p-0">
-      <table className="w-full text-left text-sm">
+      <table className="stack-table w-full text-left text-sm">
         <thead>
           <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
             <th className="py-3 pl-4 pr-4 font-medium">Employee</th>

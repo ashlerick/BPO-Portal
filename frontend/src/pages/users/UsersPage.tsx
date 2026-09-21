@@ -343,7 +343,7 @@ function UserRow({
   if (!editing) {
     return (
       <tr className="border-b border-black/5 align-top transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]">
-        <td className="py-2.5 pl-4 pr-4">
+        <td data-primary className="py-2.5 pl-4 pr-4">
           <div className="font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
           {!user.passwordSet && (
@@ -352,10 +352,10 @@ function UserRow({
             </Badge>
           )}
         </td>
-        <td className="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">
+        <td data-label="Roles" className="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">
           {user.roles.map((r) => ROLE_LABELS[r]).join(', ')}
         </td>
-        <td className="py-2.5 pr-4">
+        <td data-actions className="py-2.5 pr-4">
           <div className="flex flex-wrap gap-1.5">
             <Button size="sm" onClick={startEditing}>
               Edit
@@ -379,44 +379,59 @@ function UserRow({
 
   return (
     <tr className="border-b border-black/5 align-top dark:border-white/5">
-      <td className="py-2.5 pl-4 pr-4">
+      <td data-primary className="py-2.5 pl-4 pr-4">
+        {/* Visible labels on phones only: once a field is filled in its
+            placeholder is gone, and in the stacked card layout there's no
+            column header above it to say which field it is. */}
         <div className="space-y-1">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            autoComplete="off"
-            className="field py-1"
-          />
-          <input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="First name"
-            autoComplete="off"
-            className="field py-1"
-          />
-          <input
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="Last name"
-            autoComplete="off"
-            className="field py-1"
-          />
-          <input
-            autoComplete="off"
-            value={middleName}
-            onChange={(e) => setMiddleName(e.target.value)}
-            placeholder="Middle name (optional)"
-            className="field py-1"
-          />
+          <label className="block">
+            <span className="text-xs text-gray-500 md:sr-only dark:text-gray-400">Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              autoComplete="off"
+              className="field py-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-gray-500 md:sr-only dark:text-gray-400">First name</span>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="First name"
+              autoComplete="off"
+              className="field py-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-gray-500 md:sr-only dark:text-gray-400">Last name</span>
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Last name"
+              autoComplete="off"
+              className="field py-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-gray-500 md:sr-only dark:text-gray-400">Middle name (optional)</span>
+            <input
+              autoComplete="off"
+              value={middleName}
+              onChange={(e) => setMiddleName(e.target.value)}
+              placeholder="Middle name (optional)"
+              className="field py-1"
+            />
+          </label>
         </div>
       </td>
-      <td className="py-2.5 pr-4">
+      <td data-label="Roles" className="py-2.5 pr-4">
         <RoleCheckboxes selected={roles} onChange={setRoles} />
         {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
       </td>
-      <td className="py-2.5 pr-4">
+      <td data-actions className="py-2.5 pr-4">
         <div className="flex gap-1.5">
           <Button size="sm" variant="primary" onClick={save} disabled={!dirty || saving}>
             {saving ? 'Saving…' : 'Save'}
@@ -465,7 +480,7 @@ export function UsersPage() {
           {error && <ErrorState message={error} />}
           {users && (
             <Card className="overflow-x-auto !p-0">
-              <table className="w-full text-left text-sm">
+              <table className="stack-table w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
                     <th className="py-3 pl-4 pr-4 font-medium">User</th>
