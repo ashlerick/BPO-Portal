@@ -24,7 +24,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('bpo_theme', theme)
     // Keeps the mobile browser's address-bar/status-bar color matched
     // to the page (same values as the body background in index.css).
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b241a' : '#e9f2ec')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b241a' : '#d5e0d8')
   }, [theme])
 
   function toggleTheme() {

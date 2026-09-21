@@ -46,18 +46,69 @@
   color-scheme: light;
 }
 
-/* Light mode, softened — the original version (a near-white radial
-   gradient under near-white cards) was reported as genuinely too
-   bright/eye-straining by an actual night-shift user. Still light,
-   just without the blown-out white hotspot. Explicit `color` for the
-   same reason color-scheme is now unambiguous above. */
+/* Light theme palette (dark mode is untouched — everything below is
+   scoped to :root:not(.dark)).
+
+   The first two light themes were still reported as hard on the eyes:
+   near-white cards (white at 80% over a very pale page) and near-black
+   text add up to large bright areas with harsh contrast, and the
+   muted grays were too faint to read comfortably at the same time.
+   Rather than restyle every component, this remaps the *palette*
+   Tailwind's utilities read from, so every existing bg-white /
+   text-gray-* / border-gray-* class picks it up:
+
+   - "white" is now a soft sage-tinted paper instead of #fff, and the
+     page behind it is a step darker, so no large area is near-white.
+   - The gray scale is green-tinted and shifted so BODY text is a soft
+     dark green-gray (not #111827) and secondary/muted text is
+     DARKER than stock Tailwind's — lower brightness overall but
+     higher contrast where text actually is (muted text was ~2.2:1).
+   - Pastel status colors (badges, banners) and the amber heading
+     color are toned to match; links/primary buttons darkened so they
+     still clear 4.5:1 on the softer surfaces.
+
+   To tune the whole light theme, edit --page-* and --color-white. */
+:root:not(.dark) {
+  --page-top: #d5e0d8;
+  --page-bottom: #c7d4ca;
+
+  --color-white: #e9f0eb;
+  --color-gray-50: #e0e8e2;
+  --color-gray-100: #d8e2db;
+  --color-gray-200: #c6d3ca;
+  --color-gray-300: #b1c0b6;
+  --color-gray-400: #5a695f;
+  --color-gray-500: #4d5b53;
+  --color-gray-600: #3f4c45;
+  --color-gray-700: #303c35;
+  --color-gray-800: #222c27;
+  --color-gray-900: #18211c;
+
+  --color-gold-600: #9a4a08;
+  --color-brand-50: #d9ebdf;
+  --color-brand-100: #c9e6d4;
+  --color-brand-200: #b1dcc2;
+  --color-brand-600: #0a6538;
+  --color-brand-700: #085430;
+  --color-brand-800: #06442a;
+  --color-amber-50: #efe6cc;
+  --color-amber-100: #ead9a9;
+  --color-red-50: #ecd8d5;
+  --color-red-100: #e8cbc7;
+  --color-red-600: #c21f1f;
+  --color-purple-100: #ddd4ec;
+  --color-purple-600: #6b2fa0;
+  --color-purple-700: #5a2688;
+  --color-blue-100: #d0dcee;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background-color: #e9f2ec;
-  background-image: radial-gradient(circle at 50% -10%, #f3f8f4 0%, #e3eee6 45%, #d6e7db 100%);
+  background-color: var(--page-bottom);
+  background-image: linear-gradient(180deg, var(--page-top) 0%, var(--page-bottom) 100%);
   min-height: 100svh;
-  color: #111827;
+  color: var(--color-gray-900);
 }
 
 .dark {
@@ -133,8 +184,8 @@ body {
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
-    -webkit-text-fill-color: #111827;
-    box-shadow: 0 0 0 1000px #ffffff inset;
+    -webkit-text-fill-color: var(--color-gray-900);
+    box-shadow: 0 0 0 1000px var(--color-white) inset;
     transition: background-color 9999s ease-in-out 0s;
   }
 

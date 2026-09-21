@@ -82,7 +82,11 @@ function ThemeSwitchRow() {
         }`}
       >
         <span
-          className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+          // Positioned inside the track's 1px border: 3px in from the left,
+          // vertically centered by half-height, and (when on) shifted by
+          // exactly track-inner-width - knob - 2*3px = 20px so both ends
+          // have an equal 3px gap.
+          className={`absolute left-[3px] top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-transform ${
             dark ? 'translate-x-5' : ''
           }`}
         />
