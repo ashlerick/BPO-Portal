@@ -8,8 +8,9 @@ import { formatDisplayName } from '../lib/names.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): GET /employees, GET /employees/me,
-// PUT /employees/:id. The /me and /:id sub-paths are routed here via
-// vercel.json rewrites, arriving as ?sub=me or ?sub=<id>.
+// PUT /employees/:id, plus the employee's own PUT /employees/me (contact
+// details). The /me and /:id sub-paths are routed here via vercel.json
+// rewrites, arriving as ?sub=me or ?sub=<id>.
 
 const createSchema = z.object({
   userId: z.string().min(1),
@@ -27,6 +28,29 @@ const updateSchema = z.object({
   teamId: z.string().uuid().nullable().optional(),
   dateHired: z.string().regex(dateOnlyPattern, 'dateHired must be YYYY-MM-DD').nullable().optional(),
   silBalance: z.number().int().min(0).optional(),
+})
+
+// Empty/whitespace-only input means "clear it", stored as null.
+const blankToNull = (v: string | null | undefined) => (v === undefined ? undefined : v === null || v === '' ? null : v)
+const phonePattern = /^[0-9+()\-.\s]{5,30}$/
+const optionalPhone = z
+  .string()
+  .trim()
+  .refine((v) => v === '' || phonePattern.test(v), 'Enter a valid phone number')
+  .nullable()
+  .optional()
+  .transform(blankToNull)
+const optionalText = (max: number, label: string) =>
+  z.string().trim().max(max, `${label} must be ${max} characters or fewer`).nullable().optional().transform(blankToNull)
+
+// What an employee may change about themselves. Deliberately separate
+// from updateSchema (HR/Admin fields like status, team, SIL balance) so
+// there is no way to reach those through the self-service route.
+const contactSchema = z.object({
+  phone: optionalPhone,
+  address: optionalText(300, 'Address'),
+  emergencyContactName: optionalText(100, 'Emergency contact name'),
+  emergencyContactPhone: optionalPhone,
 })
 
 const employeeSelect = {
@@ -48,6 +72,10 @@ function serialize(e: {
   status: string
   dateHired: Date | null
   silBalance: number
+  phone: string | null
+  address: string | null
+  emergencyContactName: string | null
+  emergencyContactPhone: string | null
 }) {
   return {
     id: e.id,
@@ -61,6 +89,10 @@ function serialize(e: {
     status: e.status,
     dateHired: e.dateHired,
     silBalance: e.silBalance,
+    phone: e.phone,
+    address: e.address,
+    emergencyContactName: e.emergencyContactName,
+    emergencyContactPhone: e.emergencyContactPhone,
   }
 }
 
@@ -89,6 +121,39 @@ async function handleMe(req: AuthedRequest, res: VercelResponse) {
     res.status(404).json({ message: 'No employee profile on file yet' })
     return
   }
+  res.status(200).json(serialize(employee))
+}
+
+// Self-service: an employee edits their own contact details. Looked up
+// by the token's user id, never by a client-supplied id, so it can only
+// ever touch the caller's own record.
+async function handleUpdateMe(req: AuthedRequest, res: VercelResponse) {
+  const parsed = contactSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid contact details' })
+    return
+  }
+
+  let employee
+  try {
+    employee = await prisma.employee.update({
+      where: { userId: req.auth.sub },
+      data: parsed.data,
+      ...employeeSelect,
+    })
+  } catch (err) {
+    if (isNotFoundError(err)) {
+      res.status(404).json({ message: 'No employee profile on file yet' })
+      return
+    }
+    throw err
+  }
+
+  // Audited without the values — phone/address are personal data and
+  // don't belong in the log. Awaited (unlike most audit calls here): a
+  // fire-and-forget write can be cut off when the serverless function
+  // returns, and a change to personal data is one we want on record.
+  await logAudit(req.auth.sub, 'update_contact', 'employee', employee.id)
   res.status(200).json(serialize(employee))
 }
 
@@ -169,6 +234,7 @@ async function handler(req: AuthedRequest, res: VercelResponse) {
   if (!sub && req.method === 'GET') return handleList(req, res)
   if (!sub && req.method === 'POST') return handleCreate(req, res)
   if (sub === 'me' && req.method === 'GET') return handleMe(req, res)
+  if (sub === 'me' && req.method === 'PUT') return handleUpdateMe(req, res)
   if (sub && sub !== 'me' && req.method === 'PUT') return handleUpdate(req, res, sub)
 
   res.status(404).json({ message: 'Not found' })

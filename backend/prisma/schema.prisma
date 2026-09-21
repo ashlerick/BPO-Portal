@@ -78,6 +78,13 @@ model Employee {
   managerId  String?
   silBalance Int       @default(5)
 
+  // Self-service contact details: the employee edits their own; HR/Admin
+  // can view them. Nothing else in the API returns these.
+  phone                 String?
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
   leaveRequests     LeaveRequest[]
   attendanceRecords AttendanceRecord[]
 
