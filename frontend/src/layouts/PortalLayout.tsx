@@ -7,9 +7,79 @@ import { Button } from '../components/ui/Button'
 import { useTheme } from '../theme/ThemeContext'
 import { NOTIFICATIONS_CHANGED, type NotificationsResponse } from '../pages/notifications/types'
 
+type IconName =
+  | 'dashboard'
+  | 'announcements'
+  | 'attendance'
+  | 'leave'
+  | 'documents'
+  | 'reports'
+  | 'benefits'
+  | 'requests'
+  | 'performance'
+  | 'notifications'
+  | 'calendar'
+  | 'profile'
+  | 'settings'
+  | 'people'
+  | 'recruitment'
+  | 'onboarding'
+  | 'offboarding'
+  | 'shield'
+  | 'alert'
+  | 'payroll'
+  | 'audit'
+  | 'logout'
+  | 'chevron'
+
+// Outline icons on a 24px grid, drawn as plain strokes.
+const ICONS: Record<IconName, string> = {
+  dashboard: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  announcements: 'M3 11v2a1 1 0 001 1h2l5 4V6L6 10H4a1 1 0 00-1 1zM15 9a4 4 0 010 6M18 6.5a8 8 0 010 11',
+  attendance: 'M12 7v5l3 2M12 21a9 9 0 100-18 9 9 0 000 18z',
+  leave: 'M5 5h14v15H5zM5 9h14M9 3v4M15 3v4M9 14l2 2 4-4',
+  documents: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
+  reports: 'M5 20V10M12 20V4M19 20v-7',
+  benefits: 'M4 10h16v10H4zM3 7h18v3H3zM12 7v13M12 7C10 3 7 4 8 6s4 1 4 1zM12 7c2-4 5-3 4-1s-4 1-4 1z',
+  requests: 'M9 4h6l1 2h3v15H5V6h3zM9 12h6M9 16h4',
+  performance: 'M4 17l5-5 4 4 7-8M15 8h5v5',
+  notifications: 'M6 9a6 6 0 0112 0c0 5 2 6 2 6H4s2-1 2-6zM10 19a2 2 0 004 0',
+  calendar: 'M5 5h14v15H5zM5 9h14M9 3v4M15 3v4',
+  profile: 'M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0',
+  settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+  people: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2 20a7 7 0 0114 0M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 4 2.6 4 6',
+  recruitment: 'M10 11a4 4 0 100-8 4 4 0 000 8zM3 21a7 7 0 0114 0M19 8v6M16 11h6',
+  onboarding: 'M15 4h4v16h-4M10 8l4 4-4 4M14 12H4',
+  offboarding: 'M9 4H5v16h4M15 8l4 4-4 4M19 12H9',
+  shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  alert: 'M12 4l9 16H3zM12 10v4M12 17v.5',
+  payroll: 'M3 7h18v10H3zM12 14a2 2 0 100-4 2 2 0 000 4zM6 10v.01M18 14v.01',
+  audit: 'M5 5h14M5 10h14M5 15h9M5 20h6',
+  logout: 'M9 4H5v16h4M15 8l4 4-4 4M19 12H9',
+  chevron: 'M9 6l6 6-6 6',
+}
+
+function Icon({ name, className = 'h-[18px] w-[18px]' }: { name: IconName; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`shrink-0 ${className}`}
+    >
+      <path d={ICONS[name]} />
+    </svg>
+  )
+}
+
 interface NavItem {
   to: string
   label: string
+  icon: IconName
   roles?: readonly Role[]
 }
 
@@ -26,45 +96,45 @@ const navGroups: NavGroup[] = [
   {
     label: 'General',
     items: [
-      { to: '/', label: 'Dashboard' },
-      { to: '/announcements', label: 'Announcements' },
-      { to: '/attendance', label: 'Attendance' },
-      { to: '/leave', label: 'Leave Requests' },
-      { to: '/documents', label: 'Documents' },
-      { to: '/reports', label: 'Weekly Reports', roles: ['team_leader', 'manager', 'hr', 'admin'] },
-      { to: '/benefits', label: 'Benefits' },
-      { to: '/hr-requests', label: 'HR Requests' },
-      { to: '/performance', label: 'Performance' },
-      { to: '/notifications', label: 'Notifications' },
-      { to: '/calendar', label: 'Calendar' },
-      { to: '/profile', label: 'My Profile' },
-      { to: '/settings', label: 'Settings' },
+      { to: '/', label: 'Dashboard', icon: 'dashboard' },
+      { to: '/announcements', label: 'Announcements', icon: 'announcements' },
+      { to: '/attendance', label: 'Attendance', icon: 'attendance' },
+      { to: '/leave', label: 'Leave Requests', icon: 'leave' },
+      { to: '/documents', label: 'Documents', icon: 'documents' },
+      { to: '/reports', label: 'Weekly Reports', icon: 'reports', roles: ['team_leader', 'manager', 'hr', 'admin'] },
+      { to: '/benefits', label: 'Benefits', icon: 'benefits' },
+      { to: '/hr-requests', label: 'HR Requests', icon: 'requests' },
+      { to: '/performance', label: 'Performance', icon: 'performance' },
+      { to: '/notifications', label: 'Notifications', icon: 'notifications' },
+      { to: '/calendar', label: 'Calendar', icon: 'calendar' },
+      { to: '/profile', label: 'My Profile', icon: 'profile' },
+      { to: '/settings', label: 'Settings', icon: 'settings' },
     ],
   },
   {
     label: 'HR',
     roles: ['hr', 'admin'],
     items: [
-      { to: '/hris', label: 'Employee Management' },
-      { to: '/recruitment', label: 'Recruitment' },
-      { to: '/onboarding', label: 'Onboarding' },
-      { to: '/offboarding', label: 'Offboarding' },
-      { to: '/benefits-admin', label: 'Benefits Administration' },
-      { to: '/employee-relations', label: 'Employee Relations' },
-      { to: '/payroll', label: 'Payroll' },
+      { to: '/hris', label: 'Employee Management', icon: 'people' },
+      { to: '/recruitment', label: 'Recruitment', icon: 'recruitment' },
+      { to: '/onboarding', label: 'Onboarding', icon: 'onboarding' },
+      { to: '/offboarding', label: 'Offboarding', icon: 'offboarding' },
+      { to: '/benefits-admin', label: 'Benefits Administration', icon: 'shield' },
+      { to: '/employee-relations', label: 'Employee Relations', icon: 'alert' },
+      { to: '/payroll', label: 'Payroll', icon: 'payroll' },
     ],
   },
   {
     label: 'Admin',
     roles: ['admin'],
     items: [
-      { to: '/users', label: 'Users' },
-      { to: '/audit-logs', label: 'Audit Logs' },
+      { to: '/users', label: 'Users', icon: 'people' },
+      { to: '/audit-logs', label: 'Audit Logs', icon: 'audit' },
     ],
   },
 ]
 
-// Unread count for the header bell: fetched on load, on navigation, every
+// Unread count for the bell: fetched on load, on navigation, every
 // minute, and whenever a page reports it changed something.
 function useUnreadCount(): number {
   const location = useLocation()
@@ -90,38 +160,31 @@ function useUnreadCount(): number {
   return unread
 }
 
-function NotificationBell({ unread, className = '' }: { unread: number; className?: string }) {
+function UnreadBadge({ count, className = '' }: { count: number; className?: string }) {
+  if (count <= 0) return null
   return (
-    <Link
-      to="/notifications"
-      aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-      className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-black/10 text-gray-600 transition hover:bg-black/5 dark:border-white/15 dark:text-gray-300 dark:hover:bg-white/10 ${className}`}
+    <span
+      className={`flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-none text-white ${className}`}
     >
-      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 8a5 5 0 0110 0c0 4 1.5 5.5 1.5 5.5h-13S5 12 5 8zM8.5 16.5a1.6 1.6 0 003 0" />
-      </svg>
-      {unread > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-none text-white">
-          {unread > 9 ? '9+' : unread}
-        </span>
-      )}
-    </Link>
+      {count > 9 ? '9+' : count}
+    </span>
   )
 }
 
 const roleOptions = (Object.entries(ROLE_LABELS) as [Role, string][]).map(([value, label]) => ({ value, label }))
 
+// The admin "view as" switcher, styled for the dark sidebar.
 function RoleSwitcher() {
   const { user, viewAsRole, setViewAsRole } = useAuth()
   if (!user?.roles.includes('admin')) return null
 
   return (
-    <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-      View as:
+    <label className="flex flex-col gap-1 text-xs text-gray-400">
+      View as
       <select
         value={viewAsRole ?? ''}
         onChange={(e) => setViewAsRole(e.target.value ? (e.target.value as Role) : null)}
-        className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white/70 px-1.5 py-1 text-base sm:text-sm dark:border-white/15 dark:bg-white/5"
+        className="w-full rounded-lg border border-white/15 bg-white/5 px-2 py-1.5 text-base text-gray-100 sm:text-sm"
       >
         <option value="">My role (Admin)</option>
         {roleOptions.map((r) => (
@@ -134,58 +197,11 @@ function RoleSwitcher() {
   )
 }
 
-function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme()
+// Buttons that sit on the dark sidebar surface.
+const sidebarButton =
+  '!border-white/15 !bg-white/5 !text-gray-100 hover:!bg-white/10 dark:!border-white/15 dark:!bg-white/5 dark:!text-gray-100'
 
-  return (
-    // md and up only — on phones the switch lives in the burger menu
-    // (ThemeSwitchRow) so it isn't a permanent fixture in the header.
-    <Button
-      size="sm"
-      onClick={toggleTheme}
-      className="shrink-0 max-md:hidden"
-      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-    >
-      {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
-    </Button>
-  )
-}
-
-// Phone version: a full-width row with an on/off switch, the standard
-// Android settings pattern. The whole row is the tap target.
-function ThemeSwitchRow() {
-  const { theme, toggleTheme } = useTheme()
-  const dark = theme === 'dark'
-
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={dark}
-      onClick={toggleTheme}
-      className="flex w-full items-center justify-between gap-3 py-1.5 text-left text-gray-700 dark:text-gray-300"
-    >
-      Dark mode
-      <span
-        className={`relative h-7 w-12 shrink-0 rounded-full border transition-colors ${
-          dark ? 'border-brand-500 bg-brand-600' : 'border-gray-300 bg-gray-200'
-        }`}
-      >
-        <span
-          // Positioned inside the track's 1px border: 3px in from the left,
-          // vertically centered by half-height, and (when on) shifted by
-          // exactly track-inner-width - knob - 2*3px = 20px so both ends
-          // have an equal 3px gap.
-          className={`absolute left-[3px] top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-transform ${
-            dark ? 'translate-x-5' : ''
-          }`}
-        />
-      </span>
-    </button>
-  )
-}
-
-function CheckOutButton() {
+function CheckOutButton({ className = '' }: { className?: string }) {
   const { attendanceStatus, refreshAttendance } = useAuth()
   const [checkingOut, setCheckingOut] = useState(false)
 
@@ -206,26 +222,31 @@ function CheckOutButton() {
   if (!attendanceStatus?.checkedIn || attendanceStatus.checkedOut || attendanceStatus.status === 'absent') return null
 
   return (
-    <Button size="sm" onClick={handleCheckOut} disabled={checkingOut} className="shrink-0">
+    <Button size="sm" onClick={handleCheckOut} disabled={checkingOut} className={`${sidebarButton} ${className}`}>
       {checkingOut ? 'Checking out…' : 'Check Out'}
     </Button>
   )
 }
 
-function BurgerButton({ open, onClick }: { open: boolean; onClick: () => void }) {
+function ThemeButton({ className = '' }: { className?: string }) {
+  const { theme, toggleTheme } = useTheme()
   return (
     <Button
-      onClick={onClick}
-      className="shrink-0 !px-2.5 md:hidden"
-      aria-label={open ? 'Close menu' : 'Open menu'}
-      aria-expanded={open}
-      aria-controls="mobile-menu"
+      size="sm"
+      onClick={toggleTheme}
+      className={`${sidebarButton} ${className}`}
+      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
     >
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        {open ? <path d="M4 4l12 12M16 4L4 16" /> : <path d="M3 5h14M3 10h14M3 15h14" />}
-      </svg>
+      {theme === 'dark' ? '☀️' : '🌙'}
     </Button>
   )
+}
+
+function initials(name: string | undefined, email: string | undefined): string {
+  const source = (name ?? email ?? '?').trim()
+  const parts = source.split(/\s+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '')).toUpperCase()
 }
 
 function readGroupOpen(label: string): boolean | null {
@@ -239,16 +260,19 @@ function readGroupOpen(label: string): boolean | null {
 
 // A sidebar group: a header with a chevron that expands to the pages under
 // it. Open/closed is remembered per browser; a group that contains the
-// current page is always open on arrival.
+// current page is always open on arrival. When the sidebar is collapsed to
+// icons the groups flatten into one icon column.
 function NavGroupBlock({
   group,
-  mobile,
+  collapsed,
+  large,
   unread,
   pathname,
   onNavigate,
 }: {
   group: NavGroup
-  mobile: boolean
+  collapsed: boolean
+  large: boolean
   unread: number
   pathname: string
   onNavigate: () => void
@@ -271,49 +295,42 @@ function NavGroupBlock({
     })
   }
 
+  const showItems = collapsed || open
+
   return (
-    <div>
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5"
-      >
-        {group.label}
-        <svg
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-          className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
+    <div className={collapsed ? 'border-t border-white/10 pt-2 first:border-0 first:pt-0' : ''}>
+      {!collapsed && (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition hover:text-gray-200"
         >
-          <path
-            fillRule="evenodd"
-            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
-      {open && (
-        <div className="mt-0.5 space-y-0.5 border-l border-black/10 pl-2 ml-3 dark:border-white/10">
+          {group.label}
+          <Icon name="chevron" className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+        </button>
+      )}
+      {showItems && (
+        <div className="space-y-0.5">
           {group.items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
               onClick={onNavigate}
+              title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
-                'flex items-center justify-between gap-2 rounded-md px-3 text-sm font-medium transition ' +
-                (mobile ? 'py-2.5 ' : 'py-1.5 ') +
+                'relative flex items-center gap-3 rounded-lg text-sm font-medium transition ' +
+                (collapsed ? 'justify-center px-0 py-2.5 ' : `px-3 ${large ? 'py-2.5' : 'py-2'} `) +
                 (isActive
-                  ? 'bg-brand-600/10 text-brand-700 dark:bg-brand-400/10 dark:text-brand-400'
-                  : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white')
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'text-gray-300 hover:bg-white/10 hover:text-white')
               }
             >
-              {item.label}
-              {item.to === '/notifications' && unread > 0 && (
-                <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-4 text-white">
-                  {unread > 9 ? '9+' : unread}
-                </span>
+              <Icon name={item.icon} />
+              {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+              {item.to === '/notifications' && (
+                <UnreadBadge count={unread} className={collapsed ? 'absolute right-1.5 top-1' : ''} />
               )}
             </NavLink>
           ))}
@@ -323,16 +340,36 @@ function NavGroupBlock({
   )
 }
 
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem('sidebar:collapsed') === '1'
+  } catch {
+    return false
+  }
+}
+
 export function PortalLayout() {
   const { user, logout, effectiveRoles } = useAuth()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(readCollapsed)
   const unread = useUnreadCount()
   const allowed = (roles?: readonly Role[]) => roles?.some((r) => effectiveRoles.includes(r)) ?? true
   const visibleGroups = navGroups
     .filter((g) => allowed(g.roles))
     .map((g) => ({ ...g, items: g.items.filter((item) => allowed(item.roles)) }))
     .filter((g) => g.items.length > 0)
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      try {
+        localStorage.setItem('sidebar:collapsed', prev ? '0' : '1')
+      } catch {
+        // storage blocked: the choice just won't stick
+      }
+      return !prev
+    })
+  }
 
   useEffect(() => {
     if (!menuOpen) return
@@ -355,16 +392,13 @@ export function PortalLayout() {
     }
   }, [menuOpen])
 
-  // One set of groups, rendered twice: a fixed sidebar from md up, a
-  // vertical list inside the burger menu below it. Each group (General,
-  // HR, Admin) is a dropdown holding its pages; picking a link closes the
-  // burger menu.
-  function navLinks(mobile: boolean) {
+  function groups(isCollapsed: boolean, large: boolean) {
     return visibleGroups.map((group) => (
       <NavGroupBlock
         key={group.label}
         group={group}
-        mobile={mobile}
+        collapsed={isCollapsed}
+        large={large}
         unread={unread}
         pathname={location.pathname}
         onNavigate={() => setMenuOpen(false)}
@@ -372,63 +406,151 @@ export function PortalLayout() {
     ))
   }
 
+  const logo = (
+    <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-8 w-8 shrink-0" />
+  )
+
   return (
-    <div className="min-h-svh flex flex-col">
-      <header className="sticky top-0 z-40 border-b border-black/5 bg-white/75 backdrop-blur-md dark:border-white/10 dark:bg-brand-950/75">
-        <div className="flex w-full items-center justify-between gap-x-4 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-7 w-7 shrink-0" />
-            <span className="min-w-0 truncate text-lg font-bold tracking-tight text-gold-600 dark:text-gold-400">
-              BPO Portal
-            </span>
-            <ThemeToggle />
-          </div>
-          <div className="hidden min-w-0 flex-wrap items-center gap-4 text-sm md:flex">
-            <RoleSwitcher />
-            <span className="truncate text-gray-500 dark:text-gray-400">{user?.email}</span>
-            <NotificationBell unread={unread} />
-            <CheckOutButton />
-            <Button size="sm" onClick={logout} className="shrink-0">
-              Log out
-            </Button>
-          </div>
-          <div className="flex items-center gap-2 md:hidden">
-            <NotificationBell unread={unread} />
-            <BurgerButton open={menuOpen} onClick={() => setMenuOpen((o) => !o)} />
-          </div>
-        </div>
-        {menuOpen && (
-          <div
-            id="mobile-menu"
-            className="max-h-[calc(100svh-4.5rem)] overflow-y-auto overscroll-contain border-t border-black/5 px-4 pb-4 md:hidden dark:border-white/10"
+    <div className="min-h-svh md:flex">
+      {/* ---- Desktop sidebar: fixed to the left edge, full height ---- */}
+      <aside
+        className={`sticky top-0 hidden h-svh shrink-0 flex-col border-r border-white/10 bg-brand-950 text-gray-200 transition-[width] duration-200 md:flex ${
+          collapsed ? 'w-[72px]' : 'w-64'
+        }`}
+      >
+        <div className={`flex items-center gap-3 border-b border-white/10 px-4 py-4 ${collapsed ? 'flex-col px-0' : ''}`}>
+          {logo}
+          {!collapsed && (
+            <span className="min-w-0 flex-1 truncate text-lg font-bold tracking-tight text-gold-400">BPO Portal</span>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-white/10 hover:text-white"
           >
-            <nav className="mx-auto flex max-w-6xl flex-col gap-1 pt-2 text-sm">{navLinks(true)}</nav>
-            <div className="mx-auto mt-3 flex max-w-6xl flex-col gap-3 border-t border-black/5 pt-3 text-sm dark:border-white/10">
-              <ThemeSwitchRow />
+            <Icon name="chevron" className={`h-4 w-4 transition-transform ${collapsed ? '' : 'rotate-180'}`} />
+          </button>
+        </div>
+
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3">{groups(collapsed, false)}</nav>
+
+        <div className="space-y-3 border-t border-white/10 p-3">
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <span
+                title={user?.email}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-700 text-xs font-semibold text-white"
+              >
+                {initials(user?.name, user?.email)}
+              </span>
+              <ThemeButton className="!px-2" />
+              <button
+                type="button"
+                onClick={logout}
+                title="Log out"
+                aria-label="Log out"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-300 transition hover:bg-white/10 hover:text-white"
+              >
+                <Icon name="logout" />
+              </button>
+            </div>
+          ) : (
+            <>
               <RoleSwitcher />
-              <span className="truncate text-gray-500 dark:text-gray-400">{user?.email}</span>
-              <div className="flex gap-2">
-                <CheckOutButton />
-                <Button size="sm" onClick={logout} className="shrink-0">
-                  Log out
-                </Button>
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-700 text-xs font-semibold text-white">
+                  {initials(user?.name, user?.email)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-white">{user?.name ?? user?.email}</div>
+                  <div className="truncate text-xs text-gray-400">{user?.email}</div>
+                </div>
+                <ThemeButton />
               </div>
+              <CheckOutButton className="w-full" />
+              <button
+                type="button"
+                onClick={logout}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-white"
+              >
+                <Icon name="logout" />
+                Log out
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* ---- Phone header + burger menu ---- */}
+        <header className="sticky top-0 z-40 border-b border-white/10 bg-brand-950 text-gray-200 md:hidden">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              {logo}
+              <span className="min-w-0 truncate text-lg font-bold tracking-tight text-gold-400">BPO Portal</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                to="/notifications"
+                aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 text-gray-200"
+              >
+                <Icon name="notifications" />
+                <UnreadBadge count={unread} className="absolute -right-1 -top-1" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((o) => !o)}
+                aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={menuOpen}
+                aria-controls="mobile-menu"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 text-gray-200"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  {menuOpen ? <path d="M4 4l12 12M16 4L4 16" /> : <path d="M3 5h14M3 10h14M3 15h14" />}
+                </svg>
+              </button>
             </div>
           </div>
+          {menuOpen && (
+            <div
+              id="mobile-menu"
+              className="max-h-[calc(100svh-4.5rem)] overflow-y-auto overscroll-contain border-t border-white/10 px-3 pb-4"
+            >
+              <nav className="space-y-1 pt-2">{groups(false, true)}</nav>
+              <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
+                <RoleSwitcher />
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-700 text-xs font-semibold text-white">
+                    {initials(user?.name, user?.email)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-white">{user?.name ?? user?.email}</div>
+                    <div className="truncate text-xs text-gray-400">{user?.email}</div>
+                  </div>
+                  <ThemeButton />
+                </div>
+                <CheckOutButton className="w-full" />
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-white"
+                >
+                  <Icon name="logout" />
+                  Log out
+                </button>
+              </div>
+            </div>
+          )}
+        </header>
+        {/* Dims the page behind the open menu; tapping it closes the menu.
+            A sibling of the header, not a child. */}
+        {menuOpen && (
+          <div aria-hidden="true" onClick={() => setMenuOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
         )}
-      </header>
-      {/* Dims the page behind the open menu; tapping it closes the menu.
-          A sibling of the header, not a child — the header's backdrop-blur
-          would otherwise become the containing block for this fixed layer. */}
-      {menuOpen && (
-        <div aria-hidden="true" onClick={() => setMenuOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
-      )}
-      <div className="flex w-full flex-1">
-        <aside className="hidden w-64 shrink-0 border-r border-black/5 bg-white/40 md:block dark:border-white/10 dark:bg-black/10">
-          <nav className="sticky top-[57px] max-h-[calc(100svh-57px)] space-y-1 overflow-y-auto p-3">
-            {navLinks(false)}
-          </nav>
-        </aside>
+
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
           <div className="mx-auto w-full max-w-6xl">
             <Outlet />
