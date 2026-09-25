@@ -665,6 +665,7 @@ export function ReportsPage() {
   const [reports, setReports] = useState<WeeklyReport[] | null>(null)
   const [teams, setTeams] = useState<Team[]>([])
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
+  const [department, setDepartment] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -683,12 +684,30 @@ export function ReportsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const genericTeams = teams.filter((t) => !isFoaDepartment(t.department))
+  const departments = [...new Set(teams.map((t) => t.department))].sort()
+  const genericTeams = teams.filter(
+    (t) => !isFoaDepartment(t.department) && (!department || t.department === department),
+  )
+  const visibleReports = reports?.filter((r) => !department || r.department === department) ?? null
   const myFoaTeam = teams.find((t) => t.id === myTeamId && isFoaDepartment(t.department))
 
   return (
     <div>
       <PageHeader title="Weekly Reports" />
+
+      {departments.length > 1 && (
+        <div className="mb-4 max-w-xs space-y-1">
+          <label className="text-sm text-gray-600 dark:text-gray-400">Department</label>
+          <select value={department} onChange={(e) => setDepartment(e.target.value)} className="field">
+            <option value="">All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {myFoaTeam && (
         <div className="mb-4">
@@ -699,7 +718,7 @@ export function ReportsPage() {
         </div>
       )}
 
-      {canCreateGeneric && (
+      {canCreateGeneric && !(department && isFoaDepartment(department)) && (
         <div className="mb-4">
           <CreateReportForm
             teams={genericTeams}
@@ -710,11 +729,11 @@ export function ReportsPage() {
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
-      {reports && reports.length === 0 && <EmptyState label="No reports yet." />}
+      {visibleReports && visibleReports.length === 0 && <EmptyState label="No reports yet." />}
 
-      {reports && reports.length > 0 && (
+      {visibleReports && visibleReports.length > 0 && (
         <div className="mt-4 space-y-3">
-          {reports.map((r) => (
+          {visibleReports.map((r) => (
             <ReportCard
               key={r.id}
               report={r}
