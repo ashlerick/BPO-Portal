@@ -228,8 +228,104 @@ function BurgerButton({ open, onClick }: { open: boolean; onClick: () => void })
   )
 }
 
+function readGroupOpen(label: string): boolean | null {
+  try {
+    const v = localStorage.getItem(`navgroup:${label}`)
+    return v === null ? null : v === '1'
+  } catch {
+    return null
+  }
+}
+
+// A sidebar group: a header with a chevron that expands to the pages under
+// it. Open/closed is remembered per browser; a group that contains the
+// current page is always open on arrival.
+function NavGroupBlock({
+  group,
+  mobile,
+  unread,
+  pathname,
+  onNavigate,
+}: {
+  group: NavGroup
+  mobile: boolean
+  unread: number
+  pathname: string
+  onNavigate: () => void
+}) {
+  const containsCurrent = group.items.some((i) => (i.to === '/' ? pathname === '/' : pathname.startsWith(i.to)))
+  const [open, setOpen] = useState(() => readGroupOpen(group.label) ?? true)
+
+  useEffect(() => {
+    if (containsCurrent) setOpen(true)
+  }, [containsCurrent])
+
+  function toggle() {
+    setOpen((prev) => {
+      try {
+        localStorage.setItem(`navgroup:${group.label}`, prev ? '0' : '1')
+      } catch {
+        // storage blocked: the group just won't remember its state
+      }
+      return !prev
+    })
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 transition hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5"
+      >
+        {group.label}
+        <svg
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+          className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
+        >
+          <path
+            fillRule="evenodd"
+            d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-0.5 space-y-0.5 border-l border-black/10 pl-2 ml-3 dark:border-white/10">
+          {group.items.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                'flex items-center justify-between gap-2 rounded-md px-3 text-sm font-medium transition ' +
+                (mobile ? 'py-2.5 ' : 'py-1.5 ') +
+                (isActive
+                  ? 'bg-brand-600/10 text-brand-700 dark:bg-brand-400/10 dark:text-brand-400'
+                  : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white')
+              }
+            >
+              {item.label}
+              {item.to === '/notifications' && unread > 0 && (
+                <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-4 text-white">
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PortalLayout() {
   const { user, logout, effectiveRoles } = useAuth()
+  const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const unread = useUnreadCount()
   const allowed = (roles?: readonly Role[]) => roles?.some((r) => effectiveRoles.includes(r)) ?? true
@@ -259,45 +355,27 @@ export function PortalLayout() {
     }
   }, [menuOpen])
 
-  // One set of links, rendered twice: a horizontal strip from md up, a
-  // vertical list inside the burger menu below it. Picking a link
-  // closes the menu.
+  // One set of groups, rendered twice: a fixed sidebar from md up, a
+  // vertical list inside the burger menu below it. Each group (General,
+  // HR, Admin) is a dropdown holding its pages; picking a link closes the
+  // burger menu.
   function navLinks(mobile: boolean) {
     return visibleGroups.map((group) => (
-      <div key={group.label} className="space-y-0.5">
-        <div className="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-gray-400 first:pt-0 dark:text-gray-500">
-          {group.label}
-        </div>
-        {group.items.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            onClick={() => setMenuOpen(false)}
-            className={({ isActive }) =>
-              'flex items-center justify-between gap-2 rounded-md px-3 font-medium transition ' +
-              (mobile ? 'py-2.5 ' : 'py-1.5 ') +
-              (isActive
-                ? 'bg-brand-600/10 text-brand-700 dark:bg-brand-400/10 dark:text-brand-400'
-                : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white')
-            }
-          >
-            {item.label}
-            {item.to === '/notifications' && unread > 0 && (
-              <span className="rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-4 text-white">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </div>
+      <NavGroupBlock
+        key={group.label}
+        group={group}
+        mobile={mobile}
+        unread={unread}
+        pathname={location.pathname}
+        onNavigate={() => setMenuOpen(false)}
+      />
     ))
   }
 
   return (
     <div className="min-h-svh flex flex-col">
       <header className="sticky top-0 z-40 border-b border-black/5 bg-white/75 backdrop-blur-md dark:border-white/10 dark:bg-brand-950/75">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-x-4 px-4 py-3">
+        <div className="flex w-full items-center justify-between gap-x-4 px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
             <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-7 w-7 shrink-0" />
             <span className="min-w-0 truncate text-lg font-bold tracking-tight text-gold-600 dark:text-gold-400">
@@ -345,14 +423,16 @@ export function PortalLayout() {
       {menuOpen && (
         <div aria-hidden="true" onClick={() => setMenuOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
       )}
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-8 px-4">
-        <aside className="hidden w-52 shrink-0 md:block">
-          <nav className="sticky top-16 max-h-[calc(100svh-5rem)] space-y-1 overflow-y-auto py-6 text-sm">
+      <div className="flex w-full flex-1">
+        <aside className="hidden w-64 shrink-0 border-r border-black/5 bg-white/40 md:block dark:border-white/10 dark:bg-black/10">
+          <nav className="sticky top-[57px] max-h-[calc(100svh-57px)] space-y-1 overflow-y-auto p-3">
             {navLinks(false)}
           </nav>
         </aside>
-        <main className="min-w-0 flex-1 py-6">
-          <Outlet />
+        <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
+          <div className="mx-auto w-full max-w-6xl">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
