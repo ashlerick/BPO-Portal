@@ -1,3 +1,5 @@
+import type { FoaReportData } from './foa'
+
 export type ReportStatus = 'draft' | 'submitted' | 'reviewed' | 'approved' | 'rejected'
 
 export interface ReportData {
@@ -23,7 +25,10 @@ export interface WeeklyReport {
   periodEnd: string
   status: ReportStatus
   submittedBy: string | null
-  data: ReportData
+  schemaKey: 'generic' | 'foa'
+  authorId: string | null
+  authorName: string | null
+  data: ReportData | FoaReportData
   createdAt: string
   updatedAt: string
 }

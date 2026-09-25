@@ -204,7 +204,6 @@ Can:
 * View personal HRIS information
 * View permitted team information
 * Download authorized files
-* View applicable reports
 
 ## Team Leader
 
@@ -440,9 +439,6 @@ Possible categories:
 * Leave benefits
 * Government benefits
 * Allowances
-* Employee discounts
-* Wellness programs
-* Retirement benefits
 * Frequently asked questions
 
 Each benefit may contain:
@@ -1031,8 +1027,8 @@ Avoid putting all business logic directly inside API route handlers.
 ## Phase 4 — HRIS
 
 * [x] Employee profiles
-* [x] Team assignments (HR/Admin can assign an employee to a department + team; creating new
-  teams/departments themselves is Phase 6 team/department management, not built yet)
+* [x] Team assignments (HR/Admin can assign an employee to a department + team; creating,
+  renaming, and deleting teams/departments themselves is Phase 6 team/department management)
 * [x] Department information
 * [x] Employee status
 * [x] HR permissions (HR and Admin roles can edit any employee record)
@@ -1060,8 +1056,9 @@ Avoid putting all business logic directly inside API route handlers.
 * [x] Store generated reports in S3 — generated on demand and uploaded to B2 under `reports/`,
   presigned URL returned (not persisted/reused — regenerated fresh on every export request)
 
-Known gap: the plan lists "View applicable reports" as a base Employee capability (section 5);
-this isn't implemented yet — only Team Leader/Manager/HR/Admin can see reports right now.
+Decided (2026-09-22): regular employees do not get report visibility — reports stay scoped to
+Team Leader/Manager/HR/Admin only, to avoid exposing other employees' reports. Removed from
+section 5's Employee capability list accordingly.
 
 ---
 
@@ -1077,8 +1074,10 @@ this isn't implemented yet — only Team Leader/Manager/HR/Admin can see reports
   helper — the Dashboard greeting is the one exception and stays first-name-only.
 * [x] Employee management — covered in Phase 4 (HR/Admin can edit position, status, team,
   department for any employee)
-* [x] Team management — Admin can create teams (name + department); renaming/deleting not built yet
-* [x] Department management — Admin can create departments; renaming/deleting not built yet
+* [x] Team management — Admin can create, rename, and delete teams (name + department); delete is
+  blocked with a 409 if employees or weekly reports are still attached
+* [x] Department management — Admin can create, rename, and delete departments; delete is blocked
+  with a 409 if teams or employees are still assigned
 * [x] Content management — HR/Admin can create, edit, and delete Announcements and Benefits
 * [x] Document management — HR/Admin can upload documents (base64 through the backend, capped at
   4MB — fine for policy docs/forms, would need a presigned direct-to-S3 upload for larger files)

@@ -4,6 +4,7 @@ export interface MyEmployeeProfile {
   email: string
   department: string | null
   team: string | null
+  teamId: string | null
   position: string | null
   status: string
   dateHired: string | null

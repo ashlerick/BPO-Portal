@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { FOA_ATTENDANCE_COLUMNS, FOA_CHECKLIST_DAYS, type FoaReportData } from './foaReport.js'
 
 export interface ReportData {
   client?: string
@@ -20,17 +21,16 @@ export interface ReportExportInput {
   periodStart: Date
   periodEnd: Date
   status: string
-  data: ReportData
+  schemaKey?: string
+  authorName?: string
+  data: ReportData | FoaReportData
 }
 
 const dateFmt = (d: Date) => d.toISOString().slice(0, 10)
 
-function rows(input: ReportExportInput): [string, string][] {
-  const { data } = input
+function genericRows(input: ReportExportInput): [string, string][] {
+  const data = input.data as ReportData
   return [
-    ['Team', input.teamName],
-    ['Period', `${dateFmt(input.periodStart)} to ${dateFmt(input.periodEnd)}`],
-    ['Status', input.status],
     ['Client/Account', data.client ?? ''],
     ['Headcount', data.headcount != null ? String(data.headcount) : ''],
     ['Attendance', data.attendance ?? ''],
@@ -42,6 +42,56 @@ function rows(input: ReportExportInput): [string, string][] {
     ['Achievements', data.achievements ?? ''],
     ['Action Items', data.actionItems ?? ''],
     ['Manager Comments', data.managerComments ?? ''],
+  ]
+}
+
+// Flattens the FOA grid/matrix fields into label/value pairs so the same
+// buildCsv/buildXlsx/buildPdf below can render either report shape.
+function foaRows(input: ReportExportInput): [string, string][] {
+  const data = input.data as FoaReportData
+  const out: [string, string][] = [
+    ['Reported by', input.authorName ?? ''],
+    ['Territories', (data.territories ?? []).join(', ')],
+    ['Extended Breaks', String(data.varianceInvestigations?.extendedBreaks ?? 0)],
+    ['Back-to-Back Breaks', String(data.varianceInvestigations?.backToBackBreaks ?? 0)],
+    ['Other Investigations', String(data.varianceInvestigations?.otherInvestigations ?? 0)],
+    ['Cellphone', String(data.motiveSafetyEvents?.cellphone ?? 0)],
+    ['Seatbelts', String(data.motiveSafetyEvents?.seatbelts ?? 0)],
+    ['Incidents', String(data.motiveSafetyEvents?.incidents ?? 0)],
+    ['Tracker/Dascam', String(data.motiveSafetyEvents?.trackerDascam ?? 0)],
+    ['Speeding', String(data.motiveSafetyEvents?.speeding ?? 0)],
+  ]
+
+  const attendance = data.attendance ?? {}
+  for (const date of Object.keys(attendance).sort()) {
+    for (const column of FOA_ATTENDANCE_COLUMNS) {
+      const tokens = attendance[date]?.[column] ?? []
+      out.push([`${date} – ${column}`, tokens.join(', ') || '—'])
+    }
+  }
+
+  const checklist = data.taskChecklist ?? {}
+  for (const task of Object.keys(checklist) as (keyof typeof checklist)[]) {
+    const doneDays = FOA_CHECKLIST_DAYS.filter((day) => checklist[task]?.[day])
+    out.push([task, doneDays.length > 0 ? doneDays.join(', ') : 'Not done'])
+  }
+
+  out.push(
+    ['Additional Tasks', data.additionalTasks ?? ''],
+    ['Highlights', data.highlights ?? ''],
+    ['Roadblocks', data.roadblocks ?? ''],
+    ['Manager Comments', data.managerComments ?? ''],
+  )
+
+  return out
+}
+
+function rows(input: ReportExportInput): [string, string][] {
+  return [
+    ['Team', input.teamName],
+    ['Period', `${dateFmt(input.periodStart)} to ${dateFmt(input.periodEnd)}`],
+    ['Status', input.status],
+    ...(input.schemaKey === 'foa' ? foaRows(input) : genericRows(input)),
   ]
 }
 

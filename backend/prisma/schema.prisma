@@ -199,6 +199,16 @@ model WeeklyReport {
   periodEnd   DateTime
   status      ReportStatus @default(draft)
   submittedBy String?
+  // Which report form/shape `data` follows — "generic" (the original
+  // free-text fields) or a department-specific key like "foa". Determined
+  // server-side from the team's department at creation time, never trusted
+  // from the client.
+  schemaKey   String       @default("generic")
+  // Set only for individually-authored reports (e.g. "foa", where each
+  // employee files their own weekly report). Null for generic team-wide
+  // reports. Distinct from submittedBy, which is only set once submitted —
+  // this identifies the owner from creation, for draft-stage permissions.
+  authorId    String?
   data        Json
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
