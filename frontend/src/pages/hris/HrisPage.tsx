@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
 import { Card, CardForm } from '../../components/ui/Card'
+import { Section, SectionStack } from '../../components/ui/Section'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components/ui/PasswordInput'
@@ -54,11 +56,16 @@ function DetailList({ rows, wide = false }: { rows: [string, string][]; wide?: b
   )
 }
 
+// One card per HR-listed heading: `contact` edits phone + address,
+// `emergency` edits the emergency contact. Both save through the same
+// self-service endpoint, which treats omitted fields as unchanged.
 function ContactDetailsCard({
   profile,
+  part,
   onSaved,
 }: {
   profile: MyEmployeeProfile
+  part: 'contact' | 'emergency'
   onSaved: (updated: MyEmployeeProfile) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -85,12 +92,10 @@ function ContactDetailsCard({
     setSaving(true)
     setError(null)
     try {
-      const updated = await api.put<MyEmployeeProfile>('/employees/me', {
-        phone,
-        address,
-        emergencyContactName,
-        emergencyContactPhone,
-      })
+      const updated = await api.put<MyEmployeeProfile>(
+        '/employees/me',
+        part === 'contact' ? { phone, address } : { emergencyContactName, emergencyContactPhone },
+      )
       onSaved(updated)
       setEditing(false)
       setSaved(true)
@@ -105,8 +110,7 @@ function ContactDetailsCard({
     <Card>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-medium text-gray-900 dark:text-gray-100">Contact details</h3>
-          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Only you and HR/Admin can see these.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Only you and HR/Admin can see these.</p>
         </div>
         {!editing && (
           <Button size="sm" className="shrink-0" onClick={startEditing}>
@@ -117,61 +121,69 @@ function ContactDetailsCard({
 
       {editing ? (
         <form onSubmit={save} className="mt-3 space-y-3 sm:max-w-md">
-          <div className="space-y-1">
-            <label htmlFor="contact-phone" className="text-sm text-gray-600 dark:text-gray-400">
-              Phone
-            </label>
-            <input
-              id="contact-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="field"
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="contact-address" className="text-sm text-gray-600 dark:text-gray-400">
-              Address
-            </label>
-            <textarea
-              id="contact-address"
-              rows={2}
-              maxLength={300}
-              autoComplete="street-address"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="field"
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="contact-emergency-name" className="text-sm text-gray-600 dark:text-gray-400">
-              Emergency contact name
-            </label>
-            <input
-              id="contact-emergency-name"
-              maxLength={100}
-              autoComplete="off"
-              value={emergencyContactName}
-              onChange={(e) => setEmergencyContactName(e.target.value)}
-              className="field"
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="contact-emergency-phone" className="text-sm text-gray-600 dark:text-gray-400">
-              Emergency contact phone
-            </label>
-            <input
-              id="contact-emergency-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="off"
-              value={emergencyContactPhone}
-              onChange={(e) => setEmergencyContactPhone(e.target.value)}
-              className="field"
-            />
-          </div>
+          {part === 'contact' && (
+            <>
+              <div className="space-y-1">
+                <label htmlFor="contact-phone" className="text-sm text-gray-600 dark:text-gray-400">
+                  Phone
+                </label>
+                <input
+                  id="contact-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="field"
+                />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="contact-address" className="text-sm text-gray-600 dark:text-gray-400">
+                  Address
+                </label>
+                <textarea
+                  id="contact-address"
+                  rows={2}
+                  maxLength={300}
+                  autoComplete="street-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="field"
+                />
+              </div>
+            </>
+          )}
+          {part === 'emergency' && (
+            <>
+              <div className="space-y-1">
+                <label htmlFor="contact-emergency-name" className="text-sm text-gray-600 dark:text-gray-400">
+                  Emergency contact name
+                </label>
+                <input
+                  id="contact-emergency-name"
+                  maxLength={100}
+                  autoComplete="off"
+                  value={emergencyContactName}
+                  onChange={(e) => setEmergencyContactName(e.target.value)}
+                  className="field"
+                />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="contact-emergency-phone" className="text-sm text-gray-600 dark:text-gray-400">
+                  Emergency contact phone
+                </label>
+                <input
+                  id="contact-emergency-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="off"
+                  value={emergencyContactPhone}
+                  onChange={(e) => setEmergencyContactPhone(e.target.value)}
+                  className="field"
+                />
+              </div>
+            </>
+          )}
           {error && (
             <p role="alert" className="text-sm text-red-600 dark:text-red-400">
               {error}
@@ -188,7 +200,11 @@ function ContactDetailsCard({
         </form>
       ) : (
         <>
-          <DetailList rows={contactFields(profile).map(([label, value]) => [label, value ?? '—'])} />
+          <DetailList
+            rows={contactFields(profile)
+              .filter(([label]) => (part === 'contact' ? !label.startsWith('Emergency') : label.startsWith('Emergency')))
+              .map(([label, value]) => [label, value ?? '—'])}
+          />
           {saved && (
             <p role="status" className="mt-2 text-sm text-brand-700 dark:text-brand-400">
               Contact details saved.
@@ -200,7 +216,7 @@ function ContactDetailsCard({
   )
 }
 
-function ChangePasswordCard() {
+export function ChangePasswordCard() {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -291,7 +307,7 @@ function ChangePasswordCard() {
   )
 }
 
-function MyProfile() {
+export function MyProfile() {
   const [profile, setProfile] = useState<MyEmployeeProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -314,14 +330,10 @@ function MyProfile() {
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
 
-  const fields: [string, string][] = profile
+  const employmentFields: [string, string][] = profile
     ? [
-        ['Position', profile.position ?? '—'],
-        ['Department', profile.department ?? '—'],
-        ['Team', profile.team ?? '—'],
         ['Status', humanize(profile.status)],
         ['Date Hired', profile.dateHired ? dateFormatter.format(new Date(profile.dateHired)) : '—'],
-        ['Work Email', profile.email],
         ['SIL Balance', `${profile.silBalance} day${profile.silBalance === 1 ? '' : 's'}`],
       ]
     : []
@@ -334,15 +346,40 @@ function MyProfile() {
         <p className="text-sm text-gray-500 dark:text-gray-400">No employee profile on file for your account yet.</p>
       )}
       {profile && (
-        <>
-          <Card>
-            <h3 className="font-medium text-gray-900 dark:text-gray-100">{profile.name}</h3>
-            <DetailList rows={fields} wide />
-          </Card>
-          <ContactDetailsCard profile={profile} onSaved={setProfile} />
-        </>
+        <SectionStack>
+          <Section id="profile.personal" title="Personal information" defaultOpen>
+            <DetailList
+              rows={[
+                ['Name', profile.name],
+                ['Work Email', profile.email],
+              ]}
+            />
+          </Section>
+          <Section id="profile.contact" title="Contact information" hint="Phone and address">
+            <ContactDetailsCard profile={profile} part="contact" onSaved={setProfile} />
+          </Section>
+          <Section id="profile.emergency" title="Emergency contact">
+            <ContactDetailsCard profile={profile} part="emergency" onSaved={setProfile} />
+          </Section>
+          <Section id="profile.position" title="Position" hint={profile.position ?? undefined}>
+            <DetailList rows={[['Position', profile.position ?? '—']]} />
+          </Section>
+          <Section id="profile.department" title="Department" hint={profile.department ?? undefined}>
+            <DetailList
+              rows={[
+                ['Department', profile.department ?? '—'],
+                ['Team', profile.team ?? '—'],
+              ]}
+            />
+          </Section>
+          <Section id="profile.supervisor" title="Supervisor" hint={profile.supervisor ?? undefined}>
+            <DetailList rows={[['Supervisor', profile.supervisor ?? 'Not assigned yet']]} />
+          </Section>
+          <Section id="profile.employment" title="Employment information">
+            <DetailList rows={employmentFields} />
+          </Section>
+        </SectionStack>
       )}
-      <ChangePasswordCard />
     </div>
   )
 }
@@ -433,9 +470,17 @@ function EmployeeRow({
           {employee.silBalance} day{employee.silBalance === 1 ? '' : 's'}
         </td>
         <td data-actions className="py-2.5 pr-4">
-          <Button size="sm" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+            <Link
+              to={`/hris/${employee.id}`}
+              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white/70 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-white/15 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 sm:px-2.5 sm:py-1.5"
+            >
+              Full record
+            </Link>
+          </div>
         </td>
       </tr>
     )
@@ -909,23 +954,25 @@ function DirectoryManagement() {
   )
 }
 
-type HrisTab = 'profile' | 'employees' | 'directory'
+type HrisTab = 'employees' | 'directory'
 
 export function HrisPage() {
   const { effectiveRoles } = useAuth()
   const canManage = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const isAdmin = effectiveRoles.includes('admin')
-  const [tab, setTab] = useState<HrisTab>('profile')
+  const [tab, setTab] = useState<HrisTab>('employees')
 
   const tabs: { key: HrisTab; label: string }[] = [
-    { key: 'profile', label: 'My Profile' },
-    ...(canManage ? [{ key: 'employees' as const, label: 'Employees' }] : []),
+    { key: 'employees', label: 'Employees' },
     ...(isAdmin ? [{ key: 'directory' as const, label: 'Departments & Teams' }] : []),
   ]
 
+  // Employee records are HR/Admin only; everyone else has My Profile.
+  if (!canManage) return <Navigate to="/profile" replace />
+
   return (
     <div>
-      <PageHeader title="HRIS" />
+      <PageHeader title="Employee Management" />
 
       {tabs.length > 1 && (
         // Phones: equal-width tabs that share the row (a long label wraps
@@ -948,8 +995,7 @@ export function HrisPage() {
         </div>
       )}
 
-      {tab === 'profile' && <MyProfile />}
-      {tab === 'employees' && canManage && <EmployeeDirectory />}
+      {tab === 'employees' && <EmployeeDirectory />}
       {tab === 'directory' && isAdmin && <DirectoryManagement />}
     </div>
   )

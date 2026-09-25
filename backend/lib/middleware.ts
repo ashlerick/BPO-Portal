@@ -13,7 +13,8 @@ export function withCors(res: VercelResponse) {
 }
 
 export function requireAuth(
-  handler: (req: AuthedRequest, res: VercelResponse) => Promise<void> | void,
+  // Handlers often `return res.status(..).json(..)`, so any return value is fine.
+  handler: (req: AuthedRequest, res: VercelResponse) => Promise<unknown> | unknown,
   options?: { roles?: Role[] },
 ) {
   return async (req: VercelRequest, res: VercelResponse) => {

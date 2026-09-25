@@ -1,9 +1,9 @@
 import type { VercelResponse } from '@vercel/node'
 import { z } from 'zod'
-import { prisma } from '../../lib/prisma.js'
-import { requireAuth, type AuthedRequest } from '../../lib/middleware.js'
-import { logAudit } from '../../lib/audit.js'
-import { isNotFoundError } from '../../lib/errors.js'
+import { prisma } from '../prisma.js'
+import type { AuthedRequest } from '../middleware.js'
+import { logAudit } from '../audit.js'
+import { isNotFoundError } from '../errors.js'
 
 // GET /benefits, POST /benefits (create), PUT/DELETE /benefits/:id (via
 // a vercel.json rewrite arriving as ?sub=<id>). Create/update/delete are
@@ -14,6 +14,8 @@ const upsertSchema = z.object({
   category: z.string().min(1),
   description: z.string().min(1),
   eligibility: z.string().nullable().optional(),
+  provider: z.string().trim().max(160).nullable().optional(),
+  providerContact: z.string().trim().max(300).nullable().optional(),
 })
 
 function isManager(req: AuthedRequest): boolean {
@@ -82,7 +84,7 @@ async function handleDelete(req: AuthedRequest, res: VercelResponse, id: string)
   res.status(204).end()
 }
 
-async function handler(req: AuthedRequest, res: VercelResponse) {
+export async function handler(req: AuthedRequest, res: VercelResponse) {
   const sub = typeof req.query.sub === 'string' ? req.query.sub : undefined
 
   if (!sub && req.method === 'GET') return handleList(res)
@@ -93,4 +95,3 @@ async function handler(req: AuthedRequest, res: VercelResponse) {
   res.status(404).json({ message: 'Not found' })
 }
 
-export default requireAuth(handler)

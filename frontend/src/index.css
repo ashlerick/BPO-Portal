@@ -171,6 +171,70 @@ body {
     color-scheme: light;
   }
 
+  /* Chromium (Chrome/Edge 135+) can render the select AND its popup
+     from author CSS via appearance: base-select, so the list matches
+     the app's theme instead of the native light popup. Browsers without
+     support skip this block and keep the native fallback above. */
+  @supports (appearance: base-select) {
+    select,
+    ::picker(select) {
+      appearance: base-select;
+    }
+
+    select {
+      color-scheme: normal;
+    }
+
+    select::picker-icon {
+      color: #6b7280;
+      transition: rotate 0.15s;
+    }
+
+    select:open::picker-icon {
+      rotate: 180deg;
+    }
+
+    ::picker(select) {
+      margin-top: 4px;
+      padding: 4px;
+      border: 1px solid #d1d5db;
+      border-radius: 0.5rem;
+      background: #ffffff;
+      box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.2);
+    }
+
+    .dark ::picker(select) {
+      border-color: rgb(255 255 255 / 0.15);
+      background: #11291d;
+    }
+
+    select option {
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem;
+      color: #111827 !important;
+      cursor: pointer;
+    }
+
+    .dark select option {
+      color: #e5e7eb !important;
+    }
+
+    select option:hover,
+    select option:focus-visible {
+      background: rgb(22 163 74 / 0.15);
+      outline: none;
+    }
+
+    select option:checked {
+      background: rgb(22 163 74 / 0.3);
+      font-weight: 500;
+    }
+
+    select option::checkmark {
+      display: none;
+    }
+  }
+
   /* color-scheme alone fixed the popup's background but NOT this: an
      <option> inherits `color` from its <select>, and in dark mode
      .field sets that to a light gray meant for the closed control's

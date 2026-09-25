@@ -2,11 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
-import { formatDateOnly } from '../../utils/dates'
+import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
 import { Card, CardForm } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { Section, SectionStack } from '../../components/ui/Section'
+import { MonthCalendar, eachDay, type CalendarEvent } from '../../components/ui/MonthCalendar'
+import type { MyEmployeeProfile } from '../hris/types'
 import type { LeaveRequest, LeaveRequestStatus } from './types'
 
 const statusTones: Record<LeaveRequestStatus, 'amber' | 'green' | 'red'> = {
@@ -143,45 +146,117 @@ export function LeaveRequestsPage() {
   const { effectiveRoles } = useAuth()
   const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const [requests, setRequests] = useState<LeaveRequest[] | null>(null)
+  const [profile, setProfile] = useState<MyEmployeeProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api
-      .get<LeaveRequest[]>('/leave/requests')
-      .then(setRequests)
+    Promise.all([
+      api.get<LeaveRequest[]>('/leave/requests'),
+      api.get<MyEmployeeProfile>('/employees/me').catch(() => null),
+    ])
+      .then(([r, p]) => {
+        setRequests(r)
+        setProfile(p)
+      })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Something went wrong'))
       .finally(() => setLoading(false))
   }, [])
+
+  function replaceRequest(updated: LeaveRequest) {
+    setRequests((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)
+  }
+
+  const pending = requests?.filter((r) => r.status === 'pending') ?? []
+  const calendarEvents: CalendarEvent[] = (requests ?? [])
+    .filter((r) => r.status === 'approved')
+    .flatMap((r) =>
+      eachDay(r.startDate, r.endDate).map((date) => ({
+        id: `${r.id}-${date}`,
+        date,
+        label: isReviewer ? r.employeeName : 'Leave',
+        tone: 'brand' as const,
+      })),
+    )
 
   return (
     <div>
       <PageHeader title="Leave Requests" />
 
-      <div className="mb-6">
-        <CreateForm onCreated={(r) => setRequests((prev) => (prev ? [r, ...prev] : [r]))} />
-      </div>
-
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-        {isReviewer ? 'All Requests' : 'My Requests'}
-      </h2>
-
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
-      {requests && requests.length === 0 && <EmptyState label="No leave requests yet." />}
 
-      {requests && requests.length > 0 && (
-        <ul className="mt-2 space-y-3">
-          {requests.map((r) => (
-            <ReviewRow
-              key={r.id}
-              request={r}
-              onReviewed={(updated) =>
-                setRequests((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)
-              }
-            />
-          ))}
-        </ul>
+      {!loading && !error && (
+        <SectionStack>
+          <Section id="leave.file" title="File leave" hint="Request time off" defaultOpen>
+            <CreateForm onCreated={(r) => setRequests((prev) => (prev ? [r, ...prev] : [r]))} />
+          </Section>
+
+          <Section id="leave.balance" title="Leave balance" hint="Service Incentive Leave (SIL)">
+            {profile ? (
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                You have{' '}
+                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{profile.silBalance}</span>{' '}
+                SIL day{profile.silBalance === 1 ? '' : 's'} remaining.
+              </p>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No employee record is linked to your account.</p>
+            )}
+          </Section>
+
+          <Section
+            id="leave.approval"
+            title="Approval / rejection"
+            hint="Requests waiting on HR"
+            roles={['hr', 'admin']}
+            aside={pending.length > 0 ? <Badge tone="amber">{pending.length} pending</Badge> : undefined}
+            defaultOpen
+          >
+            {pending.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Nothing waiting for review.</p>
+            ) : (
+              <ul className="space-y-3">
+                {pending.map((r) => (
+                  <ReviewRow key={r.id} request={r} onReviewed={replaceRequest} />
+                ))}
+              </ul>
+            )}
+          </Section>
+
+          <Section
+            id="leave.history"
+            title="Leave history"
+            hint={isReviewer ? 'All requests' : 'Your requests'}
+            defaultOpen
+          >
+            {requests && requests.length === 0 ? (
+              <EmptyState label="No leave requests yet." />
+            ) : (
+              <ul className="space-y-3">
+                {requests?.map((r) => (
+                  <ReviewRow key={r.id} request={r} onReviewed={replaceRequest} />
+                ))}
+              </ul>
+            )}
+          </Section>
+
+          <Section id="leave.calendar" title="Leave calendar" hint="Approved leave by day">
+            <MonthCalendar events={calendarEvents} todayIso={todayInManilaIso()} />
+          </Section>
+
+          <Section id="leave.types" title="Leave types">
+            <ul className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+              <li>
+                <span className="font-medium text-gray-900 dark:text-gray-100">Service Incentive Leave (SIL)</span> —
+                paid leave drawn from your SIL balance. It is only deducted once HR approves the request.
+              </li>
+              <li>
+                <span className="font-medium text-gray-900 dark:text-gray-100">Other / unpaid leave</span> — leave
+                filed without using your SIL balance. It still needs HR approval.
+              </li>
+            </ul>
+          </Section>
+        </SectionStack>
       )}
     </div>
   )

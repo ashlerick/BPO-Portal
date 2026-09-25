@@ -9,6 +9,8 @@ export interface MyEmployeeProfile {
   status: string
   dateHired: string | null
   silBalance: number
+  managerId: string | null
+  supervisor: string | null
   phone: string | null
   address: string | null
   emergencyContactName: string | null
@@ -27,6 +29,11 @@ export interface EmployeeRecord {
   status: string
   dateHired: string | null
   silBalance: number
+  managerId: string | null
+  supervisor: string | null
+  employeeCode: string | null
+  probationEndDate: string | null
+  regularizationDate: string | null
   phone: string | null
   address: string | null
   emergencyContactName: string | null

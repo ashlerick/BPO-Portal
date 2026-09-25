@@ -5,6 +5,10 @@ import { api, ApiError } from '../../services/api'
 import { Card, CardForm } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { Section, SectionStack } from '../../components/ui/Section'
+import { Badge } from '../../components/ui/Badge'
+import { formatDateOnly } from '../../utils/dates'
+import type { Dependent, Enrollment } from '../hr/types'
 import type { Benefit } from './types'
 
 function groupByCategory(benefits: Benefit[]): Map<string, Benefit[]> {
@@ -215,6 +219,101 @@ function BenefitCard({
   )
 }
 
+function MyBenefits() {
+  const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null)
+  const [dependents, setDependents] = useState<Dependent[] | null>(null)
+  const [name, setName] = useState('')
+  const [relationship, setRelationship] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.get<Enrollment[]>('/hr/enrollments').then(setEnrollments).catch(() => setEnrollments([]))
+    api.get<Dependent[]>('/hr/employee-records?kind=dependents').then(setDependents).catch(() => setDependents([]))
+  }, [])
+
+  async function addDependent(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    try {
+      const created = await api.post<Dependent>('/hr/employee-records?kind=dependents', { name, relationship })
+      setDependents((prev) => [...(prev ?? []), created])
+      setName('')
+      setRelationship('')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not add the dependent')
+    }
+  }
+
+  const tone = { pending: 'amber', enrolled: 'green', waived: 'gray', terminated: 'red' } as const
+
+  return (
+    <SectionStack>
+      <Section id="benefits.mine" title="My enrollment status" hint="Your HMO and benefit enrollments" defaultOpen>
+        {!enrollments ? (
+          <LoadingState />
+        ) : enrollments.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            You have no benefit enrollments on record yet. HR enrolls you; ask through HR Requests if something looks wrong.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {enrollments.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="text-gray-900 dark:text-gray-100">
+                  {e.benefitTitle}
+                  {e.effectiveDate && <span className="text-gray-500 dark:text-gray-400"> · effective {formatDateOnly(e.effectiveDate)}</span>}
+                  {e.provider && <span className="text-gray-500 dark:text-gray-400"> · {e.provider}</span>}
+                </span>
+                <Badge tone={tone[e.status]}>{e.status}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section id="benefits.dependents" title="Dependents" hint="People covered under your benefits">
+        <div className="space-y-3">
+          {dependents && dependents.length > 0 && (
+            <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+              {dependents.map((d) => (
+                <li key={d.id} className="flex items-center justify-between gap-2 py-2">
+                  <span className="text-gray-900 dark:text-gray-100">
+                    {d.name} <span className="text-gray-500 dark:text-gray-400">· {d.relationship}</span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={async () => {
+                      await api.delete(`/hr/employee-records?kind=dependents&sub=${d.id}`)
+                      setDependents((prev) => prev?.filter((x) => x.id !== d.id) ?? null)
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form onSubmit={addDependent} className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+              Name
+              <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+              Relationship
+              <input required value={relationship} onChange={(e) => setRelationship(e.target.value)} className="field" />
+            </label>
+            <Button type="submit" size="sm">
+              Add dependent
+            </Button>
+          </form>
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        </div>
+      </Section>
+    </SectionStack>
+  )
+}
+
 export function BenefitsPage() {
   const { effectiveRoles } = useAuth()
   const canManage = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
@@ -240,18 +339,25 @@ export function BenefitsPage() {
         </div>
       )}
 
+      <div className="mb-3">
+        <MyBenefits />
+      </div>
+
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
       {data && data.length === 0 && <EmptyState label="No benefits published yet." />}
 
       {data && data.length > 0 && (
-        <div className="space-y-6">
+        <SectionStack>
           {Array.from(groupByCategory(data)).map(([category, benefits]) => (
-            <section key={category}>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                {category}
-              </h2>
-              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+            <Section
+              key={category}
+              id={`benefits.${category.toLowerCase().replace(/\s+/g, '-')}`}
+              title={category}
+              hint={`${benefits.length} ${benefits.length === 1 ? 'item' : 'items'}`}
+              defaultOpen
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
                 {benefits.map((benefit) => (
                   <BenefitCard
                     key={benefit.id}
@@ -264,9 +370,9 @@ export function BenefitsPage() {
                   />
                 ))}
               </div>
-            </section>
+            </Section>
           ))}
-        </div>
+        </SectionStack>
       )}
     </div>
   )

@@ -28,6 +28,10 @@ const updateSchema = z.object({
   teamId: z.string().uuid().nullable().optional(),
   dateHired: z.string().regex(dateOnlyPattern, 'dateHired must be YYYY-MM-DD').nullable().optional(),
   silBalance: z.number().int().min(0).optional(),
+  managerId: z.string().uuid().nullable().optional(),
+  employeeCode: z.string().trim().min(1).max(40).nullable().optional(),
+  probationEndDate: z.string().regex(dateOnlyPattern, 'probationEndDate must be YYYY-MM-DD').nullable().optional(),
+  regularizationDate: z.string().regex(dateOnlyPattern, 'regularizationDate must be YYYY-MM-DD').nullable().optional(),
 })
 
 // Empty/whitespace-only input means "clear it", stored as null.
@@ -58,6 +62,7 @@ const employeeSelect = {
     department: true,
     team: true,
     user: { select: { firstName: true, middleName: true, lastName: true, email: true } },
+    manager: { include: { user: { select: { firstName: true, middleName: true, lastName: true } } } },
   },
 } as const
 
@@ -71,6 +76,11 @@ function serialize(e: {
   position: string | null
   status: string
   dateHired: Date | null
+  managerId: string | null
+  employeeCode: string | null
+  probationEndDate: Date | null
+  regularizationDate: Date | null
+  manager: { user: { firstName: string; middleName: string | null; lastName: string } } | null
   silBalance: number
   phone: string | null
   address: string | null
@@ -88,6 +98,13 @@ function serialize(e: {
     position: e.position,
     status: e.status,
     dateHired: e.dateHired,
+    managerId: e.managerId,
+    employeeCode: e.employeeCode,
+    probationEndDate: e.probationEndDate,
+    regularizationDate: e.regularizationDate,
+    supervisor: e.manager
+      ? formatDisplayName(e.manager.user.firstName, e.manager.user.middleName, e.manager.user.lastName)
+      : null,
     silBalance: e.silBalance,
     phone: e.phone,
     address: e.address,
@@ -201,10 +218,13 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     return
   }
 
-  const { dateHired, silBalance, ...rest } = parsed.data
+  const { dateHired, silBalance, probationEndDate, regularizationDate, ...rest } = parsed.data
+  const asDate = (v: string | null) => (v === null ? null : new Date(`${v}T00:00:00.000Z`))
   const data = {
     ...rest,
-    ...(dateHired !== undefined && { dateHired: dateHired === null ? null : new Date(`${dateHired}T00:00:00.000Z`) }),
+    ...(dateHired !== undefined && { dateHired: asDate(dateHired) }),
+    ...(probationEndDate !== undefined && { probationEndDate: asDate(probationEndDate) }),
+    ...(regularizationDate !== undefined && { regularizationDate: asDate(regularizationDate) }),
     ...(silBalance !== undefined && { silBalance }),
   }
 
@@ -216,6 +236,10 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
       res.status(404).json({ message: 'Employee not found' })
       return
     }
+    if (err instanceof Error && 'code' in err && (err as { code?: string }).code === 'P2002') {
+      res.status(409).json({ message: 'That employee ID is already in use' })
+      return
+    }
     throw err
   }
 
@@ -223,7 +247,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   // more sensitive change than a position/status/team edit and is
   // worth being able to find in the log on its own.
   if (silBalance !== undefined) logAudit(req.auth.sub, 'update_sil_balance', 'employee', id)
-  if (Object.keys(rest).length > 0 || dateHired !== undefined) logAudit(req.auth.sub, 'update', 'employee', id)
+  if (Object.keys(rest).length > 0 || dateHired !== undefined || probationEndDate !== undefined || regularizationDate !== undefined) logAudit(req.auth.sub, 'update', 'employee', id)
 
   res.status(200).json(serialize(employee))
 }

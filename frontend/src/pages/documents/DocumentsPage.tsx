@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncStat
 import { Card, CardForm } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { Section, SectionStack } from '../../components/ui/Section'
 import { ROLE_LABELS, type Role } from '../../auth/types'
 import type { Document } from './types'
 
@@ -168,8 +169,12 @@ export function DocumentsPage() {
       <PageHeader title="Documents" />
 
       {canManage && (
-        <div className="mb-4">
-          <UploadForm onUploaded={(d) => setData((prev) => (prev ? [d, ...prev] : [d]))} />
+        <div className="mb-3">
+          <SectionStack>
+            <Section id="documents.upload" title="Upload a document" hint="HR / Admin" roles={['hr', 'admin']}>
+              <UploadForm onUploaded={(d) => setData((prev) => (prev ? [d, ...prev] : [d]))} />
+            </Section>
+          </SectionStack>
         </div>
       )}
 
@@ -183,13 +188,16 @@ export function DocumentsPage() {
       )}
 
       {data && data.length > 0 && (
-        <div className="space-y-6">
+        <SectionStack>
           {Array.from(groupByCategory(data)).map(([category, docs]) => (
-            <section key={category}>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                {category}
-              </h2>
-              <ul className="mt-2 space-y-2">
+            <Section
+              key={category}
+              id={`documents.${category.toLowerCase().replace(/\s+/g, '-')}`}
+              title={category}
+              hint={`${docs.length} ${docs.length === 1 ? 'document' : 'documents'}`}
+              defaultOpen
+            >
+              <ul className="space-y-2">
                 {docs.map((doc) => (
                   <li key={doc.id}>
                     <Card className="flex flex-wrap items-center justify-between gap-2 !py-3">
@@ -208,9 +216,9 @@ export function DocumentsPage() {
                   </li>
                 ))}
               </ul>
-            </section>
+            </Section>
           ))}
-        </div>
+        </SectionStack>
       )}
     </div>
   )

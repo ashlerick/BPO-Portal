@@ -37,7 +37,10 @@ function isManager(req: AuthedRequest): boolean {
 }
 
 async function handleList(req: AuthedRequest, res: VercelResponse) {
+  // Files that belong to one employee (Employee Management -> Employee
+  // documents) never appear in the company-wide list.
   const documents = await prisma.document.findMany({
+    where: { employeeId: null },
     include: { category: true },
     orderBy: { createdAt: 'desc' },
   })
@@ -62,7 +65,14 @@ async function handleDownload(req: AuthedRequest, res: VercelResponse, id: strin
     return
   }
 
-  if (!canAccess(req, doc.accessLevel)) {
+  if (doc.employeeId) {
+    // An employee's own file: HR/Admin, or the employee it belongs to.
+    const owner = await prisma.employee.findUnique({ where: { id: doc.employeeId }, select: { userId: true } })
+    if (!isManager(req) && owner?.userId !== req.auth.sub) {
+      res.status(403).json({ message: 'Insufficient permissions' })
+      return
+    }
+  } else if (!canAccess(req, doc.accessLevel)) {
     res.status(403).json({ message: 'Insufficient permissions' })
     return
   }

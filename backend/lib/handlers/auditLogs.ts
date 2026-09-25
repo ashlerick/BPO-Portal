@@ -1,9 +1,9 @@
 import type { VercelResponse } from '@vercel/node'
-import { prisma } from '../lib/prisma.js'
-import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
-import { formatDisplayName } from '../lib/names.js'
+import { prisma } from '../prisma.js'
+import type { AuthedRequest } from '../middleware.js'
+import { formatDisplayName } from '../names.js'
 
-async function handler(req: AuthedRequest, res: VercelResponse) {
+export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     res.status(405).json({ message: 'Method not allowed' })
     return
@@ -39,4 +39,3 @@ async function handler(req: AuthedRequest, res: VercelResponse) {
   )
 }
 
-export default requireAuth(handler, { roles: ['admin'] })

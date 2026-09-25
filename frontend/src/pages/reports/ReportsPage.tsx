@@ -3,6 +3,7 @@ import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
 import { Card, CardForm } from '../../components/ui/Card'
+import { Section, SectionStack } from '../../components/ui/Section'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -664,6 +665,7 @@ export function ReportsPage() {
   const canCreateGeneric = effectiveRoles.some((r) => r === 'team_leader' || r === 'hr' || r === 'admin')
   const [reports, setReports] = useState<WeeklyReport[] | null>(null)
   const [teams, setTeams] = useState<Team[]>([])
+  const [departmentNames, setDepartmentNames] = useState<string[]>([])
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
   const [department, setDepartment] = useState('')
   const [loading, setLoading] = useState(true)
@@ -672,24 +674,43 @@ export function ReportsPage() {
   useEffect(() => {
     Promise.all([
       api.get<WeeklyReport[]>('/reports'),
-      api.get<{ teams: Team[] }>('/directory'),
+      api.get<{ departments: { id: string; name: string }[]; teams: Team[] }>('/directory'),
       api.get<MyEmployeeProfile>('/employees/me').catch(() => null),
     ])
       .then(([r, dir, profile]) => {
         setReports(r)
         setTeams(dir.teams)
+        setDepartmentNames(dir.departments.map((d) => d.name).sort())
         setMyTeamId(profile?.teamId ?? null)
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Something went wrong'))
       .finally(() => setLoading(false))
   }, [])
 
-  const departments = [...new Set(teams.map((t) => t.department))].sort()
+  const departments = departmentNames
   const genericTeams = teams.filter(
     (t) => !isFoaDepartment(t.department) && (!department || t.department === department),
   )
   const visibleReports = reports?.filter((r) => !department || r.department === department) ?? null
   const myFoaTeam = teams.find((t) => t.id === myTeamId && isFoaDepartment(t.department))
+
+  // Approved reports are "history"; everything still moving through the
+  // draft -> submitted -> reviewed flow is split by kind (individually
+  // authored FOA reports vs. generic team-wide ones).
+  const activeReports = visibleReports?.filter((r) => r.status !== 'approved') ?? []
+  const employeeReports = activeReports.filter((r) => r.schemaKey === 'foa')
+  const teamReports = activeReports.filter((r) => r.schemaKey !== 'foa')
+  const historyReports = visibleReports?.filter((r) => r.status === 'approved') ?? []
+
+  function renderReport(r: WeeklyReport) {
+    return (
+      <ReportCard
+        key={r.id}
+        report={r}
+        onUpdated={(updated) => setReports((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
+      />
+    )
+  }
 
   return (
     <div>
@@ -732,17 +753,41 @@ export function ReportsPage() {
       {visibleReports && visibleReports.length === 0 && <EmptyState label="No reports yet." />}
 
       {visibleReports && visibleReports.length > 0 && (
-        <div className="mt-4 space-y-3">
-          {visibleReports.map((r) => (
-            <ReportCard
-              key={r.id}
-              report={r}
-              onUpdated={(updated) =>
-                setReports((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)
-              }
-            />
-          ))}
-        </div>
+        <SectionStack>
+          <Section
+            id="reports.employee"
+            title="Employee weekly reports"
+            hint={`${employeeReports.length} in progress`}
+            defaultOpen={employeeReports.length > 0}
+          >
+            {employeeReports.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No individual reports in progress.</p>
+            ) : (
+              <div className="space-y-3">{employeeReports.map(renderReport)}</div>
+            )}
+          </Section>
+
+          <Section
+            id="reports.team"
+            title="Team reports"
+            hint={`${teamReports.length} in progress`}
+            defaultOpen={teamReports.length > 0}
+          >
+            {teamReports.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No team reports in progress.</p>
+            ) : (
+              <div className="space-y-3">{teamReports.map(renderReport)}</div>
+            )}
+          </Section>
+
+          <Section id="reports.history" title="Report history" hint={`${historyReports.length} approved`}>
+            {historyReports.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No approved reports yet.</p>
+            ) : (
+              <div className="space-y-3">{historyReports.map(renderReport)}</div>
+            )}
+          </Section>
+        </SectionStack>
       )}
     </div>
   )

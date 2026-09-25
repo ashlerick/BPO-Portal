@@ -8,6 +8,7 @@ import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { buildCsv, buildPdf, buildXlsx, type ReportData } from '../lib/reports.js'
 import { foaReportDataSchema, resolveSchemaKey, type FoaReportData } from '../lib/foaReport.js'
 import { formatDisplayName } from '../lib/names.js'
+import { notifyUsers } from '../lib/notify.js'
 
 // GET /reports (list, role-scoped), POST /reports (create draft),
 // PUT /reports/:id (lifecycle transitions, via a vercel.json rewrite
@@ -281,6 +282,19 @@ async function handleTransition(req: AuthedRequest, res: VercelResponse, id: str
   })
 
   logAudit(req.auth.sub, action, 'weekly_report', id)
+
+  if (action === 'approve' || action === 'reject') {
+    const owner = report.submittedBy ?? report.authorId
+    if (owner && owner !== req.auth.sub) {
+      await notifyUsers([owner], {
+        type: 'report_decision',
+        title: `Weekly report ${nextStatus}`,
+        body: action === 'reject' && comment ? `Comment: ${comment}` : undefined,
+        link: '/reports',
+      })
+    }
+  }
+
   res.status(200).json(updated)
 }
 

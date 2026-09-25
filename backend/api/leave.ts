@@ -10,6 +10,7 @@ import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { formatDisplayName } from '../lib/names.js'
 import { getClientIp, isOffSiteIp } from '../lib/request.js'
 import { isNotFoundError } from '../lib/errors.js'
+import { notifyRole, notifyUsers } from '../lib/notify.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): leave requests + daily attendance
@@ -117,6 +118,12 @@ async function handleCreateLeaveRequest(req: AuthedRequest, res: VercelResponse)
     )
   }
 
+  await notifyRole(
+    ['hr', 'admin'],
+    { type: 'leave_request', title: 'New leave request', body: `${requesterName}: ${days} day(s)`, link: '/leave' },
+    req.auth.sub,
+  )
+
   res.status(201).json(leaveRequest)
 }
 
@@ -159,6 +166,17 @@ async function handleReviewLeaveRequest(req: AuthedRequest, res: VercelResponse,
   })
 
   logAudit(req.auth.sub, action, 'leave_request', id)
+
+  const requester = await prisma.employee.findUnique({ where: { id: leaveRequest.employeeId }, select: { userId: true } })
+  if (requester) {
+    await notifyUsers([requester.userId], {
+      type: 'leave_decision',
+      title: `Leave ${nextStatus}`,
+      body: comment ? `Comment: ${comment}` : undefined,
+      link: '/leave',
+    })
+  }
+
   res.status(200).json(updated)
 }
 

@@ -24,6 +24,9 @@ model User {
   middleName   String?
   lastName     String
   roles        Role[]   @default([employee])
+  // Per-user settings (notification preferences). Shape: { disabledNotifications?: string[] }
+  settings     Json     @default("{}")
+  notifications Notification[]
   employee     Employee?
   resetTokens  PasswordResetToken[]
   createdAt    DateTime @default(now())
@@ -75,7 +78,10 @@ model Employee {
   position   String?
   status     String    @default("active")
   dateHired  DateTime?
+  // Supervisor: another Employee. Set by HR/Admin.
   managerId  String?
+  manager    Employee? @relation("Supervisor", fields: [managerId], references: [id], onDelete: SetNull)
+  supervisees Employee[] @relation("Supervisor")
   silBalance Int       @default(5)
 
   // Self-service contact details: the employee edits their own; HR/Admin
@@ -85,8 +91,29 @@ model Employee {
   emergencyContactName  String?
   emergencyContactPhone String?
 
-  leaveRequests     LeaveRequest[]
-  attendanceRecords AttendanceRecord[]
+  // HR record fields (Employee Management). salary is HR/Admin only and is
+  // never included in self-service (/employees/me) responses.
+  employeeCode           String?   @unique
+  probationEndDate       DateTime?
+  regularizationDate     DateTime?
+  salary                 Decimal?  @db.Decimal(12, 2)
+  // [{ name, number?, status: "pending" | "submitted" | "verified" }]
+  governmentRequirements Json      @default("[]")
+
+  leaveRequests       LeaveRequest[]
+  attendanceRecords   AttendanceRecord[]
+  dependents          Dependent[]
+  employmentHistory   EmploymentHistory[]
+  documents           Document[]
+  hrRequests          HrRequest[]
+  benefitEnrollments  BenefitEnrollment[]
+  checklists          Checklist[]
+  performanceReviews  PerformanceReview[]
+  performanceNotes    PerformanceNote[]
+  disciplinaryCases   DisciplinaryCase[]
+  salaryChanges       SalaryChange[]
+  payItems            PayItem[]
+  payslips            Payslip[]
 
   @@map("employees")
 }
@@ -142,6 +169,7 @@ model Announcement {
   title     String
   content   String
   authorId  String
+  category  String    @default("Company announcements")
   published Boolean   @default(false)
   publishAt DateTime?
   expireAt  DateTime?
@@ -156,8 +184,11 @@ model Benefit {
   category    String
   description String
   eligibility String?
+  provider        String?
+  providerContact String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  enrollments BenefitEnrollment[]
 
   @@map("benefits")
 }
@@ -178,6 +209,11 @@ model Document {
   storageKey  String
   accessLevel Role              @default(employee)
   uploadedBy  String
+  // Set for a file that belongs to one employee (Employee Management ->
+  // Employee documents); such a file is visible only to that employee's
+  // record managers (HR/Admin), never through the company Documents list.
+  employee    Employee?         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String?
   createdAt   DateTime          @default(now())
 
   @@map("documents")
@@ -226,4 +262,311 @@ model AuditLog {
   createdAt  DateTime @default(now())
 
   @@map("audit_logs")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  // Machine-readable kind, e.g. "leave_approved" — also what a user's
+  // notification preferences key on.
+  type      String
+  title     String
+  body      String?
+  // In-app route to open when clicked, e.g. "/leave".
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model CalendarEvent {
+  id          String   @id @default(uuid())
+  title       String
+  // holiday | event | meeting | training | deadline
+  kind        String
+  // Date-only values (midnight UTC), like attendance dates.
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([startDate])
+  @@map("calendar_events")
+}
+
+model Dependent {
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  name         String
+  relationship String
+  birthDate    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([employeeId])
+  @@map("dependents")
+}
+
+model EmploymentHistory {
+  id         String    @id @default(uuid())
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  title      String
+  department String?
+  startDate  DateTime
+  endDate    DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+
+  @@index([employeeId])
+  @@map("employment_history")
+}
+
+// Employee-submitted HR requests. status: pending -> processing ->
+// completed -> closed.
+model HrRequest {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  // certificate_of_employment | salary_certificate | employment_verification
+  // | document_request | benefit_concern | hr_concern | other
+  type       String
+  subject    String
+  details    String?
+  status     String   @default("pending")
+  resolution String?
+  handledBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("hr_requests")
+}
+
+model BenefitEnrollment {
+  id            String    @id @default(uuid())
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId    String
+  benefit       Benefit   @relation(fields: [benefitId], references: [id], onDelete: Cascade)
+  benefitId     String
+  // enrolled | pending | waived | terminated
+  status        String    @default("pending")
+  effectiveDate DateTime?
+  endDate       DateTime?
+  dependentIds  String[]
+  notes         String?
+  // [{ at, by, action, detail? }] — every change, newest last.
+  history       Json      @default("[]")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([employeeId, benefitId])
+  @@map("benefit_enrollments")
+}
+
+// Onboarding and offboarding share one checklist shape. kind is
+// "onboarding" or "offboarding".
+model Checklist {
+  id             String          @id @default(uuid())
+  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  kind           String
+  // open | completed
+  status         String          @default("open")
+  // Offboarding only: resignation | termination, and the last working day.
+  separationType String?
+  effectiveDate  DateTime?
+  notes          String?
+  createdBy      String
+  completedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  tasks          ChecklistTask[]
+
+  @@index([employeeId, kind])
+  @@map("checklists")
+}
+
+model ChecklistTask {
+  id          String    @id @default(uuid())
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklistId String
+  label       String
+  position    Int
+  done        Boolean   @default(false)
+  doneAt      DateTime?
+  doneBy      String?
+  note        String?
+
+  @@index([checklistId])
+  @@map("checklist_tasks")
+}
+
+model JobOpening {
+  id          String      @id @default(uuid())
+  title       String
+  department  String?
+  description String?
+  // open | on_hold | closed
+  status      String      @default("open")
+  openedAt    DateTime    @default(now())
+  closedAt    DateTime?
+  applicants  Applicant[]
+
+  @@map("job_openings")
+}
+
+model Applicant {
+  id            String      @id @default(uuid())
+  jobOpening    JobOpening  @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  jobOpeningId  String
+  name          String
+  email         String?
+  phone         String?
+  // Free-text applicant information (background, source, expected salary…).
+  information   String?
+  // applied | screening | interview | offer | hired | rejected | withdrawn
+  status        String      @default("applied")
+  decisionNote  String?
+  decidedAt     DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  interviews    Interview[]
+
+  @@index([jobOpeningId])
+  @@map("applicants")
+}
+
+model Interview {
+  id          String    @id @default(uuid())
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  applicantId String
+  scheduledAt DateTime
+  interviewer String?
+  // Notes are HR-only; written after the interview.
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([applicantId])
+  @@map("interviews")
+}
+
+// One evaluation cycle for one employee. status: self_assessment ->
+// supervisor_evaluation -> hr_review -> completed.
+model PerformanceReview {
+  id                    String   @id @default(uuid())
+  employee              Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId            String
+  period                String
+  status                String   @default("self_assessment")
+  selfAssessment        String?
+  supervisorEvaluation  String?
+  supervisorRating      Int?
+  hrReview              String?
+  finalRating           Int?
+  createdBy             String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([employeeId])
+  @@map("performance_reviews")
+}
+
+// kind: "coaching" | "improvement_plan"
+model PerformanceNote {
+  id         String    @id @default(uuid())
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  kind       String
+  title      String
+  details    String?
+  // active | completed
+  status     String    @default("active")
+  dueDate    DateTime?
+  createdBy  String
+  createdAt  DateTime  @default(now())
+
+  @@index([employeeId])
+  @@map("performance_notes")
+}
+
+// HR-only. Never exposed to the employee or to non-HR roles.
+model DisciplinaryCase {
+  id                  String   @id @default(uuid())
+  employee            Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId          String
+  title               String
+  incidentDate        DateTime
+  incidentReport      String
+  employeeExplanation String?
+  // none | written | final
+  warningLevel        String   @default("none")
+  correctiveAction    String?
+  // open | under_review | resolved | closed
+  status              String   @default("open")
+  // [{ name, key }] — storage keys of supporting documents.
+  documents           Json     @default("[]")
+  // [{ at, by, action, detail? }] — timeline, newest last.
+  history             Json     @default("[]")
+  createdBy           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([employeeId])
+  @@map("disciplinary_cases")
+}
+
+model SalaryChange {
+  id            String   @id @default(uuid())
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId    String
+  effectiveDate DateTime
+  previousSalary Decimal? @db.Decimal(12, 2)
+  newSalary     Decimal  @db.Decimal(12, 2)
+  reason        String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId])
+  @@map("salary_changes")
+}
+
+// kind: "allowance" | "bonus" | "deduction"
+model PayItem {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  kind       String
+  label      String
+  amount     Decimal  @db.Decimal(12, 2)
+  // Date it applies to (bonus paid, deduction taken, allowance start).
+  date       DateTime
+  recurring  Boolean  @default(false)
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId])
+  @@map("pay_items")
+}
+
+model Payslip {
+  id          String   @id @default(uuid())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  periodStart DateTime
+  periodEnd   DateTime
+  gross       Decimal  @db.Decimal(12, 2)
+  deductions  Decimal  @db.Decimal(12, 2)
+  net         Decimal  @db.Decimal(12, 2)
+  // Optional uploaded PDF of the actual payslip.
+  fileKey     String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([employeeId])
+  @@map("payslips")
 }

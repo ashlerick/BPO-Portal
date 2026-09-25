@@ -6,7 +6,8 @@ import { Card, CardForm } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
-import type { Announcement } from './types'
+import { Section, SectionStack } from '../../components/ui/Section'
+import { ANNOUNCEMENT_CATEGORIES, isExpired, type Announcement, type AnnouncementCategory } from './types'
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'Asia/Manila' })
 
@@ -14,6 +15,8 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   const { guardedAction } = useAuth()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [category, setCategory] = useState<AnnouncementCategory>(ANNOUNCEMENT_CATEGORIES[0])
+  const [expireOn, setExpireOn] = useState('')
   const [published, setPublished] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,10 +27,17 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
       setError(null)
       setSubmitting(true)
       try {
-        const created = await api.post<Announcement>('/announcements', { title, content, published })
+        const created = await api.post<Announcement>('/announcements', {
+          title,
+          content,
+          category,
+          published,
+          ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
+        })
         onCreated(created)
         setTitle('')
         setContent('')
+        setExpireOn('')
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not create announcement')
       } finally {
@@ -43,6 +53,37 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           Title
         </label>
         <input id="ann-title" required value={title} onChange={(e) => setTitle(e.target.value)} className="field" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label htmlFor="ann-category" className="text-sm text-gray-600 dark:text-gray-400">
+            Category
+          </label>
+          <select
+            id="ann-category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value as AnnouncementCategory)}
+            className="field"
+          >
+            {ANNOUNCEMENT_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="ann-expire" className="text-sm text-gray-600 dark:text-gray-400">
+            Expires on (optional)
+          </label>
+          <input
+            id="ann-expire"
+            type="date"
+            value={expireOn}
+            onChange={(e) => setExpireOn(e.target.value)}
+            className="field"
+          />
+        </div>
       </div>
       <div className="space-y-1">
         <label htmlFor="ann-content" className="text-sm text-gray-600 dark:text-gray-400">
@@ -193,6 +234,20 @@ export function AnnouncementsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const history = data?.filter((a) => isExpired(a)) ?? []
+
+  function renderItem(announcement: Announcement) {
+    return (
+      <AnnouncementItem
+        key={announcement.id}
+        announcement={announcement}
+        canManage={canManage}
+        onUpdated={(updated) => setData((prev) => prev?.map((a) => (a.id === updated.id ? updated : a)) ?? null)}
+        onDeleted={(id) => setData((prev) => prev?.filter((a) => a.id !== id) ?? null)}
+      />
+    )
+  }
+
   return (
     <div>
       <PageHeader title="Announcements" />
@@ -208,19 +263,38 @@ export function AnnouncementsPage() {
       {data && data.length === 0 && <EmptyState label="No announcements yet." />}
 
       {data && data.length > 0 && (
-        <ul className="space-y-3">
-          {data.map((announcement) => (
-            <AnnouncementItem
-              key={announcement.id}
-              announcement={announcement}
-              canManage={canManage}
-              onUpdated={(updated) =>
-                setData((prev) => prev?.map((a) => (a.id === updated.id ? updated : a)) ?? null)
-              }
-              onDeleted={(id) => setData((prev) => prev?.filter((a) => a.id !== id) ?? null)}
-            />
-          ))}
-        </ul>
+        <SectionStack>
+          {ANNOUNCEMENT_CATEGORIES.map((category) => {
+            const items = data.filter((a) => a.category === category && !isExpired(a))
+            return (
+              <Section
+                key={category}
+                id={`announcements.${category.toLowerCase().replace(/\s+/g, '-')}`}
+                title={category}
+                hint={`${items.length} active`}
+                defaultOpen={items.length > 0}
+              >
+                {items.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Nothing posted here.</p>
+                ) : (
+                  <ul className="space-y-3">{items.map(renderItem)}</ul>
+                )}
+              </Section>
+            )
+          })}
+
+          <Section
+            id="announcements.history"
+            title="Announcement history"
+            hint={`${history.length} expired`}
+          >
+            {history.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No expired announcements.</p>
+            ) : (
+              <ul className="space-y-3">{history.map(renderItem)}</ul>
+            )}
+          </Section>
+        </SectionStack>
       )}
     </div>
   )
