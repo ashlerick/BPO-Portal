@@ -570,3 +570,13 @@ model Payslip {
   @@index([employeeId])
   @@map("payslips")
 }
+
+// Portal-wide settings kept as JSON, keyed by name. Currently just "menu":
+// the admin's sidebar overrides (labels, order, visibility, roles).
+model PortalSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("portal_settings")
+}

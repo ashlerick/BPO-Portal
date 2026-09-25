@@ -25,6 +25,7 @@
     { "source": "/api/calendar", "destination": "/api/portal?resource=calendar" },
     { "source": "/api/calendar/:id", "destination": "/api/portal?resource=calendar&sub=:id" },
     { "source": "/api/settings", "destination": "/api/portal?resource=settings" },
+    { "source": "/api/menu", "destination": "/api/portal?resource=menu" },
     { "source": "/api/hr/:resource", "destination": "/api/hr?resource=:resource" },
     { "source": "/api/hr/:resource/:id", "destination": "/api/hr?resource=:resource&sub=:id" },
     { "source": "/api/restricted/:resource", "destination": "/api/restricted?resource=:resource" },

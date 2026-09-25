@@ -22,6 +22,7 @@ import { PerformancePage } from './pages/performance/PerformancePage'
 import { RecruitmentPage } from './pages/recruitment/RecruitmentPage'
 import { LeaveRequestsPage } from './pages/leave/LeaveRequestsPage'
 import { LoginPage } from './pages/login/LoginPage'
+import { MenuManagementPage } from './pages/menu/MenuManagementPage'
 import { NotificationsPage } from './pages/notifications/NotificationsPage'
 import { ProfilePage } from './pages/profile/ProfilePage'
 import { ReportsPage } from './pages/reports/ReportsPage'
@@ -113,6 +114,14 @@ export default function App() {
                 element={
                   <RequireAuth roles={['admin']}>
                     <UsersPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/menu"
+                element={
+                  <RequireAuth roles={['admin']}>
+                    <MenuManagementPage />
                   </RequireAuth>
                 }
               />
