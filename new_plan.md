@@ -19,8 +19,9 @@ against a database or in a browser yet**. Test before relying on it.
 | Employee Relations / Disciplinary, Payroll / Compensation | Built, restricted + every read audit-logged |
 
 Known gaps / decisions still open:
-- **Late / undertime records** (Attendance): needs shift schedules, which the portal doesn't have. The
-  section explains this instead of showing fake data.
+- **Late / undertime records** (Attendance): built on HR-managed **shift schedules** (shift templates with
+  grace minutes and working days, assigned per employee from a date; night shifts supported). Employees
+  with no shift assigned are not measured.
 - **Admin access to Disciplinary and Payroll**: currently HR **and** Admin. One line in
   `backend/lib/handlers/util.ts` (`RESTRICTED_ROLES`) makes it HR-only.
 - **Vercel Hobby function cap**: the backend is now at exactly 12 functions. Anything new must go into an

@@ -9,6 +9,7 @@ import { handler as todos } from '../lib/handlers/todos.js'
 import { handler as kpi } from '../lib/handlers/kpi.js'
 import { handler as freedomWall } from '../lib/handlers/freedomWall.js'
 import { handler as inventory } from '../lib/handlers/inventory.js'
+import { handler as shifts } from '../lib/handlers/shifts.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -27,6 +28,7 @@ export default requireAuth(async (req, res) => {
   if (resource === 'kpi') return kpi(req, res)
   if (resource === 'freedom-wall') return freedomWall(req, res)
   if (resource === 'inventory') return inventory(req, res)
+  if (resource === 'shifts') return shifts(req, res)
 
   res.status(404).json({ message: 'Not found' })
 })

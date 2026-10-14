@@ -11,6 +11,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
+import { AssignShift, LateReport, MySchedule, ShiftTemplates } from './Shifts'
 
 const timeFmt = formatManilaTime
 
@@ -488,11 +489,20 @@ export function AttendancePage() {
           )}
         </Section>
 
-        <Section id="attendance.late" title="Late / undertime records" hint="Needs shift schedules">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Late arrivals and undertime are measured against each employee's scheduled shift. Shift schedules aren't
-            set up in the portal yet, so there is nothing to compare check-in and check-out times against.
-          </p>
+        <Section id="attendance.schedule" title="My shift schedule" hint="Set by HR">
+          <MySchedule />
+        </Section>
+
+        <Section id="attendance.late" title="Late / undertime records" hint={`${from} to ${to}`}>
+          <LateReport from={from} to={to} employeeId={employeeId} />
+        </Section>
+
+        <Section id="attendance.shifts" title="Shift schedules" hint="HR / Admin: define shifts" roles={['hr', 'admin']}>
+          <ShiftTemplates />
+        </Section>
+
+        <Section id="attendance.assign" title="Assign shifts" hint="HR / Admin: put employees on a shift" roles={['hr', 'admin']}>
+          <AssignShift />
         </Section>
 
         <Section

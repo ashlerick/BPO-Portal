@@ -112,6 +112,7 @@ model Employee {
   todos               Todo[]
   kpiScores           KpiScore[]
   inventoryItems      InventoryItem[]
+  shiftAssignments    ShiftAssignment[]
   benefitEnrollments  BenefitEnrollment[]
   checklists          Checklist[]
   performanceReviews  PerformanceReview[]
@@ -684,6 +685,41 @@ model InventoryAssignment {
   @@index([itemId])
   @@index([employeeId])
   @@map("inventory_assignments")
+}
+
+// Shift schedules, managed by HR. Late / undertime / overtime are measured
+// against the shift that applies to an attendance date.
+model Shift {
+  id           String   @id @default(uuid())
+  name         String
+  // "HH:MM" in Manila time. endTime <= startTime means the shift crosses midnight.
+  startTime    String
+  endTime      String
+  // 0 = Sunday ... 6 = Saturday
+  workDays     Int[]
+  breakMinutes Int      @default(0)
+  graceMinutes Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  assignments  ShiftAssignment[]
+
+  @@map("shifts")
+}
+
+// The shift an employee works from effectiveFrom (a date, midnight UTC)
+// until their next assignment.
+model ShiftAssignment {
+  id            String   @id @default(uuid())
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId    String
+  shift         Shift    @relation(fields: [shiftId], references: [id])
+  shiftId       String
+  effectiveFrom DateTime
+  assignedBy    String
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId, effectiveFrom])
+  @@map("shift_assignments")
 }
 
 // Portal-wide settings kept as JSON, keyed by name. Currently just "menu":
