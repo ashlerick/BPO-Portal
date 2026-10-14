@@ -16,7 +16,7 @@ import { dateOnlyPattern, forbid, isHrOrAdmin, notFound, parseBody, queryString,
 const KINDS = ['onboarding', 'offboarding'] as const
 
 // HR dropped "Account creation" and "Equipment" from the onboarding list.
-const DEFAULT_TASKS: Record<(typeof KINDS)[number], string[]> = {
+export const DEFAULT_TASKS: Record<(typeof KINDS)[number], string[]> = {
   onboarding: [
     'Employment contract',
     'Government requirements',

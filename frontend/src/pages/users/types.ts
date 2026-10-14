@@ -9,5 +9,6 @@ export interface ManagedUser {
   name: string
   roles: Role[]
   passwordSet: boolean
+  active: boolean
   createdAt: string
 }

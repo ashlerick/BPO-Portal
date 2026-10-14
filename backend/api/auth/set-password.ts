@@ -94,7 +94,7 @@ async function handleForgotPassword(req: VercelRequest, res: VercelResponse) {
   }
 
   const user = await prisma.user.findUnique({ where: { email: parsed.data.email } })
-  if (user) {
+  if (user && user.active) {
     await createAndSendResetLink(user)
   }
 
@@ -121,6 +121,11 @@ async function handleAdminResetPassword(req: VercelRequest, res: VercelResponse)
   const user = await prisma.user.findUnique({ where: { id: parsed.data.userId } })
   if (!user) {
     res.status(404).json({ message: 'User not found' })
+    return
+  }
+
+  if (!user.active) {
+    res.status(400).json({ message: 'This account has not been activated yet. Activate it first.' })
     return
   }
 
@@ -174,6 +179,12 @@ async function handleSetPassword(req: VercelRequest, res: VercelResponse) {
 
   const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } })
   if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+    res.status(400).json({ message: 'This link is invalid or has expired' })
+    return
+  }
+
+  const owner = await prisma.user.findUnique({ where: { id: resetToken.userId }, select: { active: true } })
+  if (!owner?.active) {
     res.status(400).json({ message: 'This link is invalid or has expired' })
     return
   }

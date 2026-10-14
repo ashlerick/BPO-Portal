@@ -20,6 +20,9 @@ model User {
   email        String   @unique
   passwordHash String
   passwordSet  Boolean  @default(true)
+  // false until HR/Admin activates a new hire's account (Onboarding). An
+  // inactive account can't log in or use password-reset links.
+  active       Boolean  @default(true)
   firstName    String
   middleName   String?
   lastName     String

@@ -244,6 +244,8 @@ function UserRow({
   const [resetError, setResetError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [activating, setActivating] = useState(false)
+  const [activateError, setActivateError] = useState<string | null>(null)
   const isSelf = user.id === currentUser?.id
 
   function remove() {
@@ -258,6 +260,22 @@ function UserRow({
       } catch (err) {
         setDeleteError(err instanceof ApiError ? err.message : 'Could not delete this account')
         setDeleting(false)
+      }
+    })
+  }
+
+  function activate() {
+    if (!window.confirm(`Activate ${user.name}'s account? A setup link will be emailed to ${user.email}.`)) return
+    setActivateError(null)
+
+    guardedAction(['admin'], async () => {
+      setActivating(true)
+      try {
+        onSaved(await api.put<ManagedUser>(`/users/${user.id}`, { activate: true }))
+      } catch (err) {
+        setActivateError(err instanceof ApiError ? err.message : 'Could not activate this account')
+      } finally {
+        setActivating(false)
       }
     })
   }
@@ -346,10 +364,16 @@ function UserRow({
         <td data-primary className="py-2.5 pl-4 pr-4">
           <div className="font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
-          {!user.passwordSet && (
-            <Badge tone="amber" className="mt-1">
-              Setup pending
+          {!user.active ? (
+            <Badge tone="gray" className="mt-1">
+              Not activated
             </Badge>
+          ) : (
+            !user.passwordSet && (
+              <Badge tone="amber" className="mt-1">
+                Setup pending
+              </Badge>
+            )
           )}
         </td>
         <td data-label="Roles" className="py-2.5 pr-4 text-sm text-gray-600 dark:text-gray-400">
@@ -360,15 +384,22 @@ function UserRow({
             <Button size="sm" onClick={startEditing}>
               Edit
             </Button>
-            <Button size="sm" onClick={sendResetLink} disabled={sendingReset}>
-              {sendingReset ? 'Sending…' : 'Send reset link'}
-            </Button>
+            {user.active ? (
+              <Button size="sm" onClick={sendResetLink} disabled={sendingReset}>
+                {sendingReset ? 'Sending…' : 'Send reset link'}
+              </Button>
+            ) : (
+              <Button size="sm" variant="primary" onClick={activate} disabled={activating}>
+                {activating ? 'Activating…' : 'Activate'}
+              </Button>
+            )}
             {!isSelf && (
               <Button size="sm" variant="danger" onClick={remove} disabled={deleting}>
                 {deleting ? 'Deleting…' : 'Delete'}
               </Button>
             )}
           </div>
+          {activateError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{activateError}</p>}
           {resetMessage && <p className="mt-1 text-xs text-brand-700 dark:text-brand-400">{resetMessage}</p>}
           {resetError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{resetError}</p>}
           {deleteError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{deleteError}</p>}

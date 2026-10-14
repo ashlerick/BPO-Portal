@@ -8,6 +8,7 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { isNotFoundError, isUniqueConstraintError } from '../lib/errors.js'
 import { formatDisplayName } from '../lib/names.js'
+import { activateAccount } from '../lib/accounts.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): GET /users, POST /users, PUT /users/:id.
@@ -35,6 +36,8 @@ const updateUserSchema = z
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
     middleName: z.string().trim().optional().nullable(),
+    // Switch a new hire's inactive account on (and send the setup link).
+    activate: z.literal(true).optional(),
   })
   .refine(
     (data) =>
@@ -42,7 +45,8 @@ const updateUserSchema = z
       data.email !== undefined ||
       data.firstName !== undefined ||
       data.lastName !== undefined ||
-      data.middleName !== undefined,
+      data.middleName !== undefined ||
+      data.activate !== undefined,
     { message: 'Nothing to update' },
   )
 
@@ -54,6 +58,7 @@ const userSelect = {
   lastName: true,
   roles: true,
   passwordSet: true,
+  active: true,
   createdAt: true,
 } as const
 
@@ -65,6 +70,7 @@ function serialize(u: {
   lastName: string
   roles: (typeof ROLES)[number][]
   passwordSet: boolean
+  active: boolean
   createdAt: Date
 }) {
   return {
@@ -76,6 +82,7 @@ function serialize(u: {
     name: formatDisplayName(u.firstName, u.middleName, u.lastName),
     roles: u.roles,
     passwordSet: u.passwordSet,
+    active: u.active,
     createdAt: u.createdAt,
   }
 }
@@ -161,7 +168,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     return
   }
 
-  const { roles, email, firstName, lastName, middleName } = parsed.data
+  const { roles, email, firstName, lastName, middleName, activate } = parsed.data
   const nameChanged = firstName !== undefined || lastName !== undefined || middleName !== undefined
 
   let user
@@ -194,6 +201,11 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   // rather than a single catch-all "update". Awaited (unlike most
   // logAudit call sites) so the write is guaranteed to land before the
   // response returns, rather than racing the function's teardown.
+  if (activate) {
+    if (await activateAccount(id)) await logAudit(req.auth.sub, 'activate', 'user', id)
+    const fresh = await prisma.user.findUnique({ where: { id }, select: userSelect })
+    if (fresh) user = fresh
+  }
   if (roles !== undefined) await logAudit(req.auth.sub, 'update_roles', 'user', id)
   if (email !== undefined) await logAudit(req.auth.sub, 'update_email', 'user', id)
   if (nameChanged) await logAudit(req.auth.sub, 'update_name', 'user', id)

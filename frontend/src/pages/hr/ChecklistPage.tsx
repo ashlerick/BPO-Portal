@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { formatDateOnly } from '../../utils/dates'
 import type { Checklist } from './types'
+import { NewHireForm, PendingActivation } from './NewHire'
 
 // One page for both onboarding and offboarding: they share a checklist
 // shape (employee + ticked tasks + notes); offboarding also records the
@@ -179,6 +180,7 @@ function ChecklistCard({ checklist, onUpdated, onDeleted }: { checklist: Checkli
 export function ChecklistPage({ kind }: { kind: Checklist['kind'] }) {
   const [items, setItems] = useState<Checklist[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     setItems(null)
@@ -186,7 +188,7 @@ export function ChecklistPage({ kind }: { kind: Checklist['kind'] }) {
       .get<Checklist[]>(`/hr/checklists?kind=${kind}`)
       .then(setItems)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Something went wrong'))
-  }, [kind])
+  }, [kind, reload])
 
   const open = items?.filter((c) => c.status === 'open') ?? []
   const completed = items?.filter((c) => c.status === 'completed') ?? []
@@ -201,7 +203,17 @@ export function ChecklistPage({ kind }: { kind: Checklist['kind'] }) {
 
       {items && (
         <SectionStack>
-          <Section id={`${kind}.start`} title={COPY[kind].start} defaultOpen={items.length === 0}>
+          {kind === 'onboarding' && (
+            <>
+              <Section id="onboarding.newhire" title="New hire" hint="Create the account, employee record and checklist together" defaultOpen>
+                <NewHireForm onCreated={() => setReload((n) => n + 1)} />
+              </Section>
+              <Section id="onboarding.activate" title="Waiting for activation" hint="Accounts that cannot log in yet" defaultOpen>
+                <PendingActivation refreshToken={reload} onActivated={() => setReload((n) => n + 1)} />
+              </Section>
+            </>
+          )}
+          <Section id={`${kind}.start`} title={kind === 'onboarding' ? 'Start onboarding for an existing employee' : COPY[kind].start} defaultOpen={kind !== 'onboarding' && items.length === 0}>
             <StartForm kind={kind} onCreated={(c) => setItems((prev) => (prev ? [c, ...prev] : [c]))} />
           </Section>
           <Section id={`${kind}.open`} title="In progress" hint={`${open.length} open`} defaultOpen>

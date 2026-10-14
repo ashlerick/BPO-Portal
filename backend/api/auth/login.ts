@@ -37,6 +37,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  if (!user.active) {
+    res.status(403).json({ message: 'Your account has not been activated yet. Please contact HR.' })
+    return
+  }
+
   const token = signToken({ sub: user.id, email: user.email, roles: user.roles })
 
   res.status(200).json({
