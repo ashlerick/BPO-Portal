@@ -14,8 +14,8 @@ import {
   type MatchableEmployee,
 } from '../../utils/payslips'
 
-// Spreadsheet-style payslip links: employees down, the year's 24 cut-offs
-// across. Every cell saves itself when you leave it, so nothing is lost.
+// Payslip links for one month at a time: employees down, that month's 1H and
+// 2H side by side. Every cell saves itself when you leave it.
 
 interface GridData {
   year: number
@@ -34,10 +34,15 @@ interface Entry {
 }
 
 const key = (employeeId: string, month: number, half: number) => `${employeeId}|${month}|${half}`
+const HALVES: (1 | 2)[] = [1, 2]
+const border = 'border border-black/25 dark:border-white/30'
+const headCell = `${border} bg-black/[0.06] px-3 py-2 text-left font-medium text-gray-700 dark:bg-white/[0.08] dark:text-gray-300`
 
 export function PayslipGrid() {
   const thisYear = Number(todayInManilaIso().slice(0, 4))
-  const [year, setYear] = useState(thisYear)
+  const initial = useMemo(() => currentPeriod(todayInManilaIso()), [])
+  const [year, setYear] = useState(initial.year)
+  const [month, setMonth] = useState(initial.month)
   const [data, setData] = useState<GridData | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
   const [states, setStates] = useState<Record<string, { state: CellState; message?: string }>>({})
@@ -45,10 +50,7 @@ export function PayslipGrid() {
   const [search, setSearch] = useState('')
   const [onlyMissing, setOnlyMissing] = useState(false)
   const [importing, setImporting] = useState(false)
-  const scroller = useRef<HTMLDivElement>(null)
   const saved = useRef<Record<string, string>>({}) // last value known to be on the server
-
-  const focus = useMemo(() => currentPeriod(todayInManilaIso()), [])
 
   const load = useCallback(() => {
     setError(null)
@@ -62,16 +64,9 @@ export function PayslipGrid() {
         setStates({})
         setData(d)
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load the payslip grid'))
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load the payslip links'))
   }, [year])
   useEffect(load, [load])
-
-  // Open scrolled to the cut-off HR is most likely entering.
-  useEffect(() => {
-    if (!data || !scroller.current || focus.year !== year) return
-    const idx = (focus.month - 1) * 2 + (focus.half - 1)
-    scroller.current.scrollLeft = Math.max(0, idx * 190 - 120)
-  }, [data, focus, year])
 
   const setCell = useCallback((cells: { k: string; state: CellState; message?: string }[]) => {
     setStates((prev) => {
@@ -81,9 +76,8 @@ export function PayslipGrid() {
     })
   }, [])
 
-  // Persists entries and marks their cells. Resolves true when all saved.
   const persist = useCallback(
-    async (entries: Entry[]): Promise<boolean> => {
+    async (entries: Entry[]) => {
       const keys = entries.map((e) => key(e.employeeId, e.month, e.half))
       setCell(keys.map((k) => ({ k, state: 'saving' as const })))
       try {
@@ -93,67 +87,62 @@ export function PayslipGrid() {
           else saved.current[keys[i]] = e.link
         })
         setCell(keys.map((k) => ({ k, state: 'saved' as const })))
-        return true
       } catch (err) {
         const message = err instanceof ApiError ? err.message : 'Could not save'
         setCell(keys.map((k) => ({ k, state: 'error' as const, message })))
-        return false
       }
     },
     [setCell],
-  )
-
-  const commit = useCallback(
-    (employeeId: string, month: number, half: 1 | 2) => {
-      const k = key(employeeId, month, half)
-      const value = (values[k] ?? '').trim()
-      if (value === (saved.current[k] ?? '')) return
-      if (value !== '' && !isDriveLink(value)) {
-        setCell([{ k, state: 'error', message: 'Paste a Google Drive link (https://drive.google.com/...)' }])
-        return
-      }
-      void persist([{ employeeId, year, month, half, link: value === '' ? null : value }])
-    },
-    [values, year, persist, setCell],
   )
 
   if (error) return <ErrorState message={error} />
   if (!data) return <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
 
   const today = todayInManilaIso()
+  const monthName = MONTH_NAMES[month - 1]
+  const periodOf = (half: 1 | 2) => data.periods.find((p) => p.month === month && p.half === half)!
+  const cellKey = (employeeId: string, half: 1 | 2) => key(employeeId, month, half)
+
+  const commit = (employeeId: string, half: 1 | 2) => {
+    const k = cellKey(employeeId, half)
+    const value = (values[k] ?? '').trim()
+    if (value === (saved.current[k] ?? '')) return
+    if (value !== '' && !isDriveLink(value)) {
+      setCell([{ k, state: 'error', message: 'Paste a Google Drive link (https://drive.google.com/...)' }])
+      return
+    }
+    void persist([{ employeeId, year, month, half, link: value === '' ? null : value }])
+  }
+
   const q = search.trim().toLowerCase()
-  const focusKey = (id: string) => key(id, focus.month, focus.half)
   const rows = data.employees.filter(
     (e) =>
       (!q || e.name.toLowerCase().includes(q) || (e.employeeCode ?? '').toLowerCase().includes(q)) &&
-      (!onlyMissing || !(values[focusKey(e.employeeId)] ?? '').trim()),
+      (!onlyMissing || HALVES.some((h) => !(values[cellKey(e.employeeId, h)] ?? '').trim())),
   )
-  const total = data.employees.length * 24
-  const filled = Object.keys(saved.current).length
-  const pending = Object.values(states).filter((s) => s.state === 'saving').length
-  const failed = Object.values(states).filter((s) => s.state === 'error').length
+  const haveCount = (half: 1 | 2) => data.employees.filter((e) => (saved.current[cellKey(e.employeeId, half)] ?? '') !== '').length
+  const failures = Object.values(states).filter((s) => s.state === 'error')
+  const pending = Object.values(states).some((s) => s.state === 'saving')
 
-  // Paste a block from a spreadsheet into the grid, starting at this cell.
-  function onPaste(e: React.ClipboardEvent, rowIdx: number, colIdx: number) {
+  // Paste cells copied from a spreadsheet: fills down (and across to 2H) from here.
+  function onPaste(e: React.ClipboardEvent, rowIdx: number, half: 1 | 2) {
     const text = e.clipboardData.getData('text')
-    if (!text.includes('\t') && !text.includes('\n')) return // a single value: normal paste
+    if (!text.includes('\t') && !text.includes('\n')) return // one value: normal paste
     e.preventDefault()
-    const block = parseTable(text.replace(/\t/g, '\t'))
     const entries: Entry[] = []
     const nextValues: Record<string, string> = {}
     const bad: { k: string; state: CellState; message: string }[] = []
-    block.forEach((cells, r) => {
+    parseTable(text).forEach((cells, r) => {
       const emp = rows[rowIdx + r]
       if (!emp) return
       cells.forEach((cell, c) => {
-        const p = data!.periods[colIdx + c]
-        if (!p) return
-        const k = key(emp.employeeId, p.month, p.half)
+        const h = half + c
+        if (h !== 1 && h !== 2) return
+        const k = cellKey(emp.employeeId, h)
         nextValues[k] = cell
-        if (cell !== '' && !isDriveLink(cell)) {
-          bad.push({ k, state: 'error', message: 'Not a Google Drive link' })
-        } else if (cell !== (saved.current[k] ?? '')) {
-          entries.push({ employeeId: emp.employeeId, year, month: p.month, half: p.half, link: cell === '' ? null : cell })
+        if (cell !== '' && !isDriveLink(cell)) bad.push({ k, state: 'error', message: 'Not a Google Drive link' })
+        else if (cell !== (saved.current[k] ?? '')) {
+          entries.push({ employeeId: emp.employeeId, year, month, half: h, link: cell === '' ? null : cell })
         }
       })
     })
@@ -162,39 +151,60 @@ export function PayslipGrid() {
     if (entries.length) void persist(entries)
   }
 
-  function move(e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, colIdx: number) {
+  function move(e: React.KeyboardEvent<HTMLInputElement>, rowIdx: number, half: 1 | 2) {
     const delta = e.key === 'Enter' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
     if (!delta) return
     e.preventDefault()
-    const next = document.querySelector<HTMLInputElement>(`[data-cell="${rowIdx + delta}-${colIdx}"]`)
+    const next = document.querySelector<HTMLInputElement>(`[data-cell="${rowIdx + delta}-${half}"]`)
     if (next) next.focus()
     else (e.target as HTMLInputElement).blur()
   }
 
+  const hopMonth = (delta: number) => {
+    const m = month + delta
+    if (m < 1) {
+      setYear(year - 1)
+      setMonth(12)
+    } else if (m > 12) {
+      setYear(year + 1)
+      setMonth(1)
+    } else setMonth(m)
+  }
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="field w-28" aria-label="Year">
-          {[thisYear + 1, thisYear, thisYear - 1, thisYear - 2].map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employee…" className="field max-w-[14rem]" />
-        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
-          Missing for {MONTH_NAMES[focus.month - 1]} {focus.half}H
-        </label>
-        <span className="ml-auto flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          {pending > 0 && <span>Saving…</span>}
-          {failed > 0 && <Badge tone="red">{failed} not saved</Badge>}
-          {pending === 0 && failed === 0 && <span>All changes saved</span>}
-          <span>
-            · {filled} of {total} links
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+          Month
+          <span className="mt-1 flex gap-2">
+            <Button size="sm" onClick={() => hopMonth(-1)} aria-label="Previous month">
+              ‹
+            </Button>
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="field w-40">
+              {MONTH_NAMES.map((m, i) => (
+                <option key={m} value={i + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="field w-24" aria-label="Year">
+              {[thisYear + 1, thisYear, thisYear - 1, thisYear - 2].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <Button size="sm" onClick={() => hopMonth(1)} aria-label="Next month">
+              ›
+            </Button>
           </span>
-        </span>
-        <Button size="sm" onClick={() => setImporting(true)}>
+        </label>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employee…" className="field max-w-[14rem]" />
+        <label className="flex items-center gap-2 pb-2 text-sm text-gray-600 dark:text-gray-400">
+          <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
+          Show only missing
+        </label>
+        <Button size="sm" className="ml-auto" onClick={() => setImporting(true)}>
           Import…
         </Button>
       </div>
@@ -211,68 +221,88 @@ export function PayslipGrid() {
         />
       )}
 
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        Paste a link and press Enter or Tab: it saves itself. Paste several cells copied from a spreadsheet to fill down and across.
-        Clear a cell to remove its link. Columns marked <span className="font-medium">live</span> are already visible to employees.
-      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {HALVES.map((h) => {
+          const p = periodOf(h)
+          const live = p.releaseDate <= today
+          return (
+            <div key={h} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-black/[0.04] px-3 py-2 text-sm dark:bg-white/[0.05]">
+              <span className="font-medium text-gray-900 dark:text-gray-100">
+                {monthName} {h}H
+                <span className="ml-2 font-normal text-gray-600 dark:text-gray-400">
+                  {haveCount(h)} of {data.employees.length} have a link
+                </span>
+              </span>
+              <span className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                {live ? <Badge tone="green">Live</Badge> : <Badge tone="amber">Not live yet</Badge>}
+                from {formatDateOnly(p.releaseDate)}
+              </span>
+            </div>
+          )
+        })}
+      </div>
 
-      <div ref={scroller} className="max-h-[32rem] overflow-auto rounded-md border border-black/10 dark:border-white/10">
-        <table className="border-separate border-spacing-0 text-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] border-collapse text-sm">
           <thead>
             <tr>
-              <th className="sticky left-0 top-0 z-20 min-w-[12rem] border-b border-r border-black/10 bg-gray-100 px-3 py-2 text-left font-medium dark:border-white/10 dark:bg-[#12261d]">
-                Employee
-              </th>
-              {data.periods.map((p) => {
-                const live = p.releaseDate <= today
-                return (
-                  <th
-                    key={`${p.month}-${p.half}`}
-                    className="sticky top-0 z-10 min-w-[11.5rem] border-b border-black/10 bg-gray-100 px-2 py-2 text-left font-medium dark:border-white/10 dark:bg-[#12261d]"
-                    title={`Visible to employees from ${formatDateOnly(p.releaseDate)}`}
-                  >
-                    {MONTH_NAMES[p.month - 1].slice(0, 3)} {p.half}H {live && <Badge tone="green">live</Badge>}
-                    <div className="text-xs font-normal text-gray-500 dark:text-gray-400">from {formatDateOnly(p.releaseDate)}</div>
-                  </th>
-                )
-              })}
+              <th className={headCell}>Employee</th>
+              {HALVES.map((h) => (
+                <th key={h} className={headCell}>
+                  {monthName} {h}H
+                  <span className="ml-1 font-normal text-gray-500 dark:text-gray-400">({h === 1 ? '1st–15th' : '16th–end'})</span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={3} className={`${border} px-3 py-6 text-center text-gray-500 dark:text-gray-400`}>
+                  {onlyMissing ? 'Everyone has both links for this month.' : 'No employees match.'}
+                </td>
+              </tr>
+            )}
             {rows.map((emp, r) => (
-              <tr key={emp.employeeId}>
-                <td className="sticky left-0 z-10 border-b border-r border-black/5 bg-white px-3 py-1.5 font-medium text-gray-900 dark:border-white/5 dark:bg-[#0d1f17] dark:text-gray-100">
+              <tr key={emp.employeeId} className="hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
+                <td className={`${border} px-3 py-1.5 font-medium text-gray-900 dark:text-gray-100`}>
                   {emp.name}
                   {emp.employeeCode && <span className="font-normal text-gray-500 dark:text-gray-400"> · {emp.employeeCode}</span>}
                 </td>
-                {data.periods.map((p, c) => {
-                  const k = key(emp.employeeId, p.month, p.half)
+                {HALVES.map((h) => {
+                  const k = cellKey(emp.employeeId, h)
                   const st = states[k]
                   const value = values[k] ?? ''
+                  const missing = (saved.current[k] ?? '') === '' && value.trim() === ''
                   return (
-                    <td key={k} className="border-b border-black/5 p-0 dark:border-white/5">
+                    <td key={h} className={`${border} p-0`}>
                       <div className="relative">
                         <input
-                          data-cell={`${r}-${c}`}
+                          data-cell={`${r}-${h}`}
                           value={value}
                           title={st?.message ?? value}
                           onChange={(e) => {
                             const v = e.target.value
                             setValues((prev) => ({ ...prev, [k]: v }))
                           }}
-                          onBlur={() => commit(emp.employeeId, p.month, p.half)}
-                          onKeyDown={(e) => move(e, r, c)}
-                          onPaste={(e) => onPaste(e, r, c)}
-                          placeholder=""
-                          aria-label={`${emp.name} ${MONTH_NAMES[p.month - 1]} ${p.half}H payslip link`}
-                          className={`block h-9 w-full bg-transparent px-2 pr-6 text-xs text-gray-800 outline-none focus:bg-brand-500/10 dark:text-gray-200 ${
-                            st?.state === 'error' ? 'bg-red-500/15 ring-1 ring-inset ring-red-500' : ''
+                          onBlur={() => commit(emp.employeeId, h)}
+                          onKeyDown={(e) => move(e, r, h)}
+                          onPaste={(e) => onPaste(e, r, h)}
+                          placeholder="Paste Drive link…"
+                          aria-label={`${emp.name} ${monthName} ${h}H payslip link`}
+                          className={`block h-10 w-full bg-transparent pl-3 pr-16 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:bg-brand-500/10 focus:ring-2 focus:ring-inset focus:ring-brand-500 dark:text-gray-100 ${
+                            st?.state === 'error' ? 'bg-red-500/15 ring-2 ring-inset ring-red-500' : ''
                           }`}
                         />
-                        <span className="pointer-events-none absolute right-1.5 top-2 text-xs">
-                          {st?.state === 'saving' && <span className="text-gray-400">…</span>}
-                          {st?.state === 'saved' && <span className="text-green-600 dark:text-green-400">✓</span>}
-                          {st?.state === 'error' && <span className="text-red-600 dark:text-red-400">!</span>}
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs">
+                          {st?.state === 'saving' && <span className="text-gray-500">Saving</span>}
+                          {st?.state === 'error' && <span className="font-medium text-red-600 dark:text-red-400">Not saved</span>}
+                          {st?.state !== 'saving' && st?.state !== 'error' &&
+                            (missing ? (
+                              <span className="text-amber-700 dark:text-amber-400">Missing</span>
+                            ) : (
+                              <span className="text-green-700 dark:text-green-400">✓ Saved</span>
+                            ))}
                         </span>
                       </div>
                     </td>
@@ -283,6 +313,16 @@ export function PayslipGrid() {
           </tbody>
         </table>
       </div>
+
+      {failures.length > 0 && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          {failures.length} link(s) not saved: {failures[0].message}
+        </p>
+      )}
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Each link saves itself when you press Enter or move away{pending ? ' (saving…)' : ''}. Paste a column (or two) copied from a
+        spreadsheet to fill down. Clear a cell to remove its link.
+      </p>
     </div>
   )
 }
