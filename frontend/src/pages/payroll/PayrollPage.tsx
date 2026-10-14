@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
 import { currentPeriod, MONTH_NAMES, payslipPeriodLabel } from '../../utils/payslips'
+import { PayslipGrid } from './PayslipGrid'
 
 interface Summary {
   salary: number | null
@@ -252,120 +253,6 @@ function PayslipForm({ employeeId, onSaved }: { employeeId: string; onSaved: () 
   )
 }
 
-interface PeriodRow {
-  employeeId: string
-  employeeCode: string | null
-  name: string
-  link: string | null
-}
-
-// One period, every active employee: paste a link per row, save them all.
-function PayslipBulk() {
-  const [period, setPeriod] = useState<PeriodValue>(() => currentPeriod(todayInManilaIso()))
-  const [rows, setRows] = useState<PeriodRow[]>([])
-  const [releaseDate, setReleaseDate] = useState<string | null>(null)
-  const [links, setLinks] = useState<Record<string, string>>({})
-  const [onlyMissing, setOnlyMissing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [reloadToken, setReloadToken] = useState(0)
-
-  useEffect(() => {
-    setError(null)
-    setMessage(null)
-    api
-      .get<{ releaseDate: string; rows: PeriodRow[] }>(
-        `/restricted/payroll?kind=payslips-period&year=${period.year}&month=${period.month}&half=${period.half}`,
-      )
-      .then((data) => {
-        setRows(data.rows)
-        setReleaseDate(data.releaseDate)
-        setLinks({})
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load employees'))
-  }, [period, reloadToken])
-
-  const entries = Object.entries(links)
-    .map(([employeeId, link]) => ({ employeeId, link: link.trim() }))
-    .filter((e) => e.link !== '')
-  const missingCount = rows.filter((r) => !r.link && !links[r.employeeId]?.trim()).length
-  const shown = onlyMissing ? rows.filter((r) => !r.link) : rows
-
-  async function save() {
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const { saved } = await api.post<{ saved: number }>('/restricted/payroll?kind=payslips-bulk', { ...period, entries })
-      setMessage(`Saved ${saved} payslip link${saved === 1 ? '' : 's'}.`)
-      setReloadToken((t) => t + 1)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save the links')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <PeriodFields value={period} onChange={setPeriod} />
-      {releaseDate && (
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Employees can see this payslip from <span className="font-medium">{formatDateOnly(releaseDate)}</span> (the 10th / 25th, or the Friday before
-          if it falls on a weekend). You can add links ahead of time.
-        </p>
-      )}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-400">
-        <span>
-          {rows.length - rows.filter((r) => !r.link).length} of {rows.length} have a link · {missingCount} still missing
-        </span>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />
-          Show only missing
-        </label>
-      </div>
-      {shown.length === 0 ? (
-        <EmptyState label={rows.length === 0 ? 'No active employees.' : 'Everyone has a link for this period.'} />
-      ) : (
-        <ul className="divide-y divide-black/5 dark:divide-white/10">
-          {shown.map((r) => (
-            <li key={r.employeeId} className="grid items-center gap-2 py-2 sm:grid-cols-[minmax(0,14rem)_1fr]">
-              <span className="text-sm text-gray-900 dark:text-gray-100">
-                {r.name}
-                {r.employeeCode && <span className="text-gray-500 dark:text-gray-400"> · {r.employeeCode}</span>}
-              </span>
-              <input
-                type="url"
-                aria-label={`Payslip link for ${r.name}`}
-                placeholder={r.link ? 'Replace link…' : 'Paste Drive link…'}
-                value={links[r.employeeId] ?? ''}
-                onChange={(e) => setLinks((prev) => ({ ...prev, [r.employeeId]: e.target.value }))}
-                className="field"
-              />
-              {r.link && (
-                <a
-                  href={r.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-medium text-brand-600 dark:text-brand-400 sm:col-start-2"
-                >
-                  Current link ↗
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <FormError message={error} />
-      {message && <p className="text-sm text-green-700 dark:text-green-400">{message}</p>}
-      <Button variant="primary" size="sm" disabled={busy || entries.length === 0} onClick={save}>
-        {busy ? 'Saving…' : `Save ${entries.length} link${entries.length === 1 ? '' : 's'}`}
-      </Button>
-    </div>
-  )
-}
-
 export function PayrollPage() {
   const [employeeId, setEmployeeId] = useState('')
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -410,8 +297,8 @@ export function PayrollPage() {
       <PageHeader title="Payroll / Compensation" description="Restricted. Every view and change here is recorded in the audit log." />
       <div className="mb-4">
         <SectionStack>
-          <Section id="payroll.bulk" title="Payslip links — all employees" hint="Pick a cut-off, paste each employee's Drive link, save once" defaultOpen>
-            <PayslipBulk />
+          <Section id="payroll.bulk" title="Payslip links" hint="All employees by cut-off, saves as you type" defaultOpen>
+            <PayslipGrid />
           </Section>
         </SectionStack>
       </div>
