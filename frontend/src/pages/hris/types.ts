@@ -18,6 +18,8 @@ export interface MyEmployeeProfile {
   address: string | null
   emergencyContactName: string | null
   emergencyContactPhone: string | null
+  birthDate: string | null
+  gender: string | null
 }
 
 export interface EmployeeRecord {
@@ -43,6 +45,8 @@ export interface EmployeeRecord {
   address: string | null
   emergencyContactName: string | null
   emergencyContactPhone: string | null
+  birthDate: string | null
+  gender: string | null
 }
 
 export interface Team {

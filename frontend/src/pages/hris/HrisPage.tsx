@@ -8,6 +8,7 @@ import { Section, SectionStack } from '../../components/ui/Section'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components/ui/PasswordInput'
+import { formatDateOnly } from '../../utils/dates'
 import { humanize } from '../../utils/text'
 import type { Department, EmployeeRecord, MyEmployeeProfile, Team } from './types'
 
@@ -56,6 +57,24 @@ function DetailList({ rows, wide = false }: { rows: [string, string][]; wide?: b
   )
 }
 
+const GENDER_LABEL: Record<string, string> = {
+  female: 'Female',
+  male: 'Male',
+  other: 'Other',
+  prefer_not_to_say: 'Prefer not to say',
+}
+
+// Whole years since a YYYY-MM-DD(T...) birthday.
+function ageFrom(birthDate: string): number {
+  const b = new Date(birthDate)
+  const now = new Date()
+  let age = now.getUTCFullYear() - b.getUTCFullYear()
+  const beforeBirthday =
+    now.getUTCMonth() < b.getUTCMonth() || (now.getUTCMonth() === b.getUTCMonth() && now.getUTCDate() < b.getUTCDate())
+  if (beforeBirthday) age -= 1
+  return age
+}
+
 // One card per HR-listed heading: `contact` edits phone + address,
 // `emergency` edits the emergency contact. Both save through the same
 // self-service endpoint, which treats omitted fields as unchanged.
@@ -65,7 +84,7 @@ function ContactDetailsCard({
   onSaved,
 }: {
   profile: MyEmployeeProfile
-  part: 'contact' | 'emergency'
+  part: 'contact' | 'emergency' | 'personal'
   onSaved: (updated: MyEmployeeProfile) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -76,8 +95,12 @@ function ContactDetailsCard({
   const [address, setAddress] = useState('')
   const [emergencyContactName, setEmergencyContactName] = useState('')
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('')
+  const [birthDate, setBirthDate] = useState('')
+  const [gender, setGender] = useState('')
 
   function startEditing() {
+    setBirthDate(profile.birthDate ? profile.birthDate.slice(0, 10) : '')
+    setGender(profile.gender ?? '')
     setPhone(profile.phone ?? '')
     setAddress(profile.address ?? '')
     setEmergencyContactName(profile.emergencyContactName ?? '')
@@ -94,7 +117,11 @@ function ContactDetailsCard({
     try {
       const updated = await api.put<MyEmployeeProfile>(
         '/employees/me',
-        part === 'contact' ? { phone, address } : { emergencyContactName, emergencyContactPhone },
+        part === 'contact'
+          ? { phone, address }
+          : part === 'personal'
+            ? { birthDate: birthDate || null, gender: gender || null }
+            : { emergencyContactName, emergencyContactPhone },
       )
       onSaved(updated)
       setEditing(false)
@@ -153,6 +180,36 @@ function ContactDetailsCard({
               </div>
             </>
           )}
+          {part === 'personal' && (
+            <>
+              <div className="space-y-1">
+                <label htmlFor="personal-birthdate" className="text-sm text-gray-600 dark:text-gray-400">
+                  Birthday
+                </label>
+                <input
+                  id="personal-birthdate"
+                  type="date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  autoComplete="bday"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className="field"
+                />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="personal-gender" className="text-sm text-gray-600 dark:text-gray-400">
+                  Gender (optional)
+                </label>
+                <select id="personal-gender" value={gender} onChange={(e) => setGender(e.target.value)} className="field">
+                  <option value="">Not set</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </div>
+            </>
+          )}
           {part === 'emergency' && (
             <>
               <div className="space-y-1">
@@ -200,14 +257,23 @@ function ContactDetailsCard({
         </form>
       ) : (
         <>
-          <DetailList
-            rows={contactFields(profile)
-              .filter(([label]) => (part === 'contact' ? !label.startsWith('Emergency') : label.startsWith('Emergency')))
-              .map(([label, value]) => [label, value ?? '—'])}
-          />
+          {part === 'personal' ? (
+            <DetailList
+              rows={[
+                ['Birthday', profile.birthDate ? `${formatDateOnly(profile.birthDate)} (age ${ageFrom(profile.birthDate)})` : '—'],
+                ['Gender', GENDER_LABEL[profile.gender ?? ''] ?? '—'],
+              ]}
+            />
+          ) : (
+            <DetailList
+              rows={contactFields(profile)
+                .filter(([label]) => (part === 'contact' ? !label.startsWith('Emergency') : label.startsWith('Emergency')))
+                .map(([label, value]) => [label, value ?? '—'])}
+            />
+          )}
           {saved && (
             <p role="status" className="mt-2 text-sm text-brand-700 dark:text-brand-400">
-              Contact details saved.
+              Saved.
             </p>
           )}
         </>
@@ -354,6 +420,9 @@ export function MyProfile() {
                 ['Work Email', profile.email],
               ]}
             />
+            <div className="mt-3">
+              <ContactDetailsCard profile={profile} part="personal" onSaved={setProfile} />
+            </div>
           </Section>
           <Section id="profile.contact" title="Contact information" hint="Phone and address">
             <ContactDetailsCard profile={profile} part="contact" onSaved={setProfile} />

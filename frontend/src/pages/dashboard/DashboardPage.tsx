@@ -17,6 +17,7 @@ import type { NotificationsResponse } from '../notifications/types'
 import type { WeeklyReport } from '../reports/types'
 import { AdminWidgets } from './AdminWidgets'
 import { CheckInPrompt } from './CheckInPrompt'
+import { BirthdayCard } from './BirthdayCard'
 import { AssignTodo, MyTodos } from './Todos'
 
 const quickLinks = [
@@ -130,6 +131,7 @@ export function DashboardPage() {
       </div>
 
       <SectionStack>
+        <BirthdayCard />
         <MyTodos />
         {isElevated && <AssignTodo isHr={isReviewer} />}
         <Section

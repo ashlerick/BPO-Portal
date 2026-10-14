@@ -90,6 +90,11 @@ model Employee {
   address               String?
   emergencyContactName  String?
   emergencyContactPhone String?
+  // Personal details the employee fills in (optional). Visible to the
+  // employee and HR/Admin only, like the contact details.
+  birthDate             DateTime?
+  // male | female | other | prefer_not_to_say
+  gender                String?
 
   // HR record fields (Employee Management). salary is HR/Admin only and is
   // never included in self-service (/employees/me) responses.

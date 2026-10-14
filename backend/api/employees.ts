@@ -21,6 +21,15 @@ const createSchema = z.object({
 
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/
 
+// A real past date (the year check also guards against typos like 0202).
+const birthDateField = z
+  .string()
+  .regex(dateOnlyPattern, 'Birthday must be YYYY-MM-DD')
+  .refine((v) => v >= '1900-01-01' && v <= new Date().toISOString().slice(0, 10), 'Enter a valid birthday')
+  .nullable()
+  .optional()
+const genderField = z.enum(['male', 'female', 'other', 'prefer_not_to_say']).nullable().optional()
+
 const updateSchema = z.object({
   position: z.string().min(1).nullable().optional(),
   status: z.enum(['active', 'on_leave', 'terminated']).optional(),
@@ -34,6 +43,8 @@ const updateSchema = z.object({
   level: z.string().trim().min(1).max(60).nullable().optional(),
   probationEndDate: z.string().regex(dateOnlyPattern, 'probationEndDate must be YYYY-MM-DD').nullable().optional(),
   regularizationDate: z.string().regex(dateOnlyPattern, 'regularizationDate must be YYYY-MM-DD').nullable().optional(),
+  birthDate: birthDateField,
+  gender: genderField,
 })
 
 // Empty/whitespace-only input means "clear it", stored as null.
@@ -57,6 +68,8 @@ const contactSchema = z.object({
   address: optionalText(300, 'Address'),
   emergencyContactName: optionalText(100, 'Emergency contact name'),
   emergencyContactPhone: optionalPhone,
+  birthDate: birthDateField,
+  gender: genderField,
 })
 
 const employeeSelect = {
@@ -90,6 +103,8 @@ function serialize(e: {
   address: string | null
   emergencyContactName: string | null
   emergencyContactPhone: string | null
+  birthDate: Date | null
+  gender: string | null
 }) {
   return {
     id: e.id,
@@ -116,6 +131,8 @@ function serialize(e: {
     address: e.address,
     emergencyContactName: e.emergencyContactName,
     emergencyContactPhone: e.emergencyContactPhone,
+    birthDate: e.birthDate,
+    gender: e.gender,
   }
 }
 
@@ -159,9 +176,13 @@ async function handleUpdateMe(req: AuthedRequest, res: VercelResponse) {
 
   let employee
   try {
+    const { birthDate, ...rest } = parsed.data
     employee = await prisma.employee.update({
       where: { userId: req.auth.sub },
-      data: parsed.data,
+      data: {
+        ...rest,
+        ...(birthDate !== undefined && { birthDate: birthDate === null ? null : new Date(`${birthDate}T00:00:00.000Z`) }),
+      },
       ...employeeSelect,
     })
   } catch (err) {
@@ -224,13 +245,14 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     return
   }
 
-  const { dateHired, silBalance, probationEndDate, regularizationDate, ...rest } = parsed.data
+  const { dateHired, silBalance, probationEndDate, regularizationDate, birthDate, ...rest } = parsed.data
   const asDate = (v: string | null) => (v === null ? null : new Date(`${v}T00:00:00.000Z`))
   const data = {
     ...rest,
     ...(dateHired !== undefined && { dateHired: asDate(dateHired) }),
     ...(probationEndDate !== undefined && { probationEndDate: asDate(probationEndDate) }),
     ...(regularizationDate !== undefined && { regularizationDate: asDate(regularizationDate) }),
+    ...(birthDate !== undefined && { birthDate: asDate(birthDate) }),
     ...(silBalance !== undefined && { silBalance }),
   }
 
