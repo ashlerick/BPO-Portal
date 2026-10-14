@@ -410,7 +410,7 @@ export function PayrollPage() {
       <PageHeader title="Payroll / Compensation" description="Restricted. Every view and change here is recorded in the audit log." />
       <div className="mb-4">
         <SectionStack>
-          <Section id="payroll.bulk" title="Payslip links — all employees" hint="Pick a cut-off, paste each employee's Drive link, save once">
+          <Section id="payroll.bulk" title="Payslip links — all employees" hint="Pick a cut-off, paste each employee's Drive link, save once" defaultOpen>
             <PayslipBulk />
           </Section>
         </SectionStack>
