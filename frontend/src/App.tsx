@@ -10,6 +10,7 @@ import { BenefitsPage } from './pages/benefits/BenefitsPage'
 import { CalendarPage } from './pages/calendar/CalendarPage'
 import { DashboardPage } from './pages/dashboard/DashboardPage'
 import { DocumentsPage } from './pages/documents/DocumentsPage'
+import { CareersPage } from './pages/careers/CareersPage'
 import { FormsPage } from './pages/forms/FormsPage'
 import { InventoryItemPage } from './pages/inventory/InventoryItemPage'
 import { InventoryPage } from './pages/inventory/InventoryPage'
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/set-password" element={<SetPasswordPage />} />
+            <Route path="/careers" element={<CareersPage />} />
             <Route
               element={
                 <RequireAuth>

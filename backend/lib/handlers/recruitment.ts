@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
+import { deleteObject, getDownloadUrl, putObject } from '../s3.js'
 import { forbid, isHrOrAdmin, notFound, parseBody, queryString } from './util.js'
 
 // Recruitment, HR/Admin only. One handler, three collections chosen by
@@ -12,12 +13,48 @@ const OPENING_STATUSES = ['open', 'on_hold', 'closed'] as const
 const APPLICANT_STATUSES = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected', 'withdrawn'] as const
 const FINAL_APPLICANT = ['hired', 'rejected', 'withdrawn']
 
+const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }
+const MAX_BANNER_BYTES = 2 * 1024 * 1024
+
 const openingSchema = z.object({
   title: z.string().trim().min(1).max(160),
   department: z.string().trim().max(120).nullable().optional(),
   description: z.string().trim().max(3000).nullable().optional(),
   status: z.enum(OPENING_STATUSES).optional(),
+  // A new banner image, or null to remove the current one.
+  banner: z
+    .object({ contentType: z.string().min(1), base64: z.string().min(1) })
+    .nullable()
+    .optional(),
 })
+
+// Stores/clears the banner. Returns the object key to save, null to clear,
+// undefined for "unchanged", or { error } when the image is not acceptable.
+async function applyBanner(
+  openingId: string,
+  banner: { contentType: string; base64: string } | null | undefined,
+  oldKey: string | null,
+): Promise<string | null | undefined | { error: string }> {
+  if (banner === undefined) return undefined
+  if (banner === null) {
+    if (oldKey) await deleteObject(oldKey).catch(() => undefined)
+    return null
+  }
+  const ext = IMAGE_TYPES[banner.contentType]
+  if (!ext) return { error: 'The banner must be a PNG, JPG or WebP image' }
+  const buffer = Buffer.from(banner.base64, 'base64')
+  if (buffer.length === 0 || buffer.length > MAX_BANNER_BYTES) return { error: 'The banner must be an image under 2MB' }
+  const key = `banners/${openingId}-${Date.now()}.${ext}`
+  await putObject(key, buffer, banner.contentType)
+  if (oldKey) await deleteObject(oldKey).catch(() => undefined)
+  return key
+}
+
+// Never expose the storage key; give HR a short-lived image URL instead.
+async function openingView<T extends { bannerKey: string | null }>(o: T) {
+  const { bannerKey, ...rest } = o
+  return { ...rest, bannerUrl: bannerKey ? await getDownloadUrl(bannerKey, 3600).catch(() => null) : null }
+}
 
 const applicantSchema = z.object({
   jobOpeningId: z.string().uuid(),
@@ -48,31 +85,46 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
         include: { _count: { select: { applicants: true } } },
         orderBy: { openedAt: 'desc' },
       })
-      return res.status(200).json(rows.map(({ _count, ...o }) => ({ ...o, applicantCount: _count.applicants })))
+      return res.status(200).json(
+        await Promise.all(rows.map(async ({ _count, ...o }) => ({ ...(await openingView(o)), applicantCount: _count.applicants }))),
+      )
     }
     if (req.method === 'POST') {
       const data = parseBody(openingSchema, req.body, res)
       if (!data) return
-      const created = await prisma.jobOpening.create({ data })
+      const { banner, ...fields } = data
+      let created = await prisma.jobOpening.create({ data: fields })
+      if (banner) {
+        const key = await applyBanner(created.id, banner, null)
+        if (typeof key === 'object' && key !== null) {
+          await prisma.jobOpening.delete({ where: { id: created.id } })
+          return res.status(400).json({ message: key.error })
+        }
+        created = await prisma.jobOpening.update({ where: { id: created.id }, data: { bannerKey: key as string } })
+      }
       logAudit(req.auth.sub, 'create', 'job_opening', created.id)
-      return res.status(201).json({ ...created, applicantCount: 0 })
+      return res.status(201).json({ ...(await openingView(created)), applicantCount: 0 })
     }
     if (req.method === 'PUT' && sub) {
       const data = parseBody(openingSchema.partial(), req.body, res)
       if (!data) return
       const existing = await prisma.jobOpening.findUnique({ where: { id: sub } })
       if (!existing) return notFound(res, 'Job opening not found')
+      const { banner, ...fields } = data
+      const key = await applyBanner(sub, banner, existing.bannerKey)
+      if (typeof key === 'object' && key !== null) return res.status(400).json({ message: key.error })
       const updated = await prisma.jobOpening.update({
         where: { id: sub },
         data: {
-          ...data,
+          ...fields,
+          ...(key !== undefined && { bannerKey: key as string | null }),
           ...(data.status !== undefined && { closedAt: data.status === 'closed' ? new Date() : null }),
         },
         include: { _count: { select: { applicants: true } } },
       })
       logAudit(req.auth.sub, 'update', 'job_opening', sub)
       const { _count, ...rest } = updated
-      return res.status(200).json({ ...rest, applicantCount: _count.applicants })
+      return res.status(200).json({ ...(await openingView(rest)), applicantCount: _count.applicants })
     }
     if (req.method === 'DELETE' && sub) {
       await prisma.jobOpening.deleteMany({ where: { id: sub } })
@@ -87,11 +139,13 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       const jobOpeningId = queryString(req, 'jobOpeningId')
       const rows = await prisma.applicant.findMany({
         where: jobOpeningId ? { jobOpeningId } : {},
-        include: { jobOpening: { select: { title: true } }, interviews: { orderBy: { scheduledAt: 'asc' } } },
+        include: { jobOpening: { select: { title: true, department: true } }, interviews: { orderBy: { scheduledAt: 'asc' } } },
         orderBy: { createdAt: 'desc' },
       })
       await logAudit(req.auth.sub, 'view', 'applicants', null)
-      return res.status(200).json(rows.map(({ jobOpening, ...a }) => ({ ...a, jobTitle: jobOpening.title })))
+      return res
+        .status(200)
+        .json(rows.map(({ jobOpening, ...a }) => ({ ...a, jobTitle: jobOpening.title, jobDepartment: jobOpening.department })))
     }
     if (req.method === 'POST') {
       const data = parseBody(applicantSchema, req.body, res)

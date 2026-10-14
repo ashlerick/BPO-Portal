@@ -19,6 +19,18 @@ interface Shift {
   active: boolean
 }
 
+interface ApplicantOption {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  status: string
+  jobTitle: string
+  jobDepartment: string | null
+  hiredUserId: string | null
+  information: string | null
+}
+
 interface Pending {
   userId: string
   name: string
@@ -43,6 +55,7 @@ const blank = {
   birthDate: '',
   gender: '',
   shiftId: '',
+  phone: '',
   teamLeader: false,
 }
 
@@ -54,6 +67,8 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
   const [teams, setTeams] = useState<Team[]>([])
   const [people, setPeople] = useState<EmployeeRecord[]>([])
   const [shifts, setShifts] = useState<Shift[]>([])
+  const [applicants, setApplicants] = useState<ApplicantOption[]>([])
+  const [applicantId, setApplicantId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -65,7 +80,32 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
     }).catch(() => undefined)
     api.get<EmployeeRecord[]>('/employees').then(setPeople).catch(() => undefined)
     api.get<Shift[]>('/hr/shifts?kind=templates').then((s) => setShifts(s.filter((x) => x.active))).catch(() => undefined)
+    api
+      .get<ApplicantOption[]>('/hr/recruitment?kind=applicants')
+      .then((rows) => setApplicants(rows.filter((a) => !a.hiredUserId && a.status !== 'rejected' && a.status !== 'withdrawn')))
+      .catch(() => undefined)
   }, [])
+
+  // Choosing an applicant fills what the portal already knows; every field stays editable.
+  function pickApplicant(id: string) {
+    setApplicantId(id)
+    const a = applicants.find((x) => x.id === id)
+    if (!a) return
+    const parts = a.name.trim().split(/\s+/)
+    const lastName = parts.length > 1 ? parts[parts.length - 1] : ''
+    const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0]
+    const dept = departments.find((d) => a.jobDepartment && d.name.toLowerCase() === a.jobDepartment.toLowerCase())
+    setF((prev) => ({
+      ...prev,
+      firstName,
+      lastName,
+      email: a.email ?? prev.email,
+      phone: a.phone ?? prev.phone,
+      position: a.jobTitle,
+      departmentId: dept?.id ?? prev.departmentId,
+      teamId: dept ? '' : prev.teamId,
+    }))
+  }
 
   const set = (k: keyof typeof blank) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }))
   const nullable = (v: string) => (v.trim() === '' ? null : v.trim())
@@ -93,9 +133,13 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
         birthDate: f.birthDate || null,
         gender: f.gender || null,
         shiftId: f.shiftId || null,
+        phone: nullable(f.phone),
+        applicantId: applicantId || null,
       })
       setMessage(`${f.firstName} ${f.lastName} was added. Their account stays inactive until you activate it.`)
       setF(blank)
+      setApplicantId('')
+      setApplicants((prev) => prev.filter((a) => a.id !== applicantId))
       onCreated()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the new hire')
@@ -112,6 +156,16 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
         Creates the account (inactive), the employee record and the onboarding checklist in one go. No email is sent and they cannot log
         in until you press <span className="font-medium">Activate</span>.
       </p>
+      <Field label="Start from an applicant (optional)">
+        <select value={applicantId} onChange={(e) => pickApplicant(e.target.value)} className="field">
+          <option value="">Enter a new hire manually</option>
+          {applicants.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name} · {a.jobTitle} ({a.status})
+            </option>
+          ))}
+        </select>
+      </Field>
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="First name">
           <input required value={f.firstName} onChange={set('firstName')} className="field" />
@@ -124,6 +178,9 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
         </Field>
         <Field label="Email">
           <input required type="email" value={f.email} onChange={set('email')} className="field" />
+        </Field>
+        <Field label="Phone (optional)">
+          <input type="tel" value={f.phone} onChange={set('phone')} className="field" />
         </Field>
         <Field label="Employee ID (optional)">
           <input value={f.employeeCode} onChange={set('employeeCode')} className="field" />

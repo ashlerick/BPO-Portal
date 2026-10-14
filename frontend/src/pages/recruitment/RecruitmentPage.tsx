@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { formatDateOnly } from '../../utils/dates'
 import { humanize } from '../../utils/text'
+import { readFileAsBase64 } from '../../utils/files'
 
 type OpeningStatus = 'open' | 'on_hold' | 'closed'
 type ApplicantStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected' | 'withdrawn'
@@ -29,6 +30,7 @@ interface Opening {
   status: OpeningStatus
   openedAt: string
   closedAt: string | null
+  bannerUrl: string | null
   applicantCount: number
 }
 
@@ -43,6 +45,9 @@ interface Applicant {
   status: ApplicantStatus
   decisionNote: string | null
   decidedAt: string | null
+  source: 'internal' | 'careers'
+  resumeLink: string | null
+  hiredUserId: string | null
   createdAt: string
   interviews: Interview[]
 }
@@ -60,18 +65,28 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
   const [title, setTitle] = useState('')
   const [department, setDepartment] = useState('')
   const [description, setDescription] = useState('')
+  const [banner, setBanner] = useState<File | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (banner && banner.size > 2 * 1024 * 1024) return setError('The banner image must be under 2MB')
     setBusy(true)
     setError(null)
     try {
-      onCreated(await api.post<Opening>('/hr/recruitment?kind=openings', { title, department: department || null, description: description || null }))
+      onCreated(
+        await api.post<Opening>('/hr/recruitment?kind=openings', {
+          title,
+          department: department || null,
+          description: description || null,
+          ...(banner && { banner: { contentType: banner.type, base64: await readFileAsBase64(banner) } }),
+        }),
+      )
       setTitle('')
       setDepartment('')
       setDescription('')
+      setBanner(undefined)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the opening')
     } finally {
@@ -91,6 +106,9 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
       </div>
       <Field label="Description (optional)">
         <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className="field" />
+      </Field>
+      <Field label="Banner image (optional, PNG/JPG/WebP, under 2MB)">
+        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setBanner(e.target.files?.[0])} className="text-sm" />
       </Field>
       <FormError message={error} />
       <Button type="submit" variant="primary" size="sm" disabled={busy}>
@@ -218,6 +236,15 @@ function ApplicantCard({ applicant, onUpdated, onDeleted }: { applicant: Applica
               {applicant.email && ` · ${applicant.email}`}
               {applicant.phone && ` · ${applicant.phone}`}
             </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              {applicant.source === 'careers' && <Badge tone="purple">Applied online</Badge>}
+              {applicant.hiredUserId && <Badge tone="green">Now an employee</Badge>}
+              {applicant.resumeLink && (
+                <a href={applicant.resumeLink} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400">
+                  Resume ↗
+                </a>
+              )}
+            </div>
           </div>
           <Badge tone={statusTone(applicant.status)}>{humanize(applicant.status)}</Badge>
         </div>
@@ -318,6 +345,78 @@ function InterviewNotes({ interview, applicantName, onSaved }: { interview: Inte
   )
 }
 
+// The shareable public address of the careers page.
+function CareersLink() {
+  const url = `${window.location.origin}${import.meta.env.BASE_URL}careers`.replace(/([^:])\/{2,}/g, '$1/')
+  const [copied, setCopied] = useState(false)
+  return (
+    <Card className="mb-4 flex flex-wrap items-center justify-between gap-2 !py-3 text-sm">
+      <span className="min-w-0 text-gray-700 dark:text-gray-300">
+        Public careers page (anyone can apply, no login):{' '}
+        <a href={url} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-brand-600 dark:text-brand-400">
+          {url}
+        </a>
+      </span>
+      <Button
+        size="sm"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(url)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+          } catch {
+            window.prompt('Copy this link', url)
+          }
+        }}
+      >
+        {copied ? 'Copied' : 'Copy link'}
+      </Button>
+    </Card>
+  )
+}
+
+// Add, replace or remove a position's banner image.
+function BannerControl({ opening, onChanged }: { opening: Opening; onChanged: (o: Opening) => void }) {
+  const [busy, setBusy] = useState(false)
+
+  async function send(banner: { contentType: string; base64: string } | null) {
+    setBusy(true)
+    try {
+      onChanged(await api.put<Opening>(`/hr/recruitment?kind=openings&sub=${opening.id}`, { banner }))
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'Could not update the banner')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <label className="inline-flex cursor-pointer items-center rounded-md border border-black/15 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-black/5 dark:border-white/20 dark:text-gray-200 dark:hover:bg-white/10">
+        {busy ? 'Uploading…' : opening.bannerUrl ? 'Change banner' : 'Add banner'}
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          disabled={busy}
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (!f) return
+            if (f.size > 2 * 1024 * 1024) return alert('The banner image must be under 2MB')
+            await send({ contentType: f.type, base64: await readFileAsBase64(f) })
+          }}
+        />
+      </label>
+      {opening.bannerUrl && (
+        <Button size="sm" disabled={busy} onClick={() => send(null)}>
+          Remove banner
+        </Button>
+      )}
+    </>
+  )
+}
+
 export function RecruitmentPage() {
   const [openings, setOpenings] = useState<Opening[] | null>(null)
   const [applicants, setApplicants] = useState<Applicant[] | null>(null)
@@ -355,6 +454,7 @@ export function RecruitmentPage() {
   return (
     <div>
       <PageHeader title="Recruitment" description="Job openings, applicants, interviews and hiring decisions." />
+      <CareersLink />
       <SectionStack>
         <Section id="recruit.openings" title="Job openings" hint={`${openings.filter((o) => o.status === 'open').length} open`} defaultOpen>
           <div className="space-y-3">
@@ -368,13 +468,15 @@ export function RecruitmentPage() {
                   .map((o) => (
                     <li key={o.id}>
                       <Card className="flex flex-wrap items-center justify-between gap-2 !py-3">
-                        <div className="min-w-0">
+                        {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-14 w-24 rounded object-cover" />}
+                        <div className="min-w-0 flex-1">
                           <div className="font-medium text-gray-900 dark:text-gray-100">{o.title}</div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             {o.department ?? 'Any department'} · {o.applicantCount} applicant{o.applicantCount === 1 ? '' : 's'} · opened {formatDateOnly(o.openedAt)}
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
+                          <BannerControl opening={o} onChanged={(u) => setOpenings((prev) => prev?.map((x) => (x.id === u.id ? u : x)) ?? null)} />
                           <Button size="sm" onClick={() => setOpeningStatus(o, o.status === 'open' ? 'on_hold' : 'open')}>
                             {o.status === 'open' ? 'Put on hold' : 'Reopen'}
                           </Button>

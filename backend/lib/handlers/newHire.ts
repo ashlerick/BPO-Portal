@@ -44,6 +44,9 @@ const createSchema = z.object({
     .optional(),
   gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).nullable().optional(),
   shiftId: z.string().uuid().nullable().optional(),
+  phone: z.string().trim().max(30).nullable().optional(),
+  // The applicant this hire came from (marks them hired, links the account).
+  applicantId: z.string().uuid().nullable().optional(),
 })
 
 export async function handler(req: AuthedRequest, res: VercelResponse) {
@@ -81,6 +84,13 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (await prisma.user.findUnique({ where: { email: data.email } })) {
       return res.status(409).json({ message: 'A user with that email already exists' })
     }
+    if (data.applicantId) {
+      const applicant = await prisma.applicant.findUnique({ where: { id: data.applicantId } })
+      if (!applicant) return notFound(res, 'Applicant not found')
+      if (applicant.hiredUserId) {
+        return res.status(409).json({ message: 'This applicant was already turned into an employee' })
+      }
+    }
     if (data.shiftId) {
       const shift = await prisma.shift.findUnique({ where: { id: data.shiftId } })
       if (!shift || !shift.active) return notFound(res, 'Shift not found')
@@ -105,6 +115,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
           employee: {
             create: {
               position: data.position ?? null,
+              phone: data.phone ?? null,
               departmentId: data.departmentId ?? null,
               teamId: data.teamId ?? null,
               managerId: data.managerId ?? null,
@@ -143,6 +154,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       throw err
     }
 
+    if (data.applicantId) {
+      await prisma.applicant.update({
+        where: { id: data.applicantId },
+        data: { status: 'hired', hiredUserId: created.id, decidedAt: new Date() },
+      })
+    }
     await logAudit(req.auth.sub, 'create_new_hire', 'user', created.id)
     return res.status(201).json({
       userId: created.id,

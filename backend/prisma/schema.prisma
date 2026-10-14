@@ -434,6 +434,8 @@ model JobOpening {
   status      String      @default("open")
   openedAt    DateTime    @default(now())
   closedAt    DateTime?
+  // Optional banner image (object key in storage; served by short-lived URLs).
+  bannerKey   String?
   applicants  Applicant[]
 
   @@map("job_openings")
@@ -452,6 +454,11 @@ model Applicant {
   status        String      @default("applied")
   decisionNote  String?
   decidedAt     DateTime?
+  // internal (entered by HR) | careers (applied on the public page)
+  source        String      @default("internal")
+  resumeLink    String?
+  // Set when this applicant was turned into an employee through Onboarding.
+  hiredUserId   String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   interviews    Interview[]

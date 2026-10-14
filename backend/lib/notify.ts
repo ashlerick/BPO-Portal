@@ -9,6 +9,7 @@ export const NOTIFICATION_TYPES = {
   report_decision: 'Weekly reports approved or rejected',
   hr_request: 'HR request updates',
   todo: 'New to-dos assigned to you',
+  applicant: 'New job applications',
   inventory: 'Company items assigned to you',
 } as const
 

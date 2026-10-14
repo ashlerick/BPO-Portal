@@ -1,3 +1,4 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { requireAuth } from '../lib/middleware.js'
 import { handler as hrRequests } from '../lib/handlers/hrRequests.js'
 import { handler as employeeRecords } from '../lib/handlers/employeeRecords.js'
@@ -12,12 +13,13 @@ import { handler as inventory } from '../lib/handlers/inventory.js'
 import { handler as shifts } from '../lib/handlers/shifts.js'
 import { handler as birthdays } from '../lib/handlers/birthdays.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
+import { handler as careers } from '../lib/handlers/careers.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
 // Each handler does its own role checks; the very sensitive ones
 // (disciplinary, payroll) live in api/restricted.ts instead.
-export default requireAuth(async (req, res) => {
+const authed = requireAuth(async (req, res) => {
   const resource = typeof req.query.resource === 'string' ? req.query.resource : undefined
 
   if (resource === 'hr-requests') return hrRequests(req, res)
@@ -36,3 +38,9 @@ export default requireAuth(async (req, res) => {
 
   res.status(404).json({ message: 'Not found' })
 })
+
+// /api/hr/careers is public (the careers page); everything else needs a login.
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.query.resource === 'careers') return careers(req, res)
+  return authed(req, res)
+}
