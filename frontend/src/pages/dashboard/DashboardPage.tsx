@@ -17,6 +17,7 @@ import type { NotificationsResponse } from '../notifications/types'
 import type { WeeklyReport } from '../reports/types'
 import { AdminWidgets } from './AdminWidgets'
 import { CheckInPrompt } from './CheckInPrompt'
+import { AssignTodo, MyTodos } from './Todos'
 
 const quickLinks = [
   { to: '/announcements', label: 'Announcements' },
@@ -129,6 +130,8 @@ export function DashboardPage() {
       </div>
 
       <SectionStack>
+        <MyTodos />
+        {isElevated && <AssignTodo isHr={isReviewer} />}
         <Section
           id="dashboard.tasks"
           title="Pending tasks"

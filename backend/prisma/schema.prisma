@@ -94,6 +94,9 @@ model Employee {
   // HR record fields (Employee Management). salary is HR/Admin only and is
   // never included in self-service (/employees/me) responses.
   employeeCode           String?   @unique
+  // Shown on the employee's header card (from the old spreadsheet).
+  legalEntity            String?
+  level                  String?
   probationEndDate       DateTime?
   regularizationDate     DateTime?
   salary                 Decimal?  @db.Decimal(12, 2)
@@ -106,6 +109,9 @@ model Employee {
   employmentHistory   EmploymentHistory[]
   documents           Document[]
   hrRequests          HrRequest[]
+  todos               Todo[]
+  kpiScores           KpiScore[]
+  inventoryItems      InventoryItem[]
   benefitEnrollments  BenefitEnrollment[]
   checklists          Checklist[]
   performanceReviews  PerformanceReview[]
@@ -158,6 +164,10 @@ model AttendanceRecord {
   checkInIp  String?          // client IP at check-in, for HR to spot off-site logins
   checkOutIp String?
   markedBy   String?          // userId of the HR/admin who marked this absent, if applicable
+  // Entered by HR (no shift schedule to compute them from): the weekly tracker's
+  // OverTime and Working Holiday rows.
+  overtimeHours  Decimal?     @db.Decimal(4, 2)
+  workingHoliday Boolean       @default(false)
   createdAt  DateTime         @default(now())
 
   @@unique([employeeId, date])
@@ -559,16 +569,121 @@ model Payslip {
   employeeId  String
   periodStart DateTime
   periodEnd   DateTime
-  gross       Decimal  @db.Decimal(12, 2)
-  deductions  Decimal  @db.Decimal(12, 2)
-  net         Decimal  @db.Decimal(12, 2)
-  // Optional uploaded PDF of the actual payslip.
+  // Amounts are optional: HR usually just records the payslip link.
+  gross       Decimal? @db.Decimal(12, 2)
+  deductions  Decimal? @db.Decimal(12, 2)
+  net         Decimal? @db.Decimal(12, 2)
+  // Link to the payslip in Google Drive (access is decided by Drive sharing).
+  link        String?
+  // Legacy: PDFs uploaded to storage before payslips became links.
   fileKey     String?
   createdBy   String
   createdAt   DateTime @default(now())
 
   @@index([employeeId])
   @@map("payslips")
+}
+
+// A to-do assigned to an employee by HR or their supervisor (the old
+// spreadsheet's "To Do's": task, due date, linked document).
+model Todo {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  title       String
+  dueDate     DateTime?
+  link        String?
+  // open | done
+  status      String    @default("open")
+  completedAt DateTime?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+
+  @@index([employeeId, status])
+  @@map("todos")
+}
+
+// KPI scorecard (the old spreadsheet's "KPI Metrics"): HR-managed criteria
+// grouped by core value, scored per employee per month. The scale and how
+// totals are computed live in portal_settings under the key "kpi".
+model KpiCriterion {
+  id        String     @id @default(uuid())
+  coreValue String
+  name      String
+  weight    Float      @default(1)
+  sortOrder Int        @default(0)
+  active    Boolean    @default(true)
+  scores    KpiScore[]
+  createdAt DateTime   @default(now())
+
+  @@map("kpi_criteria")
+}
+
+model KpiScore {
+  id          String       @id @default(uuid())
+  employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  criterion   KpiCriterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  criterionId String
+  year        Int
+  month       Int
+  score       Float
+  scoredBy    String
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([employeeId, criterionId, year, month])
+  @@index([employeeId, year])
+  @@map("kpi_scores")
+}
+
+// Freedom Wall: anonymous posts everyone can read. There is deliberately NO
+// author column — who posted is never stored, here or in the audit log.
+model FreedomPost {
+  id        String   @id @default(uuid())
+  body      String
+  hidden    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("freedom_posts")
+}
+
+// Company inventory: every item has at most ONE current holder (a nullable
+// FK), while one employee can hold many items. InventoryAssignment keeps the
+// full history. assetTag is what the QR sticker encodes.
+model InventoryItem {
+  id           String   @id @default(uuid())
+  assetTag     String   @unique
+  name         String
+  category     String?
+  serialNumber String?
+  // available | assigned | repair | lost | retired
+  status       String   @default("available")
+  notes        String?
+  assignedTo   Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  assignments  InventoryAssignment[]
+
+  @@index([assignedToId])
+  @@map("inventory_items")
+}
+
+model InventoryAssignment {
+  id         String        @id @default(uuid())
+  item       InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId     String
+  employeeId String
+  assignedAt DateTime      @default(now())
+  assignedBy String
+  returnedAt DateTime?
+  returnNote String?
+
+  @@index([itemId])
+  @@index([employeeId])
+  @@map("inventory_assignments")
 }
 
 // Portal-wide settings kept as JSON, keyed by name. Currently just "menu":

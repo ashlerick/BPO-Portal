@@ -11,6 +11,9 @@ export interface MyEmployeeProfile {
   silBalance: number
   managerId: string | null
   supervisor: string | null
+  employeeCode: string | null
+  legalEntity: string | null
+  level: string | null
   phone: string | null
   address: string | null
   emergencyContactName: string | null
@@ -32,6 +35,8 @@ export interface EmployeeRecord {
   managerId: string | null
   supervisor: string | null
   employeeCode: string | null
+  legalEntity: string | null
+  level: string | null
   probationEndDate: string | null
   regularizationDate: string | null
   phone: string | null

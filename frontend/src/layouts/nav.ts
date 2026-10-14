@@ -37,6 +37,7 @@ export const defaultNavGroups: NavGroup[] = [
       { to: '/attendance', label: 'Attendance', icon: 'attendance' },
       { to: '/leave', label: 'Leave Requests', icon: 'leave' },
       { to: '/documents', label: 'Documents', icon: 'documents' },
+      { to: '/forms', label: 'Forms', icon: 'requests' },
       { to: '/reports', label: 'Weekly Reports', icon: 'reports', roles: ['team_leader', 'manager', 'hr', 'admin'] },
       { to: '/benefits', label: 'Benefits', icon: 'benefits' },
       { to: '/hr-requests', label: 'HR Requests', icon: 'requests' },
@@ -57,6 +58,7 @@ export const defaultNavGroups: NavGroup[] = [
       { to: '/benefits-admin', label: 'Benefits Administration', icon: 'shield', roles: ['hr', 'admin'] },
       { to: '/employee-relations', label: 'Employee Relations', icon: 'alert', roles: ['hr', 'admin'] },
       { to: '/payroll', label: 'Payroll', icon: 'payroll', roles: ['hr', 'admin'] },
+      { to: '/inventory', label: 'Inventory', icon: 'shield', roles: ['hr', 'admin'] },
     ],
   },
   {

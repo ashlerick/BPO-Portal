@@ -42,6 +42,8 @@ const dateValue = (v: string | null) => (v ? v.slice(0, 10) : '')
 function RecordForm({ employee, departments, teams, everyone, onSaved }: { employee: EmployeeRecord; departments: Department[]; teams: Team[]; everyone: EmployeeRecord[]; onSaved: (e: EmployeeRecord) => void }) {
   const [code, setCode] = useState(employee.employeeCode ?? '')
   const [position, setPosition] = useState(employee.position ?? '')
+  const [legalEntity, setLegalEntity] = useState(employee.legalEntity ?? '')
+  const [level, setLevel] = useState(employee.level ?? '')
   const [departmentId, setDepartmentId] = useState(employee.departmentId ?? '')
   const [teamId, setTeamId] = useState(employee.teamId ?? '')
   const [managerId, setManagerId] = useState(employee.managerId ?? '')
@@ -61,6 +63,8 @@ function RecordForm({ employee, departments, teams, everyone, onSaved }: { emplo
         await api.put<EmployeeRecord>(`/employees/${employee.id}`, {
           employeeCode: code || null,
           position: position || null,
+          legalEntity: legalEntity || null,
+          level: level || null,
           departmentId: departmentId || null,
           teamId: teamId || null,
           managerId: managerId || null,
@@ -86,6 +90,12 @@ function RecordForm({ employee, departments, teams, everyone, onSaved }: { emplo
         </Field>
         <Field label="Position">
           <input value={position} onChange={(e) => setPosition(e.target.value)} className="field" />
+        </Field>
+        <Field label="Legal entity">
+          <input value={legalEntity} onChange={(e) => setLegalEntity(e.target.value)} className="field" />
+        </Field>
+        <Field label="Level / tier">
+          <input value={level} onChange={(e) => setLevel(e.target.value)} placeholder="e.g. Tier 01" className="field" />
         </Field>
         <Field label="Employment status">
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="field">

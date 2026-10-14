@@ -89,6 +89,8 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
   const [date, setDate] = useState(todayInManilaIso())
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
+  const [overtime, setOvertime] = useState('')
+  const [workingHoliday, setWorkingHoliday] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -97,8 +99,8 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!checkIn && !checkOut) {
-      setMessage({ ok: false, text: 'Enter a check-in time, a check-out time, or both.' })
+    if (!checkIn && !checkOut && overtime === '' && !workingHoliday) {
+      setMessage({ ok: false, text: 'Enter a time, overtime hours, or mark a working holiday.' })
       return
     }
     guardedAction(['hr', 'admin'], async () => {
@@ -111,10 +113,14 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
           status: 'present',
           ...(checkIn && { checkInAt: toIso(checkIn) }),
           ...(checkOut && { checkOutAt: toIso(checkOut) }),
+          ...(overtime !== '' && { overtimeHours: Number(overtime) }),
+          workingHoliday,
         })
         setMessage({ ok: true, text: 'Attendance corrected.' })
         setCheckIn('')
         setCheckOut('')
+        setOvertime('')
+        setWorkingHoliday(false)
         onCorrected()
       } catch (err) {
         setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Could not correct attendance' })
@@ -153,6 +159,14 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
           Check out
           <input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="field mt-1" />
         </label>
+        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+          Overtime hours
+          <input type="number" min="0" max="24" step="0.25" value={overtime} onChange={(e) => setOvertime(e.target.value)} className="field mt-1" />
+        </label>
+        <label className="flex items-center gap-2 self-end pb-2 text-sm text-gray-600 dark:text-gray-400">
+          <input type="checkbox" checked={workingHoliday} onChange={(e) => setWorkingHoliday(e.target.checked)} />
+          Worked on a holiday
+        </label>
       </div>
       {message && (
         <p className={`text-sm ${message.ok ? 'text-brand-700 dark:text-brand-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -169,6 +183,95 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
 function hoursBetween(a: string | null, b: string | null): number {
   if (!a || !b) return 0
   return Math.max(0, (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000)
+}
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+function mondayOf(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  const back = (d.getUTCDay() + 6) % 7
+  return addDaysIso(iso, -back)
+}
+
+// The old sheet's weekly tracker: Regular Hours (from time in/out),
+// OverTime and Working Holiday (entered by HR) for one Mon-Sun week.
+function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reloadToken: number }) {
+  const [weekStart, setWeekStart] = useState(() => mondayOf(todayInManilaIso()))
+  const weekEnd = addDaysIso(weekStart, 6)
+  const q = new URLSearchParams({ from: weekStart, to: weekEnd })
+  if (employeeId) q.set('employeeId', employeeId)
+  q.set('_r', String(reloadToken))
+  const { data, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?${q.toString()}`)
+
+  const days = DAY_NAMES.map((name, i) => {
+    const date = addDaysIso(weekStart, i)
+    const rec = data?.find((r) => r.date.slice(0, 10) === date && r.status === 'present')
+    return { name, date, rec }
+  })
+  const hours = (r?: AttendanceRecord) => (r ? Math.round(hoursBetween(r.checkInAt, r.checkOutAt) * 100) / 100 : 0)
+  const totalRegular = days.reduce((a, d) => a + hours(d.rec), 0)
+  const totalOt = days.reduce((a, d) => a + (d.rec?.overtimeHours ?? 0), 0)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => setWeekStart(addDaysIso(weekStart, -7))}>
+            ← Previous
+          </Button>
+          <Button size="sm" onClick={() => setWeekStart(addDaysIso(weekStart, 7))}>
+            Next →
+          </Button>
+        </div>
+        <span className="text-sm text-gray-600 dark:text-gray-400">
+          {formatDateOnly(weekStart)} – {formatDateOnly(weekEnd)}
+        </span>
+      </div>
+      {error && <ErrorState message={error} />}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[34rem] text-center text-sm">
+          <thead>
+            <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
+              <th className="py-2 pr-3 text-left font-medium" />
+              {days.map((d) => (
+                <th key={d.date} className="px-1 py-2 font-medium">
+                  {d.name}
+                  <div className="text-xs font-normal">{d.date.slice(5)}</div>
+                </th>
+              ))}
+              <th className="px-1 py-2 font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody className="text-gray-800 dark:text-gray-200">
+            <tr className="border-b border-black/5 dark:border-white/5">
+              <td className="py-2 pr-3 text-left font-medium">Regular hours</td>
+              {days.map((d) => (
+                <td key={d.date}>{d.rec ? hours(d.rec) : ''}</td>
+              ))}
+              <td className="font-medium">{Math.round(totalRegular * 100) / 100}</td>
+            </tr>
+            <tr className="border-b border-black/5 dark:border-white/5">
+              <td className="py-2 pr-3 text-left font-medium">Overtime</td>
+              {days.map((d) => (
+                <td key={d.date}>{d.rec?.overtimeHours ?? ''}</td>
+              ))}
+              <td className="font-medium">{totalOt}</td>
+            </tr>
+            <tr>
+              <td className="py-2 pr-3 text-left font-medium">Working holiday</td>
+              {days.map((d) => (
+                <td key={d.date}>{d.rec?.workingHoliday ? '✓' : ''}</td>
+              ))}
+              <td />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {employeeId === '' && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">Hours come from time in / time out. Overtime and working holiday are entered by HR.</p>
+      )}
+    </div>
+  )
 }
 
 export function AttendancePage() {
@@ -411,6 +514,12 @@ export function AttendancePage() {
             </ul>
           )}
         </Section>
+
+        {(!isReviewer || employeeId) && (
+          <Section id="attendance.weekly" title="Weekly tracker" hint="Regular hours, overtime, working holiday" defaultOpen>
+            <WeeklyTracker employeeId={employeeId} reloadToken={reloadToken} />
+          </Section>
+        )}
 
         <Section id="attendance.corrections" title="Attendance corrections" hint="HR / Admin" roles={['hr', 'admin']}>
           <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />

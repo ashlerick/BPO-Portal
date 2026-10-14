@@ -28,6 +28,26 @@ Known gaps / decisions still open:
 - Notifications are in-app only (no email), and are created for: leave requests/decisions, report
   approvals/rejections, new announcements, HR request updates, performance review steps.
 
+### 0b. Added after reviewing the Excel beta (2026-10-14)
+
+The portal replaces the per-employee Google Sheet, so everything on that sheet is now covered.
+All of it is built and typechecks; **none of it has been run against a database or browser**.
+
+| From the sheet | Portal |
+|---|---|
+| Payslip list (period + Drive link) | Payroll: bulk link entry per cut-off (1H = 1st–15th, 2H = 16th–end); employees see only their own on My Profile, from the release date (25th for 1H, 10th for the previous 2H; weekend → the Friday before). Links only: nothing is uploaded to storage. Drive sharing decides who can open a file |
+| Legal Entity, Level/Tier | Employee Management fields; shown on My Profile |
+| To Do's (task, due date, link) | Dashboard to-do list; HR and supervisors assign (to one, many or everyone) |
+| KPI Metrics | Performance: HR-defined KPI list, monthly scoring by HR, employee scorecard. Scale, total method (average / weighted / sum / percent), missing-score handling and rating labels are HR settings |
+| Attendance tracker | Attendance: weekly grid; regular hours computed, overtime and working holiday entered by HR |
+| Authorized Absences | Leave balance table (used days; no credit) |
+| Forms | Forms page; Freedom Wall (anonymous, everyone reads, HR moderates); Petty Cash Liquidation is "under construction" |
+| (not in the sheet) Inventory | Inventory: one holder per item, history, QR stickers; "my items" on My Profile |
+
+Open: Permanent Files (Handbook, 201 File, Archived) are covered by Documents / employee documents
+rather than a dedicated list. Inventory QR codes encode a base address chosen at print time, so the
+domain does not have to be final yet.
+
 ---
 
 ## 1. Core UI idea

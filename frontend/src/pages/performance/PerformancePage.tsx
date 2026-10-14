@@ -12,6 +12,7 @@ import { Section, SectionStack } from '../../components/ui/Section'
 import { formatDateOnly } from '../../utils/dates'
 import { humanize } from '../../utils/text'
 import type { MyEmployeeProfile } from '../hris/types'
+import { KpiEntry, KpiScorecard, KpiSettings } from './Kpi'
 
 type ReviewStatus = 'self_assessment' | 'supervisor_evaluation' | 'hr_review' | 'completed'
 
@@ -334,6 +335,18 @@ export function PerformancePage() {
     <div>
       <PageHeader title="Performance Management" description="Evaluations, coaching and improvement plans." />
       <SectionStack>
+        <Section id="perf.kpi" title="My KPI scorecard" hint="Monthly scores by core value">
+          <KpiScorecard />
+        </Section>
+
+        <Section id="perf.kpi-entry" title="Score KPIs" hint="Enter an employee's monthly scores" roles={['hr', 'admin']}>
+          <KpiEntry />
+        </Section>
+
+        <Section id="perf.kpi-settings" title="KPI settings" hint="Scale, formula and KPI list" roles={['hr', 'admin']}>
+          <KpiSettings />
+        </Section>
+
         <Section id="perf.start" title="Start a performance evaluation" roles={['hr', 'admin']}>
           <StartReviewForm onCreated={(r) => setReviews((prev) => (prev ? [r, ...prev] : [r]))} />
         </Section>

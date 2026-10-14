@@ -237,6 +237,8 @@ async function handleListAttendance(req: AuthedRequest, res: VercelResponse) {
       status: r.status,
       checkInAt: r.checkInAt,
       checkOutAt: r.checkOutAt,
+      overtimeHours: r.overtimeHours === null ? null : Number(r.overtimeHours.toString()),
+      workingHoliday: r.workingHoliday,
       // IP/off-site flag is a monitoring detail — only surfaced to HR/Admin, not to the employee themselves.
       checkInIp: reviewer ? r.checkInIp : undefined,
       checkInOffSite: reviewer ? isOffSiteIp(r.checkInIp) : undefined,
@@ -407,6 +409,8 @@ const correctAttendanceSchema = z.object({
   checkOutAt: z.string().datetime().nullable().optional(),
   checkInIp: z.string().nullable().optional(),
   checkOutIp: z.string().nullable().optional(),
+  overtimeHours: z.number().min(0).max(24).nullable().optional(),
+  workingHoliday: z.boolean().optional(),
 })
 
 // HR/admin override to fix a specific field on an existing attendance
@@ -425,7 +429,7 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
     return
   }
 
-  const { employeeId, date: dateStr, status, checkInAt, checkOutAt, checkInIp, checkOutIp } = parsed.data
+  const { employeeId, date: dateStr, status, checkInAt, checkOutAt, checkInIp, checkOutIp, overtimeHours, workingHoliday } = parsed.data
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } })
   if (!employee) {
     res.status(404).json({ message: 'Employee not found' })
@@ -439,6 +443,8 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
     ...(checkOutAt !== undefined && { checkOutAt: checkOutAt === null ? null : new Date(checkOutAt) }),
     ...(checkInIp !== undefined && { checkInIp }),
     ...(checkOutIp !== undefined && { checkOutIp }),
+    ...(overtimeHours !== undefined && { overtimeHours }),
+    ...(workingHoliday !== undefined && { workingHoliday }),
   }
 
   let record
@@ -462,6 +468,8 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
     checkOutAt: record.checkOutAt,
     checkInIp: record.checkInIp,
     checkOutIp: record.checkOutIp,
+    overtimeHours: record.overtimeHours === null ? null : Number(record.overtimeHours.toString()),
+    workingHoliday: record.workingHoliday,
   })
 }
 

@@ -207,6 +207,81 @@ Set the result as `JWT_SECRET` (Production + Preview + Development) and redeploy
   developer's original Google Cloud project's grant for this app can be revoked at
   https://myaccount.google.com/permissions
 
+## Deploying the October 2026 changes (database migrations)
+
+This release adds database tables and columns (payslip links, employee legal entity/level, to-dos,
+KPI scorecard, Freedom Wall, attendance overtime/working holiday, inventory). **Apply the
+migrations before the new backend serves traffic**, otherwise the new pages return errors:
+
+```
+cd backend
+npx prisma migrate deploy
+```
+
+Then deploy the backend, then the frontend. The KPI migration also seeds the starting KPI list
+(6 core values, 17 KPIs), which HR can edit in Performance → KPI settings.
+
+Payslips are Google Drive links, not uploaded files. The portal decides who sees the *link*; Google
+Drive decides who can *open* it, so each file must be shared with that employee in Drive.
+
+## Optional: upgrade Vercel to Pro and split the endpoints
+
+The backend runs on Vercel Hobby, which caps a deployment at **12 serverless functions**. We are at
+exactly 12, so new features have been folded into four "dispatcher" functions (`content`, `portal`,
+`hr`, `restricted`) that route by `?resource=` (see `backend/vercel.json` rewrites). That works, but
+it is a workaround for the cap, not a design choice.
+
+**Option for the owner:** move the Vercel project to a **Pro** plan (~$20/month per member; check
+current pricing). Besides lifting the function cap, Pro is the plan Vercel's terms expect for
+commercial use (see "Ongoing costs" below), and it allows longer `maxDuration` than the 10s
+configured today. After upgrading, the dispatchers can be split into one function per resource.
+This is optional: the portal works as-is on Hobby, and nothing below is required.
+
+### Current functions (12)
+
+| Function | Serves |
+|---|---|
+| `auth/login`, `auth/set-password` | Login, forgot/reset/change password |
+| `users`, `employees`, `directory` | Accounts, employee HRIS, departments & teams |
+| `documents`, `reports`, `leave` | Documents, weekly reports, leave + attendance |
+| `content` | announcements, benefits |
+| `portal` | me, notifications, calendar, settings, menu, audit-logs |
+| `hr` | hr-requests, employee-records, enrollments, checklists, recruitment, performance |
+| `restricted` | disciplinary, payroll |
+
+### Proposed split (about 25 functions)
+
+| New function | Taken from | Why separate |
+|---|---|---|
+| `announcements`, `benefits` | `content` | Independent resources |
+| `notifications`, `calendar`, `settings`, `menu`, `me`, `audit-logs` | `portal` | `notifications` is polled by the bell, so it benefits from its own cold-start and logs |
+| `hr-requests`, `employee-records`, `enrollments` | `hr` | Heaviest daily HR use |
+| `checklists` (onboarding/offboarding), `recruitment`, `performance` | `hr` | Different workflows, rarely used together |
+| `disciplinary`, `payroll` | `restricted` | **Highest value**: separate logs, errors and access reviews for the most sensitive data |
+| `attendance`, `leave-requests` | `leave` | Attendance is the highest-traffic path (time in/out) |
+| `inventory` | new | Planned asset-tag/QR module; no need to add to a dispatcher |
+
+Keep `auth/*`, `users`, `employees`, `directory`, `documents` and `reports` as they are.
+
+### How to do it safely
+
+1. Handlers already live in `backend/lib/handlers/*.ts` and are called by the dispatchers, so each
+   new function is a thin file in `backend/api/` that imports one handler. No handler logic changes.
+2. Update `backend/vercel.json` rewrites to point each public path at its own file, keeping the
+   public URLs (`/api/hr/hr-requests`, `/api/restricted/payroll`, ...) unchanged so the frontend
+   needs no changes.
+3. Do it in stages (restricted first, then `leave`, then `hr`, `portal`, `content`), deploying and
+   verifying after each, not all at once.
+4. Delete a dispatcher only after its rewrites no longer reference it.
+5. Re-check `RESTRICTED_ROLES` in `backend/lib/handlers/util.ts` and the audit-logging on
+   disciplinary and payroll after the split; every read there must still be logged.
+
+### Things the split does not fix
+
+- Neon's connection limits: more functions means more concurrent connections, so confirm the
+  pooled connection string is in use (and consider a paid Neon tier, see below).
+- Cold starts get slightly more frequent per function because traffic is spread thinner.
+
 ## Ongoing costs after transfer
 
 Everything here runs on free tiers as of this writing — GitHub Pages, Vercel Hobby, Neon Free,

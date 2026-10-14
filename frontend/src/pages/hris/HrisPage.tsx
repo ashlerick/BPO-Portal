@@ -362,7 +362,14 @@ export function MyProfile() {
             <ContactDetailsCard profile={profile} part="emergency" onSaved={setProfile} />
           </Section>
           <Section id="profile.position" title="Position" hint={profile.position ?? undefined}>
-            <DetailList rows={[['Position', profile.position ?? '—']]} />
+            <DetailList
+              rows={[
+                ['Position', profile.position ?? '—'],
+                ['Employee ID', profile.employeeCode ?? '—'],
+                ['Legal entity', profile.legalEntity ?? '—'],
+                ['Level', profile.level ?? '—'],
+              ]}
+            />
           </Section>
           <Section id="profile.department" title="Department" hint={profile.department ?? undefined}>
             <DetailList

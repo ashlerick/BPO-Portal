@@ -30,6 +30,8 @@ const updateSchema = z.object({
   silBalance: z.number().int().min(0).optional(),
   managerId: z.string().uuid().nullable().optional(),
   employeeCode: z.string().trim().min(1).max(40).nullable().optional(),
+  legalEntity: z.string().trim().min(1).max(120).nullable().optional(),
+  level: z.string().trim().min(1).max(60).nullable().optional(),
   probationEndDate: z.string().regex(dateOnlyPattern, 'probationEndDate must be YYYY-MM-DD').nullable().optional(),
   regularizationDate: z.string().regex(dateOnlyPattern, 'regularizationDate must be YYYY-MM-DD').nullable().optional(),
 })
@@ -78,6 +80,8 @@ function serialize(e: {
   dateHired: Date | null
   managerId: string | null
   employeeCode: string | null
+  legalEntity: string | null
+  level: string | null
   probationEndDate: Date | null
   regularizationDate: Date | null
   manager: { user: { firstName: string; middleName: string | null; lastName: string } } | null
@@ -100,6 +104,8 @@ function serialize(e: {
     dateHired: e.dateHired,
     managerId: e.managerId,
     employeeCode: e.employeeCode,
+    legalEntity: e.legalEntity,
+    level: e.level,
     probationEndDate: e.probationEndDate,
     regularizationDate: e.regularizationDate,
     supervisor: e.manager

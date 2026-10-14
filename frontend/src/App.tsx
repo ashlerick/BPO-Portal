@@ -10,6 +10,10 @@ import { BenefitsPage } from './pages/benefits/BenefitsPage'
 import { CalendarPage } from './pages/calendar/CalendarPage'
 import { DashboardPage } from './pages/dashboard/DashboardPage'
 import { DocumentsPage } from './pages/documents/DocumentsPage'
+import { FormsPage } from './pages/forms/FormsPage'
+import { InventoryItemPage } from './pages/inventory/InventoryItemPage'
+import { InventoryPage } from './pages/inventory/InventoryPage'
+import { FreedomWallPage } from './pages/forms/FreedomWallPage'
 import { ForgotPasswordPage } from './pages/forgot-password/ForgotPasswordPage'
 import { HrisPage } from './pages/hris/HrisPage'
 import { EmployeeRecordPage } from './pages/hris/EmployeeRecordPage'
@@ -101,8 +105,19 @@ export default function App() {
                   </RequireAuth>
                 }
               />
+              <Route
+                path="/inventory"
+                element={
+                  <RequireAuth roles={['hr', 'admin']}>
+                    <InventoryPage />
+                  </RequireAuth>
+                }
+              />
+              <Route path="/inventory/:tag" element={<InventoryItemPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/forms" element={<FormsPage />} />
+              <Route path="/freedom-wall" element={<FreedomWallPage />} />
               <Route path="/leave" element={<LeaveRequestsPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />

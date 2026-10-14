@@ -1,18 +1,20 @@
 import type { VercelResponse } from '@vercel/node'
-import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
-import { getDownloadUrl, putObject } from '../s3.js'
-import { canAccessRestricted, dateOnlyPattern, forbid, money, notFound, parseBody, queryString, toDate } from './util.js'
+import { getDownloadUrl } from '../s3.js'
+import { canAccessRestricted, dateOnlyPattern, forbid, money, myEmployee, notFound, parseBody, queryString, toDate } from './util.js'
 
 // Payroll / Compensation. Very restricted: only RESTRICTED_ROLES (util.ts)
 // may use any of it, and every read is audit-logged (awaited). ?kind= picks:
 //   summary   GET  ?employeeId=          current salary + last change
 //   salary    GET  ?employeeId=          salary history; POST records a change
 //   items     GET  ?employeeId=[&kind2=] allowances / bonuses / deductions; POST; DELETE /:id
-//   payslips  GET  ?employeeId=          payroll history; POST; DELETE /:id; GET /:id?download=1
+//   payslips  GET  ?employeeId=          payroll history; POST (period + Drive link, upserts); DELETE /:id
+//   payslips-period GET ?year=&month=&half=  every active employee + their link for that period
+//   payslips-bulk   POST                 {year, month, half, entries:[{employeeId, link}]}
+//   mine      GET                        the signed-in employee's own payslip links (any role)
 
 const amount = z.number().min(0).max(100_000_000)
 const dateField = z.string().regex(dateOnlyPattern, 'Dates must be YYYY-MM-DD')
@@ -33,18 +35,107 @@ const itemSchema = z.object({
   recurring: z.boolean().default(false),
 })
 
+// Payslips live in Google Drive; the portal only stores the link. Who can
+// open a file is decided by its Drive sharing, not by the portal.
+const driveLink = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => {
+    try {
+      const u = new URL(v)
+      return u.protocol === 'https:' && ['drive.google.com', 'docs.google.com'].includes(u.hostname)
+    } catch {
+      return false
+    }
+  }, 'Paste a Google Drive link (https://drive.google.com/...)')
+
+const periodFields = {
+  year: z.number().int().min(2000).max(2100),
+  month: z.number().int().min(1).max(12),
+  half: z.union([z.literal(1), z.literal(2)]),
+}
+
 const payslipSchema = z.object({
   employeeId: z.string().uuid(),
-  periodStart: dateField,
-  periodEnd: dateField,
-  gross: amount,
-  deductions: amount,
-  file: z.object({ contentType: z.string().min(1), fileName: z.string().min(1), base64: z.string().min(1) }).optional(),
+  ...periodFields,
+  link: driveLink,
+})
+
+const bulkSchema = z.object({
+  ...periodFields,
+  entries: z.array(z.object({ employeeId: z.string().uuid(), link: driveLink })).min(1).max(500),
+})
+
+// 1H = 1st-15th, 2H = 16th-end of month (the company's semi-monthly cut-offs).
+function periodRange(year: number, month: number, half: 1 | 2) {
+  const mm = String(month).padStart(2, '0')
+  const lastDay = String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, '0')
+  return half === 1
+    ? { start: toDate(`${year}-${mm}-01`), end: toDate(`${year}-${mm}-15`) }
+    : { start: toDate(`${year}-${mm}-16`), end: toDate(`${year}-${mm}-${lastDay}`) }
+}
+
+async function savePayslip(employeeId: string, range: { start: Date; end: Date }, link: string, by: string) {
+  const existing = await prisma.payslip.findFirst({ where: { employeeId, periodStart: range.start, periodEnd: range.end } })
+  if (existing) return prisma.payslip.update({ where: { id: existing.id }, data: { link, createdBy: by } })
+  return prisma.payslip.create({
+    data: { employeeId, periodStart: range.start, periodEnd: range.end, link, createdBy: by },
+  })
+}
+
+// Payslips go live on the 25th (that month's 1H) and the 10th of the next
+// month (the previous month's 2H). A weekend date moves back to the Friday
+// before. Returned as YYYY-MM-DD, effective from 00:00 Manila time.
+function releaseDate(periodStart: Date): string {
+  const y = periodStart.getUTCFullYear()
+  const m = periodStart.getUTCMonth()
+  const firstHalf = periodStart.getUTCDate() <= 15
+  const d = firstHalf ? new Date(Date.UTC(y, m, 25)) : new Date(Date.UTC(y, m + 1, 10))
+  const dow = d.getUTCDay()
+  if (dow === 6) d.setUTCDate(d.getUTCDate() - 1)
+  if (dow === 0) d.setUTCDate(d.getUTCDate() - 2)
+  return d.toISOString().slice(0, 10)
+}
+
+const isReleased = (periodStart: Date, now = new Date()) => now >= new Date(`${releaseDate(periodStart)}T00:00:00+08:00`)
+
+type Money = { toString(): string } | null
+const slipView = (r: { id: string; periodStart: Date; periodEnd: Date; gross: Money; deductions: Money; net: Money; link: string | null; fileKey: string | null }) => ({
+  id: r.id,
+  periodStart: r.periodStart,
+  periodEnd: r.periodEnd,
+  gross: money(r.gross),
+  deductions: money(r.deductions),
+  net: money(r.net),
+  link: r.link,
+  releaseDate: releaseDate(r.periodStart),
+  hasFile: r.fileKey !== null,
 })
 
 export async function handler(req: AuthedRequest, res: VercelResponse) {
-  if (!canAccessRestricted(req)) return forbid(res)
   const kind = queryString(req, 'kind')
+
+  // An employee's own payslip links: open to any signed-in user, but only
+  // ever their own rows (the employee comes from the session, not the query).
+  if (kind === 'mine' && req.method === 'GET') {
+    const me = await myEmployee(req)
+    if (!me) return res.status(200).json([])
+    const rows = await prisma.payslip.findMany({
+      where: { employeeId: me.id, link: { not: null } },
+      orderBy: { periodEnd: 'desc' },
+    })
+    await logAudit(req.auth.sub, 'view', 'payslips', me.id)
+    // Not visible to the employee until the period's release date.
+    const now = new Date()
+    return res.status(200).json(
+      rows
+        .filter((r) => isReleased(r.periodStart, now))
+        .map((r) => ({ id: r.id, periodStart: r.periodStart, periodEnd: r.periodEnd, link: r.link })),
+    )
+  }
+
+  if (!canAccessRestricted(req)) return forbid(res)
   const sub = queryString(req, 'sub')
   const employeeId = queryString(req, 'employeeId')
 
@@ -134,22 +225,52 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   }
 
   // ---- payslips / payroll history
+  // Every active employee with their link for one period (bulk-entry page).
+  if (kind === 'payslips-period' && req.method === 'GET') {
+    const year = Number(queryString(req, 'year'))
+    const month = Number(queryString(req, 'month'))
+    const half = Number(queryString(req, 'half'))
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12 || (half !== 1 && half !== 2)) {
+      return res.status(400).json({ message: 'year, month and half are required' })
+    }
+    const range = periodRange(year, month, half)
+    const [employees, slips] = await Promise.all([
+      prisma.employee.findMany({
+        where: { status: 'active' },
+        select: { id: true, employeeCode: true, user: { select: { firstName: true, lastName: true } } },
+      }),
+      prisma.payslip.findMany({ where: { periodStart: range.start, periodEnd: range.end } }),
+    ])
+    const linkByEmployee = new Map(slips.map((s) => [s.employeeId, s.link]))
+    await logAudit(req.auth.sub, 'view', 'payslips', null)
+    return res.status(200).json({
+      releaseDate: releaseDate(range.start),
+      rows: employees
+        .map((e) => ({
+          employeeId: e.id,
+          employeeCode: e.employeeCode,
+          name: `${e.user.lastName}, ${e.user.firstName}`,
+          link: linkByEmployee.get(e.id) ?? null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    })
+  }
+
+  if (kind === 'payslips-bulk' && req.method === 'POST') {
+    const data = parseBody(bulkSchema, req.body, res)
+    if (!data) return
+    const range = periodRange(data.year, data.month, data.half)
+    for (const entry of data.entries) await savePayslip(entry.employeeId, range, entry.link, req.auth.sub)
+    await logAudit(req.auth.sub, 'create', 'payslips-bulk', `${data.year}-${data.month}-${data.half}H`)
+    return res.status(200).json({ saved: data.entries.length })
+  }
+
   if (kind === 'payslips') {
     if (req.method === 'GET' && !sub) {
       if (!employeeId) return res.status(400).json({ message: 'employeeId is required' })
       const rows = await prisma.payslip.findMany({ where: { employeeId }, orderBy: { periodEnd: 'desc' } })
       await logAudit(req.auth.sub, 'view', 'payslips', employeeId)
-      return res.status(200).json(
-        rows.map((r) => ({
-          id: r.id,
-          periodStart: r.periodStart,
-          periodEnd: r.periodEnd,
-          gross: money(r.gross),
-          deductions: money(r.deductions),
-          net: money(r.net),
-          hasFile: r.fileKey !== null,
-        })),
-      )
+      return res.status(200).json(rows.map(slipView))
     }
     if (req.method === 'GET' && sub) {
       const slip = await prisma.payslip.findUnique({ where: { id: sub } })
@@ -160,42 +281,9 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (req.method === 'POST') {
       const data = parseBody(payslipSchema, req.body, res)
       if (!data) return
-      if (data.periodEnd < data.periodStart) {
-        res.status(400).json({ message: 'Period end can\'t be before the period start' })
-        return
-      }
-      let fileKey: string | null = null
-      if (data.file) {
-        const buffer = Buffer.from(data.file.base64, 'base64')
-        if (buffer.length === 0 || buffer.length > 4 * 1024 * 1024) {
-          res.status(400).json({ message: 'File must be non-empty and under 4MB' })
-          return
-        }
-        fileKey = `payslips/${data.employeeId}/${randomUUID()}-${data.file.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-        await putObject(fileKey, buffer, data.file.contentType)
-      }
-      const created = await prisma.payslip.create({
-        data: {
-          employeeId: data.employeeId,
-          periodStart: toDate(data.periodStart),
-          periodEnd: toDate(data.periodEnd),
-          gross: data.gross,
-          deductions: data.deductions,
-          net: Math.round((data.gross - data.deductions) * 100) / 100,
-          fileKey,
-          createdBy: req.auth.sub,
-        },
-      })
-      await logAudit(req.auth.sub, 'create', 'payslip', created.id)
-      return res.status(201).json({
-        id: created.id,
-        periodStart: created.periodStart,
-        periodEnd: created.periodEnd,
-        gross: money(created.gross),
-        deductions: money(created.deductions),
-        net: money(created.net),
-        hasFile: fileKey !== null,
-      })
+      const saved = await savePayslip(data.employeeId, periodRange(data.year, data.month, data.half), data.link, req.auth.sub)
+      await logAudit(req.auth.sub, 'create', 'payslip', saved.id)
+      return res.status(201).json(slipView(saved))
     }
     if (req.method === 'DELETE' && sub) {
       await prisma.payslip.deleteMany({ where: { id: sub } })

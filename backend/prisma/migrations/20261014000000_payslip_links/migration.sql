@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "payslips" ADD COLUMN "link" TEXT,
+ALTER COLUMN "gross" DROP NOT NULL,
+ALTER COLUMN "deductions" DROP NOT NULL,
+ALTER COLUMN "net" DROP NOT NULL;

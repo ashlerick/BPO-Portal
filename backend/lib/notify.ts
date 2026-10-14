@@ -8,6 +8,8 @@ export const NOTIFICATION_TYPES = {
   announcement: 'New announcements',
   report_decision: 'Weekly reports approved or rejected',
   hr_request: 'HR request updates',
+  todo: 'New to-dos assigned to you',
+  inventory: 'Company items assigned to you',
 } as const
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES

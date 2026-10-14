@@ -167,6 +167,12 @@ export function LeaveRequestsPage() {
     setRequests((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)
   }
 
+  // Approved days this year taken from SIL, or as authorized absences (no SIL credit).
+  const thisYear = String(new Date().getFullYear())
+  const myApprovedDays = (sil: boolean) =>
+    (requests ?? [])
+      .filter((r) => r.employeeId === profile?.id && r.status === 'approved' && r.useSil === sil && r.startDate.startsWith(thisYear))
+      .reduce((sum, r) => sum + r.days, 0)
   const pending = requests?.filter((r) => r.status === 'pending') ?? []
   const calendarEvents: CalendarEvent[] = (requests ?? [])
     .filter((r) => r.status === 'approved')
@@ -192,13 +198,29 @@ export function LeaveRequestsPage() {
             <CreateForm onCreated={(r) => setRequests((prev) => (prev ? [r, ...prev] : [r]))} />
           </Section>
 
-          <Section id="leave.balance" title="Leave balance" hint="Service Incentive Leave (SIL)">
+          <Section id="leave.balance" title="Leave balance" hint="Service Incentive Leave and authorized absences">
             {profile ? (
-              <p className="text-sm text-gray-700 dark:text-gray-300">
-                You have{' '}
-                <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">{profile.silBalance}</span>{' '}
-                SIL day{profile.silBalance === 1 ? '' : 's'} remaining.
-              </p>
+              <table className="w-full max-w-md text-left text-sm">
+                <thead>
+                  <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
+                    <th className="py-2 font-medium">Leave</th>
+                    <th className="py-2 text-right font-medium">Used</th>
+                    <th className="py-2 text-right font-medium">Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-800 dark:text-gray-200">
+                  <tr className="border-b border-black/5 dark:border-white/5">
+                    <td className="py-2">Service Incentive Leave</td>
+                    <td className="py-2 text-right">{myApprovedDays(true)}</td>
+                    <td className="py-2 text-right font-semibold">{profile.silBalance}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2">Authorized Absences</td>
+                    <td className="py-2 text-right">{myApprovedDays(false)}</td>
+                    <td className="py-2 text-right text-gray-500 dark:text-gray-400">N/A</td>
+                  </tr>
+                </tbody>
+              </table>
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">No employee record is linked to your account.</p>
             )}
