@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState, ErrorState } from '../../components/AsyncState'
 import { EmployeeSelect } from '../../components/EmployeeSelect'
@@ -135,6 +135,7 @@ export function InventoryPage() {
   const [selected, setSelected] = useState<string[]>([])
   const [printing, setPrinting] = useState(false)
   const [filter, setFilter] = useState('')
+  const [grouped, setGrouped] = useState(true)
 
   const load = useCallback(() => {
     api
@@ -158,6 +159,21 @@ export function InventoryPage() {
     return <StickerSheet items={items.filter((i) => selected.includes(i.id))} onClose={() => setPrinting(false)} />
   }
 
+  // One group per holder (A-Z), then "Unassigned" (in storage, repair, lost, retired).
+  const groups = useMemo(() => {
+    if (!grouped) return [{ key: 'all', label: '', items: shown }]
+    const byHolder = new Map<string, InventoryItem[]>()
+    const unassigned: InventoryItem[] = []
+    for (const i of shown) {
+      if (i.assignedToName) byHolder.set(i.assignedToName, [...(byHolder.get(i.assignedToName) ?? []), i])
+      else unassigned.push(i)
+    }
+    const people = [...byHolder.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, list]) => ({ key: name, label: name, items: list }))
+    return unassigned.length > 0 ? [...people, { key: '__unassigned', label: 'Unassigned', items: unassigned }] : people
+  }, [shown, grouped])
+
   const allShownSelected = shown.length > 0 && shown.every((i) => selected.includes(i.id))
 
   return (
@@ -176,9 +192,15 @@ export function InventoryPage() {
               placeholder="Search tag, name, holder…"
               className="field max-w-xs"
             />
-            <Button variant="primary" size="sm" disabled={selected.length === 0} onClick={() => setPrinting(true)}>
-              Print QR stickers ({selected.length})
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
+                Group by person
+              </label>
+              <Button variant="primary" size="sm" disabled={selected.length === 0} onClick={() => setPrinting(true)}>
+                Print QR stickers ({selected.length})
+              </Button>
+            </div>
           </div>
           {items && shown.length === 0 && <EmptyState label="No items." />}
           {shown.length > 0 && (
@@ -202,36 +224,63 @@ export function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="text-gray-800 dark:text-gray-200">
-                  {shown.map((i) => (
-                    <tr key={i.id} className="border-b border-black/5 dark:border-white/5">
-                      <td className="py-2 pr-2">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${i.assetTag}`}
-                          checked={selected.includes(i.id)}
-                          onChange={(e) =>
-                            setSelected((prev) => (e.target.checked ? [...prev, i.id] : prev.filter((x) => x !== i.id)))
-                          }
-                        />
-                      </td>
-                      <td className="py-2 pr-3 font-medium">
-                        <Link to={`/inventory/${encodeURIComponent(i.assetTag)}`} className="text-brand-600 dark:text-brand-400">
-                          {i.assetTag}
-                        </Link>
-                      </td>
-                      <td className="py-2 pr-3">
-                        {i.name}
-                        {i.category && <span className="text-gray-500 dark:text-gray-400"> · {i.category}</span>}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <Badge tone={STATUS_TONE[i.status]}>{STATUS_LABEL[i.status]}</Badge>
-                      </td>
-                      <td className="py-2 pr-3">{i.assignedToName ?? '—'}</td>
-                      <td className="py-2">
-                        <AssignControl item={i} onChanged={load} />
-                      </td>
-                    </tr>
-                  ))}
+                  {groups.map((g) => {
+                    const groupSelected = g.items.length > 0 && g.items.every((i) => selected.includes(i.id))
+                    return (
+                      <Fragment key={g.key}>
+                        {grouped && (
+                          <tr className="bg-black/[0.03] dark:bg-white/[0.04]">
+                            <td className="py-2 pr-2">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select all items for ${g.label}`}
+                                checked={groupSelected}
+                                onChange={(e) =>
+                                  setSelected((prev) => {
+                                    const ids = g.items.map((i) => i.id)
+                                    return e.target.checked ? [...new Set([...prev, ...ids])] : prev.filter((x) => !ids.includes(x))
+                                  })
+                                }
+                              />
+                            </td>
+                            <td colSpan={5} className="py-2 font-semibold text-gray-900 dark:text-gray-100">
+                              {g.label} <span className="font-normal text-gray-500 dark:text-gray-400">· {g.items.length} item{g.items.length === 1 ? '' : 's'}</span>
+                            </td>
+                          </tr>
+                        )}
+                        {g.items.map((i) => (
+                          <tr key={i.id} className="border-b border-black/5 dark:border-white/5">
+                            <td className="py-2 pr-2">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${i.assetTag}`}
+                                checked={selected.includes(i.id)}
+                                onChange={(e) =>
+                                  setSelected((prev) => (e.target.checked ? [...prev, i.id] : prev.filter((x) => x !== i.id)))
+                                }
+                              />
+                            </td>
+                            <td className="py-2 pr-3 font-medium">
+                              <Link to={`/inventory/${encodeURIComponent(i.assetTag)}`} className="text-brand-600 dark:text-brand-400">
+                                {i.assetTag}
+                              </Link>
+                            </td>
+                            <td className="py-2 pr-3">
+                              {i.name}
+                              {i.category && <span className="text-gray-500 dark:text-gray-400"> · {i.category}</span>}
+                            </td>
+                            <td className="py-2 pr-3">
+                              <Badge tone={STATUS_TONE[i.status]}>{STATUS_LABEL[i.status]}</Badge>
+                            </td>
+                            <td className="py-2 pr-3">{i.assignedToName ?? '—'}</td>
+                            <td className="py-2">
+                              <AssignControl item={i} onChanged={load} />
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
