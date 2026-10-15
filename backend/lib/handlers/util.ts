@@ -20,8 +20,12 @@ export const isHrOrAdmin = (req: AuthedRequest) => hasRole(req, 'hr', 'admin')
 
 // Who may open the highest-sensitivity records (disciplinary cases,
 // payroll). Kept in one place: to make these HR-only, drop 'admin' here.
-export const RESTRICTED_ROLES: Role[] = ['hr', 'admin']
-export const canAccessRestricted = (req: AuthedRequest) => hasRole(req, ...RESTRICTED_ROLES)
+// Who may open Payroll and Employee Relations / Disciplinary. While the
+// portal is being tested it is HR and Admin; set RESTRICTED_HR_ONLY=1 in the
+// backend environment when it goes live and Admin loses access. Only whoever
+// controls the deployment can flip it, so an admin can't undo it.
+export const restrictedRoles = (): Role[] => (process.env.RESTRICTED_HR_ONLY === '1' ? ['hr'] : ['hr', 'admin'])
+export const canAccessRestricted = (req: AuthedRequest) => hasRole(req, ...restrictedRoles())
 
 export function forbid(res: VercelResponse) {
   res.status(403).json({ message: 'Insufficient permissions' })

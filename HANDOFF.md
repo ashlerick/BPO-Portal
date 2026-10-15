@@ -306,3 +306,12 @@ every call and no reminders are sent. Vercel adds the matching `Authorization` h
 `postinstall` used to run `prisma migrate deploy`, which intermittently failed the build with
 `P1002` (advisory lock timeout). It now only runs `prisma generate`. **Always apply migrations by
 hand before deploying the backend**: `cd backend && npx prisma migrate deploy`.
+
+## Go-live switch: Payroll and Disciplinary become HR-only
+
+While the portal is being tested, Payroll and Employee Relations / Disciplinary are open to HR **and**
+Admin. Before go-live, set `RESTRICTED_HR_ONLY=1` in the backend's Production environment and
+redeploy: Admin then loses access (the API refuses it and the sidebar and routes hide the pages).
+It is deliberately an environment variable, not a setting in the app, so an admin cannot switch it
+back. To go live: `cd backend && printf '1' | npx vercel env add RESTRICTED_HR_ONLY production`, then
+`npx vercel deploy --prod`.

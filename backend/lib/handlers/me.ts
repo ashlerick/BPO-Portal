@@ -2,6 +2,7 @@ import type { VercelResponse } from '@vercel/node'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { formatDisplayName } from '../names.js'
+import { restrictedRoles } from './util.js'
 
 export async function handler(req: AuthedRequest, res: VercelResponse) {
   const user = await prisma.user.findUnique({ where: { id: req.auth.sub } })
@@ -16,6 +17,8 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     firstName: user.firstName,
     name: formatDisplayName(user.firstName, user.middleName, user.lastName),
     roles: user.roles,
+    // Which roles may open Payroll and Disciplinary (the app hides them for the rest).
+    restrictedRoles: restrictedRoles(),
   })
 }
 

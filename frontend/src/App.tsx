@@ -96,7 +96,7 @@ export default function App() {
               <Route
                 path="/employee-relations"
                 element={
-                  <RequireAuth roles={['hr', 'admin']}>
+                  <RequireAuth restricted>
                     <EmployeeRelationsPage />
                   </RequireAuth>
                 }
@@ -104,7 +104,7 @@ export default function App() {
               <Route
                 path="/payroll"
                 element={
-                  <RequireAuth roles={['hr', 'admin']}>
+                  <RequireAuth restricted>
                     <PayrollPage />
                   </RequireAuth>
                 }

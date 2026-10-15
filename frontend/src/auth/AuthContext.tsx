@@ -26,6 +26,8 @@ interface AuthContextValue {
   viewAsRole: Role | null
   setViewAsRole: (role: Role | null) => void
   effectiveRoles: Role[]
+  // Roles that may open Payroll and Disciplinary (HR only once the portal is live).
+  restrictedRoles: Role[]
   guardedAction: (requiredRoles: Role[], run: () => void) => void
   attendanceStatus: AttendanceStatus | null
   refreshAttendance: () => void
@@ -41,6 +43,7 @@ const roleLabels = ROLE_LABELS
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [restrictedRoles, setRestrictedRoles] = useState<Role[]>(['hr', 'admin'])
   const [loading, setLoading] = useState(true)
   const [viewAsRole, setViewAsRole] = useState<Role | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
@@ -143,6 +146,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Only real admins can simulate a role — otherwise a simulated
   // "employee" could simulate their way back to admin.
+  useEffect(() => {
+    if (!user) return
+    api
+      .get<{ restrictedRoles?: Role[] }>('/me')
+      .then((m) => m.restrictedRoles && setRestrictedRoles(m.restrictedRoles))
+      .catch(() => undefined)
+  }, [user])
+
   const canSimulate = user?.roles.includes('admin') ?? false
   const effectiveRoles = canSimulate && viewAsRole ? [viewAsRole] : (user?.roles ?? [])
 
@@ -174,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         viewAsRole,
         setViewAsRole,
         effectiveRoles,
+        restrictedRoles,
         guardedAction,
         attendanceStatus,
         refreshAttendance,

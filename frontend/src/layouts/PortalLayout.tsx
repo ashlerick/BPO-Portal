@@ -298,13 +298,20 @@ function readCollapsed(): boolean {
 }
 
 export function PortalLayout() {
-  const { user, effectiveRoles } = useAuth()
+  const { user, effectiveRoles, restrictedRoles } = useAuth()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const unread = useUnreadCount()
   const menuConfig = useMenuConfig()
+  // Payroll and Disciplinary also follow the server's restricted-role list.
+  const canOpenRestricted = restrictedRoles.some((r) => effectiveRoles.includes(r))
   const visibleGroups = resolveNav(menuConfig, effectiveRoles)
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => canOpenRestricted || (i.to !== '/payroll' && i.to !== '/employee-relations')),
+    }))
+    .filter((g) => g.items.length > 0)
 
   function toggleCollapsed() {
     setCollapsed((prev) => {

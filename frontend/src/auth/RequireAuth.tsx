@@ -6,10 +6,13 @@ import type { Role } from './types'
 interface RequireAuthProps {
   children: ReactNode
   roles?: Role[]
+  // Payroll and Disciplinary: allowed roles come from the server (HR only once live).
+  restricted?: boolean
 }
 
-export function RequireAuth({ children, roles }: RequireAuthProps) {
-  const { user, loading, effectiveRoles } = useAuth()
+export function RequireAuth({ children, roles: rolesProp, restricted }: RequireAuthProps) {
+  const { user, loading, effectiveRoles, restrictedRoles } = useAuth()
+  const roles = restricted ? restrictedRoles : rolesProp
 
   if (loading) return null
 
