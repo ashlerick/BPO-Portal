@@ -4,6 +4,7 @@ import { EmptyState, ErrorState } from '../../components/AsyncState'
 import { EmployeeSelect } from '../../components/EmployeeSelect'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { useToast } from '../../components/ui/Toast'
 import { CardForm } from '../../components/ui/Card'
 import { Field, FormError } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -29,6 +30,7 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
   const [nextTag, setNextTag] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   const loadNext = useCallback(() => {
     api
@@ -46,7 +48,7 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await api.post('/hr/inventory', {
+      const created = await api.post<InventoryItem>('/hr/inventory', {
         name,
         category: category || null,
         serialNumber: serial || null,
@@ -58,8 +60,11 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
       setTag('')
       loadNext()
       onAdded()
+      toast.success(`Added ${created.name} (${created.assetTag})`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not add the item')
+      const message = err instanceof ApiError ? err.message : 'Could not add the item'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -100,16 +105,20 @@ function AssignControl({ item, onChanged }: { item: InventoryItem; onChanged: ()
   const [open, setOpen] = useState(false)
   const [employeeId, setEmployeeId] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
-  async function run(fn: () => Promise<unknown>) {
+  async function run(fn: () => Promise<unknown>, done: string) {
     setError(null)
     try {
       await fn()
       setOpen(false)
       setEmployeeId('')
       onChanged()
+      toast.success(done)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong')
+      const message = err instanceof ApiError ? err.message : 'Something went wrong'
+      setError(message)
+      toast.error(message)
     }
   }
 
@@ -120,7 +129,7 @@ function AssignControl({ item, onChanged }: { item: InventoryItem; onChanged: ()
           size="sm"
           onClick={() => {
             if (window.confirm(`Mark ${item.assetTag} as returned by ${item.assignedToName}?`)) {
-              void run(() => api.post(`/hr/inventory/${item.id}?action=return`, {}))
+              void run(() => api.post(`/hr/inventory/${item.id}?action=return`, {}), `${item.assetTag} marked as returned`)
             }
           }}
         >
@@ -144,7 +153,7 @@ function AssignControl({ item, onChanged }: { item: InventoryItem; onChanged: ()
             size="sm"
             variant="primary"
             disabled={!employeeId}
-            onClick={() => run(() => api.post(`/hr/inventory/${item.id}?action=assign`, { employeeId }))}
+            onClick={() => run(() => api.post(`/hr/inventory/${item.id}?action=assign`, { employeeId }), `${item.assetTag} assigned`)}
           >
             Save
           </Button>
@@ -174,6 +183,7 @@ function ItemRow({
   const to = `/inventory/${encodeURIComponent(item.assetTag)}`
   const [showQr, setShowQr] = useState(false)
   const [editing, setEditing] = useState(false)
+  const toast = useToast()
   const { effectiveRoles } = useAuth()
   const isAdmin = effectiveRoles.includes('admin')
   return (
@@ -223,10 +233,12 @@ function ItemRow({
           onSaved={() => {
             setEditing(false)
             onChanged()
+            toast.success(`${item.assetTag} updated`)
           }}
           onDeleted={() => {
             setEditing(false)
             onChanged()
+            toast.success(`${item.assetTag} deleted`)
           }}
         />
       )}

@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import { RequireAuth } from './auth/RequireAuth'
 import { ThemeProvider } from './theme/ThemeContext'
+import { ToastProvider } from './components/ui/Toast'
 import { PortalLayout } from './layouts/PortalLayout'
 import { AnnouncementsPage } from './pages/announcements/AnnouncementsPage'
 import { AttendancePage } from './pages/attendance/AttendancePage'
@@ -39,6 +40,7 @@ export default function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ThemeProvider>
+        <ToastProvider>
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
@@ -153,6 +155,7 @@ export default function App() {
             </Route>
           </Routes>
         </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>
   )

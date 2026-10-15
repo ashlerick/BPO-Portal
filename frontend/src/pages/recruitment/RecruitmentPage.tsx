@@ -13,6 +13,7 @@ import { readFileAsBase64 } from '../../utils/files'
 import { FilePicker } from '../../components/ui/FilePicker'
 import { useAuth } from '../../auth/AuthContext'
 import { Modal } from '../../components/ui/Modal'
+import { useToast } from '../../components/ui/Toast'
 
 type OpeningStatus = 'open' | 'on_hold' | 'closed'
 type ApplicantStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected' | 'withdrawn'
@@ -73,6 +74,7 @@ const statusTone = (s: ApplicantStatus): 'gray' | 'blue' | 'amber' | 'green' | '
 const dateTimeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
 
 function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
+  const toast = useToast()
   const [title, setTitle] = useState('')
   const [department, setDepartment] = useState('')
   const [description, setDescription] = useState('')
@@ -98,8 +100,11 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
       setDepartment('')
       setDescription('')
       setBanner(undefined)
+      toast.success(`Job opening "${title}" added`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create the opening')
+      const message = err instanceof ApiError ? err.message : 'Could not create the opening'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -130,6 +135,7 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
 }
 
 function ApplicantForm({ openings, onCreated }: { openings: Opening[]; onCreated: (a: Applicant) => void }) {
+  const toast = useToast()
   const [jobOpeningId, setJobOpeningId] = useState('')
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
@@ -168,8 +174,11 @@ function ApplicantForm({ openings, onCreated }: { openings: Opening[]; onCreated
       setEmail('')
       setPhone('')
       setInformation('')
+      toast.success(`Applicant ${firstName} ${lastName} added`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not add the applicant')
+      const message = err instanceof ApiError ? err.message : 'Could not add the applicant'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -481,6 +490,7 @@ function OpeningAdminControls({
   const [description, setDescription] = useState(opening.description ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -495,8 +505,11 @@ function OpeningAdminControls({
         }),
       )
       setOpen(false)
+      toast.success('Job opening updated')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save the opening')
+      const message = err instanceof ApiError ? err.message : 'Could not save the opening'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -510,8 +523,11 @@ function OpeningAdminControls({
     try {
       await api.delete(`/hr/recruitment?kind=openings&sub=${opening.id}`)
       onDeleted(opening.id)
+      toast.success(`Job opening "${opening.title}" deleted`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete the opening')
+      const message = err instanceof ApiError ? err.message : 'Could not delete the opening'
+      setError(message)
+      toast.error(message)
       setBusy(false)
     }
   }

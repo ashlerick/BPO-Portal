@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { api, ApiError } from '../../services/api'
+import { useToast } from '../../components/ui/Toast'
 import { CONDITIONS, CONDITION_LABEL, type Condition, type InventoryItem } from './types'
 
 // The monthly check: pick the item's condition and it is saved for this month.
 export function ConditionSelect({ item, onChanged }: { item: InventoryItem; onChanged: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const toast = useToast()
 
   async function save(condition: Condition) {
     setBusy(true)
@@ -13,8 +15,11 @@ export function ConditionSelect({ item, onChanged }: { item: InventoryItem; onCh
     try {
       await api.post(`/hr/inventory/${item.id}?action=check`, { condition })
       onChanged()
+      toast.success(`${item.assetTag} checked: ${CONDITION_LABEL[condition]}`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save')
+      const message = err instanceof ApiError ? err.message : 'Could not save'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
