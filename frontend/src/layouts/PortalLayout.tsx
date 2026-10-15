@@ -366,7 +366,6 @@ export function PortalLayout() {
   return (
     <div className="min-h-svh md:flex">
       <WorldClock variant="floating" />
-      <QuickScanButton />
       {/* ---- Desktop sidebar: fixed to the left edge, full height ---- */}
       <aside
         className={`sticky top-0 hidden h-svh shrink-0 flex-col border-r border-white/10 bg-brand-950 text-gray-200 transition-[width] duration-200 md:flex ${
@@ -405,6 +404,7 @@ export function PortalLayout() {
               <span className="min-w-0 truncate text-lg font-bold tracking-tight text-gold-400">BPO Portal</span>
             </div>
             <div className="flex items-center gap-2">
+              <QuickScanButton />
               <Link
                 to="/notifications"
                 aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
