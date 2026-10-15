@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState } from '../../components/AsyncState'
 import { Badge } from '../../components/ui/Badge'
@@ -40,6 +40,16 @@ function hashOf(text: string): number {
   return h
 }
 
+// Emoji offered by the picker (a phone's own keyboard can still type any emoji).
+const PICKER_EMOJI = [
+  '😀', '😂', '🤣', '😊', '😍', '🥰', '😎', '🤩', '🥳', '😅', '😉', '😋',
+  '🤔', '😴', '😭', '😢', '😡', '🤯', '😱', '🙃', '😇', '🤗', '🫡', '🙄',
+  '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '👀', '🫶', '✌️', '🤞', '👋',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔', '✨', '🔥', '💯', '🎉',
+  '🎂', '🍕', '☕', '🍔', '🍜', '🍰', '🍺', '🌮', '🌈', '☀️', '🌙', '⭐',
+  '💡', '📣', '🎶', '🏆', '🚀', '💼', '🏠', '🛠️', '📚', '🐶', '🐱', '🐨',
+] as const
+
 const fmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
 
 export function FreedomWallPage() {
@@ -48,6 +58,9 @@ export function FreedomWallPage() {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const areaRef = useRef<HTMLTextAreaElement>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
   const [error, setError] = useState<string | null>(null)
 
@@ -82,6 +95,35 @@ export function FreedomWallPage() {
     }
   }
 
+  function insertEmoji(emoji: string) {
+    const el = areaRef.current
+    const start = el?.selectionStart ?? body.length
+    const end = el?.selectionEnd ?? body.length
+    const next = body.slice(0, start) + emoji + body.slice(end)
+    if (next.length > 1000) return
+    setBody(next)
+    // put the caret right after the emoji once React has re-rendered
+    requestAnimationFrame(() => {
+      el?.focus()
+      el?.setSelectionRange(start + emoji.length, start + emoji.length)
+    })
+  }
+
+  // close the picker on Escape or a click anywhere outside it
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPickerOpen(false)
+    const onDown = (e: MouseEvent) => {
+      if (!pickerRef.current?.contains(e.target as Node)) setPickerOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mousedown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onDown)
+    }
+  }, [pickerOpen])
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -102,9 +144,10 @@ export function FreedomWallPage() {
       <PageHeader title="Freedom Wall" description="Post anonymously. Nobody — including HR — can see who wrote a post." />
       <form
         onSubmit={submit}
-        className="mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
+        className="relative mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
       >
         <textarea
+          ref={areaRef}
           required
           maxLength={1000}
           rows={3}
@@ -115,7 +158,38 @@ export function FreedomWallPage() {
         />
         <FormError message={error} />
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-xs tabular-nums text-gray-600">{body.length} / 1000</span>
+          <div className="flex items-center gap-2" ref={pickerRef}>
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              aria-label="Add an emoji"
+              aria-expanded={pickerOpen}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-black/20 bg-white/70 text-xl hover:bg-white"
+            >
+              😊
+            </button>
+            <span className="text-xs tabular-nums text-gray-600">{body.length} / 1000</span>
+            {pickerOpen && (
+              <div
+                role="dialog"
+                aria-label="Choose an emoji"
+                className="absolute bottom-16 left-3 z-20 w-[min(20rem,calc(100%-1.5rem))] rounded-xl border border-black/15 bg-white p-2 shadow-xl"
+              >
+                <div className="grid grid-cols-8 gap-0.5">
+                  {PICKER_EMOJI.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => insertEmoji(emoji)}
+                      className="flex h-9 items-center justify-center rounded-md text-xl hover:bg-gray-100 active:scale-90"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <button
             type="submit"
             disabled={busy || body.trim() === ''}
