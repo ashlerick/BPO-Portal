@@ -154,6 +154,7 @@ export function CareersPage() {
   const [applying, setApplying] = useState<string | null>(null)
   const [sent, setSent] = useState<string[]>([])
   const [referrers, setReferrers] = useState<Referrer[]>([])
+  const [zoom, setZoom] = useState<{ url: string; title: string } | null>(null)
 
   useEffect(() => {
     api
@@ -167,7 +168,7 @@ export function CareersPage() {
   }, [])
 
   return (
-    <div className="mx-auto min-h-svh max-w-3xl px-4 py-8">
+    <div className="mx-auto min-h-svh max-w-5xl px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-10 w-10" />
@@ -192,11 +193,40 @@ export function CareersPage() {
         </Card>
       )}
 
+      {zoom && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${zoom.title} poster`}
+          onClick={() => setZoom(null)}
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center overflow-auto bg-black/80 p-3"
+        >
+          <img src={zoom.url} alt={`${zoom.title} poster`} className="max-h-full max-w-full object-contain" />
+          <button
+            type="button"
+            onClick={() => setZoom(null)}
+            className="fixed right-4 top-4 rounded-lg bg-black/60 px-3 py-1.5 text-sm font-medium text-white"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
       <ul className="space-y-4">
         {openings?.map((o) => (
           <li key={o.id}>
             <Card className="overflow-hidden !p-0">
-              {o.bannerUrl && <img src={o.bannerUrl} alt="" className="block h-auto w-full" />}
+              {o.bannerUrl && (
+                <button
+                  type="button"
+                  onClick={() => setZoom({ url: o.bannerUrl as string, title: o.title })}
+                  className="block w-full cursor-zoom-in bg-black/20"
+                  aria-label={`View the ${o.title} poster full size`}
+                >
+                  <img src={o.bannerUrl} alt={`${o.title} poster`} className="mx-auto block h-auto w-full" />
+                  <span className="block bg-black/30 py-1 text-center text-xs text-gray-200">Click the poster to view it full size</span>
+                </button>
+              )}
               <div className="p-5">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{o.title}</h2>
                 {o.department && <p className="text-sm text-gray-500 dark:text-gray-400">{o.department}</p>}

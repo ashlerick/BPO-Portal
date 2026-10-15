@@ -75,7 +75,7 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    if (banner && banner.size > 2 * 1024 * 1024) return setError('The banner image must be under 2MB')
+    if (banner && banner.size > 2 * 1024 * 1024) return setError('The poster image must be under 2MB')
     setBusy(true)
     setError(null)
     try {
@@ -111,8 +111,8 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
       <Field label="Description (optional)">
         <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className="field" />
       </Field>
-      <Field label="Banner image (optional, PNG/JPG/WebP, under 2MB)">
-        <FilePicker file={banner} onChange={setBanner} accept="image/png,image/jpeg,image/webp" label="Choose image" />
+      <Field label="Job poster (optional, shown in full on the careers page; PNG/JPG/WebP, under 2MB)">
+        <FilePicker file={banner} onChange={setBanner} accept="image/png,image/jpeg,image/webp" label="Choose poster" />
       </Field>
       <FormError message={error} />
       <Button type="submit" variant="primary" size="sm" disabled={busy}>
@@ -394,7 +394,7 @@ function BannerControl({ opening, onChanged }: { opening: Opening; onChanged: (o
     try {
       onChanged(await api.put<Opening>(`/hr/recruitment?kind=openings&sub=${opening.id}`, { banner }))
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Could not update the banner')
+      alert(err instanceof ApiError ? err.message : 'Could not update the poster')
     } finally {
       setBusy(false)
     }
@@ -403,7 +403,7 @@ function BannerControl({ opening, onChanged }: { opening: Opening; onChanged: (o
   return (
     <>
       <label className="inline-flex cursor-pointer items-center rounded-md border border-black/15 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-black/5 dark:border-white/20 dark:text-gray-200 dark:hover:bg-white/10">
-        {busy ? 'Uploading…' : opening.bannerUrl ? 'Change banner' : 'Add banner'}
+        {busy ? 'Uploading…' : opening.bannerUrl ? 'Change poster' : 'Add poster'}
         <input
           type="file"
           accept="image/png,image/jpeg,image/webp"
@@ -413,14 +413,14 @@ function BannerControl({ opening, onChanged }: { opening: Opening; onChanged: (o
             const f = e.target.files?.[0]
             e.target.value = ''
             if (!f) return
-            if (f.size > 2 * 1024 * 1024) return alert('The banner image must be under 2MB')
+            if (f.size > 2 * 1024 * 1024) return alert('The poster image must be under 2MB')
             await send({ contentType: f.type, base64: await readFileAsBase64(f) })
           }}
         />
       </label>
       {opening.bannerUrl && (
         <Button size="sm" disabled={busy} onClick={() => send(null)}>
-          Remove banner
+          Remove poster
         </Button>
       )}
     </>
@@ -478,7 +478,7 @@ export function RecruitmentPage() {
                   .map((o) => (
                     <li key={o.id}>
                       <Card className="flex flex-wrap items-center justify-between gap-2 !py-3">
-                        {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-14 w-24 rounded bg-black/20 object-contain" />}
+                        {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-20 w-32 rounded bg-black/20 object-contain" />}
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-gray-900 dark:text-gray-100">{o.title}</div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
