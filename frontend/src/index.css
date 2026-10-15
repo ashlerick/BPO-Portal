@@ -420,3 +420,23 @@ body {
   }
 }
 
+
+/* Freedom Wall: a new note pops onto the wall. */
+@keyframes note-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(8px);
+  }
+  70% {
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-pop {
+    animation: none !important;
+  }
+}

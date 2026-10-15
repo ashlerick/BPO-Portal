@@ -704,9 +704,24 @@ model FreedomPost {
   alias     String?
   hidden    Boolean  @default(false)
   createdAt DateTime @default(now())
+  reactions FreedomReaction[]
 
   @@index([createdAt])
   @@map("freedom_posts")
+}
+
+// One reaction per person per post. reactorKey is an HMAC of the user and the
+// post, not the user id, so the table cannot be read back to a person.
+model FreedomReaction {
+  id         String       @id @default(uuid())
+  post       FreedomPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId     String
+  reactorKey String
+  emoji      String
+  createdAt  DateTime     @default(now())
+
+  @@unique([postId, reactorKey])
+  @@map("freedom_reactions")
 }
 
 // Company inventory: every item has at most ONE current holder (a nullable
