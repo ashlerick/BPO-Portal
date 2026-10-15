@@ -20,17 +20,6 @@ import { CheckInPrompt } from './CheckInPrompt'
 import { BirthdayCard } from './BirthdayCard'
 import { AssignTodo, MyTodos } from './Todos'
 
-const quickLinks = [
-  { to: '/announcements', label: 'Announcements' },
-  { to: '/attendance', label: 'Attendance' },
-  { to: '/leave', label: 'Leave Requests' },
-  { to: '/documents', label: 'Documents' },
-  { to: '/reports', label: 'Weekly Reports', roles: ['team_leader', 'manager', 'hr', 'admin'] as const },
-  { to: '/benefits', label: 'Benefits' },
-  { to: '/calendar', label: 'Calendar' },
-  { to: '/profile', label: 'My Profile' },
-]
-
 const timeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
 
 interface PendingTask {
@@ -240,23 +229,6 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
-        </Section>
-
-        <Section id="dashboard.links" title="Quick links">
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {quickLinks
-              .filter((l) => !l.roles || l.roles.some((r) => effectiveRoles.includes(r)))
-              .map((link) => (
-                <li key={link.to}>
-                  <Link
-                    to={link.to}
-                    className="block rounded-lg border border-black/5 bg-white/70 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm backdrop-blur-sm transition hover:border-brand-300 hover:bg-white hover:text-brand-700 dark:border-white/10 dark:bg-white/[0.035] dark:text-gray-300 dark:hover:border-brand-700 dark:hover:bg-white/[0.07] dark:hover:text-brand-400"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-          </ul>
         </Section>
 
         <Section
