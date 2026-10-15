@@ -94,11 +94,7 @@ export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 's
       onClick={toggle}
       title={hidden ? 'Show the clocks' : 'Hide the clocks'}
       aria-label={hidden ? 'Show the clocks' : 'Hide the clocks'}
-      className={
-        variant === 'floating'
-          ? 'rounded-xl border border-white/15 bg-brand-950/85 px-3 py-1.5 text-left text-gray-100 shadow-lg backdrop-blur transition hover:bg-brand-950'
-          : 'block w-full border-b border-white/10 bg-brand-950 px-4 py-1.5 text-left text-gray-100 md:hidden'
-      }
+      className="block w-full border-b border-white/10 bg-brand-950 px-4 py-1.5 text-left text-gray-100 md:hidden"
     >
       {hidden ? (
         <span className="text-xs font-semibold tabular-nums">
