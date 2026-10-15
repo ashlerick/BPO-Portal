@@ -9,16 +9,35 @@ import { Field, FormError } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { api, ApiError } from '../../services/api'
+import { ConditionSelect } from './ConditionSelect'
+import { QrImage } from './qr'
 import { StickerSheet } from './StickerSheet'
 import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
+
+// Every row, in every person's folder, shares these column widths so the
+// tag, item, condition and status line up from one folder to the next.
+const ROW_GRID = 'grid grid-cols-[1.25rem_3rem_6.5rem_minmax(9rem,1fr)_10rem_6.5rem_9rem] items-center gap-x-3'
+const MIN_W = 'min-w-[52rem]'
 
 function AddItemForm({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
   const [serial, setSerial] = useState('')
   const [tag, setTag] = useState('')
+  const [nextTag, setNextTag] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const loadNext = useCallback(() => {
+    api
+      .get<{ assetTag: string }>('/hr/inventory?nexttag=1')
+      .then((r) => setNextTag(r.assetTag))
+      .catch(() => setNextTag(''))
+  }, [])
+  useEffect(loadNext, [loadNext])
+
+  // The sticker is previewed live: the typed tag, else the one the item will get.
+  const previewTag = tag.trim() || nextTag
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -35,6 +54,7 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
       setCategory('')
       setSerial('')
       setTag('')
+      loadNext()
       onAdded()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add the item')
@@ -45,19 +65,26 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
 
   return (
     <CardForm onSubmit={submit} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Field label="Item name">
-          <input required value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="e.g. Dell Latitude 5420" />
-        </Field>
-        <Field label="Category">
-          <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" placeholder="Laptop, Phone…" />
-        </Field>
-        <Field label="Serial number">
-          <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
-        </Field>
-        <Field label="Asset tag (optional)">
-          <input value={tag} onChange={(e) => setTag(e.target.value)} className="field" placeholder="Auto: AST-00001" />
-        </Field>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="grid min-w-[18rem] flex-1 gap-3 sm:grid-cols-2">
+          <Field label="Item name">
+            <input required value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="e.g. Dell Latitude 5420" />
+          </Field>
+          <Field label="Category">
+            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" placeholder="Laptop, Phone…" />
+          </Field>
+          <Field label="Serial number">
+            <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
+          </Field>
+          <Field label="Asset tag (optional)">
+            <input value={tag} onChange={(e) => setTag(e.target.value)} className="field" placeholder={nextTag ? `Auto: ${nextTag}` : 'Auto'} />
+          </Field>
+        </div>
+        <div className="flex flex-col items-center gap-1 text-center">
+          <QrImage assetTag={previewTag} size={120} />
+          <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{previewTag || '…'}</span>
+          <span className="text-[11px] text-gray-500 dark:text-gray-400">Sticker preview</span>
+        </div>
       </div>
       <FormError message={error} />
       <Button type="submit" variant="primary" size="sm" disabled={busy}>
@@ -103,7 +130,7 @@ function AssignControl({ item, onChanged }: { item: InventoryItem; onChanged: ()
   }
   if (item.status !== 'available') return null
   return (
-    <span className="inline-flex flex-wrap items-center gap-2">
+    <span className="inline-flex flex-wrap items-center justify-end gap-2">
       {!open ? (
         <Button size="sm" onClick={() => setOpen(true)}>
           Assign
@@ -135,37 +162,35 @@ function ItemRow({
   item,
   checked,
   onToggle,
-  showHolder,
   onChanged,
 }: {
   item: InventoryItem
   checked: boolean
   onToggle: (on: boolean) => void
-  showHolder: boolean
   onChanged: () => void
 }) {
+  const to = `/inventory/${encodeURIComponent(item.assetTag)}`
   return (
-    <tr className="border-b border-black/5 last:border-0 dark:border-white/5">
-      <td className="w-8 py-2 pr-2">
-        <input type="checkbox" aria-label={`Select ${item.assetTag}`} checked={checked} onChange={(e) => onToggle(e.target.checked)} />
-      </td>
-      <td className="py-2 pr-3 font-medium">
-        <Link to={`/inventory/${encodeURIComponent(item.assetTag)}`} className="text-brand-600 dark:text-brand-400">
-          {item.assetTag}
-        </Link>
-      </td>
-      <td className="py-2 pr-3">
+    <div className={`${ROW_GRID} ${MIN_W} border-b border-black/5 py-2 last:border-0 dark:border-white/5`}>
+      <input type="checkbox" aria-label={`Select ${item.assetTag}`} checked={checked} onChange={(e) => onToggle(e.target.checked)} />
+      <Link to={to} aria-label={`Open ${item.assetTag}`}>
+        <QrImage assetTag={item.assetTag} size={44} />
+      </Link>
+      <Link to={to} className="truncate font-medium text-brand-600 dark:text-brand-400">
+        {item.assetTag}
+      </Link>
+      <span className="min-w-0 truncate">
         {item.name}
         {item.category && <span className="text-gray-500 dark:text-gray-400"> · {item.category}</span>}
-      </td>
-      <td className="py-2 pr-3">
+      </span>
+      <ConditionSelect item={item} onChanged={onChanged} />
+      <span>
         <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
-      </td>
-      {showHolder && <td className="py-2 pr-3">{item.assignedToName ?? '—'}</td>}
-      <td className="py-2 text-right">
+      </span>
+      <span className="flex justify-end">
         <AssignControl item={item} onChanged={onChanged} />
-      </td>
-    </tr>
+      </span>
+    </div>
   )
 }
 
@@ -186,6 +211,7 @@ function PersonFolder({
   const ids = group.items.map((i) => i.id)
   const allSelected = ids.length > 0 && ids.every((id) => selected.includes(id))
   const unassigned = group.key === '__unassigned'
+  const due = group.items.filter((i) => !i.checkedThisMonth && i.status !== 'retired' && i.status !== 'lost').length
   return (
     <div className="rounded-xl border border-black/10 bg-black/[0.02] dark:border-white/10 dark:bg-white/[0.03]">
       <div className="flex items-center gap-3 px-3 py-2.5">
@@ -203,13 +229,14 @@ function PersonFolder({
               unassigned ? 'bg-gray-500/20 text-gray-600 dark:text-gray-300' : 'bg-brand-500/20 text-brand-700 dark:text-brand-300'
             }`}
           >
-            {unassigned ? '·' : group.label.charAt(0).toUpperCase()}
+            {unassigned ? '▣' : group.label.charAt(0).toUpperCase()}
           </span>
           <span className="flex-1 font-semibold text-gray-900 dark:text-gray-100">
             {group.label}
             <span className="ml-2 font-normal text-gray-500 dark:text-gray-400">
               {group.items.length} item{group.items.length === 1 ? '' : 's'}
             </span>
+            {due > 0 && <span className="ml-2 text-xs font-normal text-amber-500">{due} to check</span>}
           </span>
           <span className={`text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>
             ›
@@ -217,21 +244,16 @@ function PersonFolder({
         </button>
       </div>
       {open && (
-        <div className="overflow-x-auto border-t border-black/10 px-3 pb-1 dark:border-white/10">
-          <table className="w-full min-w-[34rem] text-left text-sm text-gray-800 dark:text-gray-200">
-            <tbody>
-              {group.items.map((i) => (
-                <ItemRow
-                  key={i.id}
-                  item={i}
-                  checked={selected.includes(i.id)}
-                  onToggle={(on) => setSelected((prev) => (on ? [...prev, i.id] : prev.filter((x) => x !== i.id)))}
-                  showHolder={false}
-                  onChanged={onChanged}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="overflow-x-auto border-t border-black/10 px-3 text-sm text-gray-800 dark:border-white/10 dark:text-gray-200">
+          {group.items.map((i) => (
+            <ItemRow
+              key={i.id}
+              item={i}
+              checked={selected.includes(i.id)}
+              onToggle={(on) => setSelected((prev) => (on ? [...prev, i.id] : prev.filter((x) => x !== i.id)))}
+              onChanged={onChanged}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -245,6 +267,7 @@ export function InventoryPage() {
   const [printing, setPrinting] = useState(false)
   const [filter, setFilter] = useState('')
   const [grouped, setGrouped] = useState(true)
+  const [dueOnly, setDueOnly] = useState(false)
 
   const load = useCallback(() => {
     api
@@ -254,15 +277,20 @@ export function InventoryPage() {
   }, [])
   useEffect(load, [load])
 
+  // Lost and retired items are not part of the monthly check.
+  const checkable = useMemo(() => (items ?? []).filter((i) => i.status !== 'lost' && i.status !== 'retired'), [items])
+  const checkedCount = checkable.filter((i) => i.checkedThisMonth).length
+
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase()
-    if (!q) return items ?? []
-    return (items ?? []).filter((i) =>
-      [i.assetTag, i.name, i.category, i.serialNumber, i.assignedToName].some((v) => v?.toLowerCase().includes(q)),
-    )
-  }, [items, filter])
+    return (items ?? []).filter((i) => {
+      if (dueOnly && (i.checkedThisMonth || i.status === 'lost' || i.status === 'retired')) return false
+      if (!q) return true
+      return [i.assetTag, i.name, i.category, i.serialNumber, i.assignedToName].some((v) => v?.toLowerCase().includes(q))
+    })
+  }, [items, filter, dueOnly])
 
-  // One folder per holder (A-Z), then "Unassigned" (in storage, repair, lost, retired).
+  // Unassigned first, then one folder per holder (A-Z).
   const groups = useMemo<Group[]>(() => {
     const byHolder = new Map<string, InventoryItem[]>()
     const unassigned: InventoryItem[] = []
@@ -273,7 +301,7 @@ export function InventoryPage() {
     const people = [...byHolder.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, list]) => ({ key: name, label: name, items: list }))
-    return unassigned.length > 0 ? [...people, { key: '__unassigned', label: 'Unassigned', items: unassigned }] : people
+    return unassigned.length > 0 ? [{ key: '__unassigned', label: 'Unassigned', items: unassigned }, ...people] : people
   }, [shown])
 
   if (error) return <ErrorState message={error} />
@@ -283,6 +311,8 @@ export function InventoryPage() {
   }
 
   const allShownSelected = shown.length > 0 && shown.every((i) => selected.includes(i.id))
+  const monthName = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Manila' })
+  const pct = checkable.length ? Math.round((checkedCount / checkable.length) * 100) : 0
 
   return (
     <div>
@@ -293,6 +323,25 @@ export function InventoryPage() {
         </Section>
 
         <Section id="inventory.items" title="Items" hint={items ? `${items.length} total` : undefined} defaultOpen>
+          {items && checkable.length > 0 && (
+            <div className="mb-4 rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {monthName} condition check
+                  <span className="ml-2 font-normal text-gray-500 dark:text-gray-400">
+                    {checkedCount} of {checkable.length} checked
+                  </span>
+                </span>
+                <label className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                  <input type="checkbox" checked={dueOnly} onChange={(e) => setDueOnly(e.target.checked)} />
+                  Only items still to check
+                </label>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+                <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          )}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <input
               value={filter}
@@ -318,7 +367,7 @@ export function InventoryPage() {
               </Button>
             </div>
           </div>
-          {items && shown.length === 0 && <EmptyState label="No items." />}
+          {items && shown.length === 0 && <EmptyState label={dueOnly ? 'Everything is checked for this month.' : 'No items.'} />}
           {shown.length > 0 && grouped && (
             <div className="space-y-2">
               {groups.map((g) => (
@@ -328,37 +377,22 @@ export function InventoryPage() {
                   selected={selected}
                   setSelected={setSelected}
                   onChanged={load}
-                  defaultOpen={groups.length <= 3 || filter.trim() !== ''}
+                  defaultOpen={g.key === '__unassigned' || groups.length <= 3 || filter.trim() !== ''}
                 />
               ))}
             </div>
           )}
           {shown.length > 0 && !grouped && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
-                    <th className="w-8 py-2 pr-2" />
-                    <th className="py-2 pr-3 font-medium">Tag</th>
-                    <th className="py-2 pr-3 font-medium">Item</th>
-                    <th className="py-2 pr-3 font-medium">Status</th>
-                    <th className="py-2 pr-3 font-medium">Held by</th>
-                    <th className="py-2 font-medium" />
-                  </tr>
-                </thead>
-                <tbody className="text-gray-800 dark:text-gray-200">
-                  {shown.map((i) => (
-                    <ItemRow
-                      key={i.id}
-                      item={i}
-                      checked={selected.includes(i.id)}
-                      onToggle={(on) => setSelected((prev) => (on ? [...prev, i.id] : prev.filter((x) => x !== i.id)))}
-                      showHolder
-                      onChanged={load}
-                    />
-                  ))}
-                </tbody>
-              </table>
+            <div className="overflow-x-auto text-sm text-gray-800 dark:text-gray-200">
+              {shown.map((i) => (
+                <ItemRow
+                  key={i.id}
+                  item={i}
+                  checked={selected.includes(i.id)}
+                  onToggle={(on) => setSelected((prev) => (on ? [...prev, i.id] : prev.filter((x) => x !== i.id)))}
+                  onChanged={load}
+                />
+              ))}
             </div>
           )}
         </Section>

@@ -1,3 +1,5 @@
+export type Condition = 'excellent' | 'good' | 'fair' | 'poor' | 'damaged'
+
 export interface InventoryItem {
   id: string
   assetTag: string
@@ -6,12 +8,16 @@ export interface InventoryItem {
   serialNumber: string | null
   status: 'available' | 'assigned' | 'repair' | 'lost' | 'retired'
   notes: string | null
+  condition: Condition | null
+  conditionCheckedAt: string | null
+  checkedThisMonth: boolean
   assignedToId: string | null
   assignedToName: string | null
   updatedAt: string
 }
 
 export interface InventoryDetail extends InventoryItem {
+  checks: { id: string; month: string; condition: Condition; note: string | null; checkedAt: string }[]
   history: { id: string; employeeName: string; assignedAt: string; returnedAt: string | null; returnNote: string | null }[]
 }
 
@@ -29,4 +35,22 @@ export const STATUS_TONE: Record<InventoryItem['status'], 'green' | 'blue' | 'am
   repair: 'amber',
   lost: 'red',
   retired: 'gray',
+}
+
+export const CONDITIONS: Condition[] = ['excellent', 'good', 'fair', 'poor', 'damaged']
+
+export const CONDITION_LABEL: Record<Condition, string> = {
+  excellent: 'Excellent',
+  good: 'Good',
+  fair: 'Fair',
+  poor: 'Poor',
+  damaged: 'Damaged',
+}
+
+export const CONDITION_TONE: Record<Condition, 'green' | 'blue' | 'amber' | 'red' | 'gray'> = {
+  excellent: 'green',
+  good: 'green',
+  fair: 'amber',
+  poor: 'red',
+  damaged: 'red',
 }

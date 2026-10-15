@@ -678,13 +678,32 @@ model InventoryItem {
   notes        String?
   assignedTo   Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedToId String?
+  // Latest monthly-check result: excellent | good | fair | poor | damaged
+  condition          String?
+  conditionCheckedAt DateTime?
   createdBy    String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   assignments  InventoryAssignment[]
+  checks       InventoryCheck[]
 
   @@index([assignedToId])
   @@map("inventory_items")
+}
+
+// One condition check per item per month ("YYYY-MM", Manila time).
+model InventoryCheck {
+  id        String        @id @default(uuid())
+  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  itemId    String
+  month     String
+  condition String
+  note      String?
+  checkedBy String
+  checkedAt DateTime      @default(now())
+
+  @@unique([itemId, month])
+  @@map("inventory_checks")
 }
 
 model InventoryAssignment {

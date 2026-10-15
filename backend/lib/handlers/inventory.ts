@@ -16,6 +16,8 @@ import { forbid, isHrOrAdmin, myEmployee, notFound, parseBody, queryString } fro
 //   PUT /:id             edit details / status
 //   POST /:id?action=assign   {employeeId} — refused while someone holds it
 //   POST /:id?action=return   {note?}
+//   POST /:id?action=check    {condition, note?} — the monthly condition check
+//   GET ?nexttag=1            the asset tag the next new item would get
 // Assigning and returning are audit-logged and kept as history rows.
 
 const createSchema = z.object({
@@ -33,12 +35,27 @@ const updateSchema = z.object({
   // 'assigned' is only ever set by assigning.
   status: z.enum(['available', 'repair', 'lost', 'retired']).optional(),
 })
+const CONDITIONS = ['excellent', 'good', 'fair', 'poor', 'damaged'] as const
+const checkSchema = z.object({
+  condition: z.enum(CONDITIONS),
+  note: z.string().trim().max(500).nullable().optional(),
+})
 const assignSchema = z.object({ employeeId: z.string().uuid() })
 const returnSchema = z.object({ note: z.string().trim().max(500).nullable().optional() })
 
 const include = { assignedTo: { include: { user: true } } } as const
 
 type ItemRow = Awaited<ReturnType<typeof prisma.inventoryItem.findMany<{ include: typeof include }>>>[number]
+
+// "YYYY-MM" in Manila time, so a check made late on the 31st counts for that month.
+function currentMonth(): string {
+  return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 7)
+}
+
+function monthStart(): number {
+  const [y, m] = currentMonth().split('-').map(Number)
+  return Date.UTC(y, m - 1, 1) - 8 * 3600_000
+}
 
 function serialize(i: ItemRow) {
   return {
@@ -49,6 +66,9 @@ function serialize(i: ItemRow) {
     serialNumber: i.serialNumber,
     status: i.status,
     notes: i.notes,
+    condition: i.condition,
+    conditionCheckedAt: i.conditionCheckedAt,
+    checkedThisMonth: !!i.conditionCheckedAt && i.conditionCheckedAt.getTime() >= monthStart(),
     assignedToId: i.assignedToId,
     assignedToName: i.assignedTo
       ? formatDisplayName(i.assignedTo.user.firstName, i.assignedTo.user.middleName, i.assignedTo.user.lastName)
@@ -80,6 +100,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       return res.status(200).json(rows.map(serialize))
     }
     if (!hr) return forbid(res)
+    if (queryString(req, 'nexttag')) return res.status(200).json({ assetTag: await nextTag() })
     const employeeId = queryString(req, 'employeeId')
     const rows = await prisma.inventoryItem.findMany({
       where: employeeId ? { assignedToId: employeeId } : {},
@@ -106,8 +127,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       include: { user: true },
     })
     const nameOf = new Map(people.map((p) => [p.id, formatDisplayName(p.user.firstName, p.user.middleName, p.user.lastName)]))
+    const checks = hr
+      ? await prisma.inventoryCheck.findMany({ where: { itemId: item.id }, orderBy: { checkedAt: 'desc' }, take: 24 })
+      : []
     return res.status(200).json({
       ...serialize(item),
+      checks: checks.map((c) => ({ id: c.id, month: c.month, condition: c.condition, note: c.note, checkedAt: c.checkedAt })),
       history: history.map((h) => ({
         id: h.id,
         employeeName: nameOf.get(h.employeeId) ?? 'Former employee',
@@ -173,6 +198,28 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     await notifyUsers([employee.userId], { type: 'inventory', title: 'A company item was assigned to you', body: item.name, link: '/profile' })
     const fresh = await prisma.inventoryItem.findUnique({ where: { id: sub }, include })
     return res.status(200).json(serialize(fresh!))
+  }
+
+  if (sub && action === 'check' && req.method === 'POST') {
+    const data = parseBody(checkSchema, req.body, res)
+    if (!data) return
+    const item = await prisma.inventoryItem.findUnique({ where: { id: sub } })
+    if (!item) return notFound(res, 'Item not found')
+    // Re-checking in the same month replaces that month's result.
+    const month = currentMonth()
+    const now = new Date()
+    await prisma.inventoryCheck.upsert({
+      where: { itemId_month: { itemId: sub, month } },
+      create: { itemId: sub, month, condition: data.condition, note: data.note ?? null, checkedBy: req.auth.sub },
+      update: { condition: data.condition, note: data.note ?? null, checkedBy: req.auth.sub, checkedAt: now },
+    })
+    const updated = await prisma.inventoryItem.update({
+      where: { id: sub },
+      data: { condition: data.condition, conditionCheckedAt: now },
+      include,
+    })
+    await logAudit(req.auth.sub, 'check', 'inventory_item', sub)
+    return res.status(200).json(serialize(updated))
   }
 
   if (sub && action === 'return' && req.method === 'POST') {

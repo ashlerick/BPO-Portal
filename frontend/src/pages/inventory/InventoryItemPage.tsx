@@ -7,7 +7,9 @@ import { Card } from '../../components/ui/Card'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly } from '../../utils/dates'
-import { STATUS_LABEL, STATUS_TONE, type InventoryDetail } from './types'
+import { ConditionSelect } from './ConditionSelect'
+import { QrImage } from './qr'
+import { CONDITION_LABEL, CONDITION_TONE, STATUS_LABEL, STATUS_TONE, type InventoryDetail } from './types'
 
 // What a QR sticker opens: /inventory/<assetTag>. HR/Admin see the item and
 // its history; an employee sees it only if it is currently theirs.
@@ -43,7 +45,31 @@ export function InventoryItemPage() {
         {item.serialNumber && <p>Serial number: {item.serialNumber}</p>}
         <p>Held by: {item.assignedToName ?? 'Nobody (in storage)'}</p>
         {item.notes && <p className="text-gray-600 dark:text-gray-400">{item.notes}</p>}
+        <div className="pt-2">
+          <QrImage assetTag={item.assetTag} size={112} />
+        </div>
       </Card>
+      {isHr && (
+        <Card className="mb-4">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Condition</h2>
+            <ConditionSelect item={item} onChanged={load} />
+          </div>
+          {item.checks.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Not checked yet.</p>
+          ) : (
+            <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+              {item.checks.map((c) => (
+                <li key={c.id} className="flex items-center gap-3 py-2">
+                  <span className="w-20 text-gray-500 dark:text-gray-400">{c.month}</span>
+                  <Badge tone={CONDITION_TONE[c.condition]}>{CONDITION_LABEL[c.condition]}</Badge>
+                  {c.note && <span className="text-gray-500 dark:text-gray-400">{c.note}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
       {isHr && (
         <Card>
           <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">History</h2>

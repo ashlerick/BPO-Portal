@@ -2,13 +2,14 @@ import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
 import { Button } from '../../components/ui/Button'
 import { Field } from '../../components/ui/Field'
+import { itemUrl, portalBase } from './qr'
 import type { InventoryItem } from './types'
 
 // Printable QR stickers. Each code opens /inventory/<assetTag> on the
 // portal. The base address is editable because the production domain may
 // not be final when stickers are designed: set it before printing.
 export function StickerSheet({ items, onClose }: { items: InventoryItem[]; onClose: () => void }) {
-  const [base, setBase] = useState(() => `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/+$/, ''))
+  const [base, setBase] = useState(portalBase)
   const [codes, setCodes] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -16,7 +17,7 @@ export function StickerSheet({ items, onClose }: { items: InventoryItem[]; onClo
     Promise.all(
       items.map(
         async (i) =>
-          [i.id, await QRCode.toDataURL(`${base}/inventory/${encodeURIComponent(i.assetTag)}`, { margin: 1, width: 220 })] as const,
+          [i.id, await QRCode.toDataURL(itemUrl(i.assetTag, base), { margin: 1, width: 220 })] as const,
       ),
     ).then((pairs) => {
       if (!cancelled) setCodes(Object.fromEntries(pairs))
