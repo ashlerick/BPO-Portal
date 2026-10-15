@@ -22,7 +22,7 @@ import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
 // tag, item, condition and status line up from one folder to the next.
 // Phones: each item is its own card (stacked). md and up: one aligned row.
 const ROW_GRID =
-  'md:grid md:grid-cols-[1.25rem_3rem_6.5rem_minmax(9rem,1fr)_10rem_6.5rem_9rem] md:items-center md:gap-x-3 md:min-w-[52rem]'
+  'md:grid md:grid-cols-[1.25rem_3rem_6.5rem_minmax(9rem,1fr)_10rem_6.5rem_9rem] md:items-center md:gap-x-3 md:min-w-[50.5rem]'
 
 function AddItemForm({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState('')
@@ -510,7 +510,7 @@ export function InventoryPage() {
             </div>
           )}
           {!grouped && (
-            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200 md:space-y-0">
+            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200 md:space-y-0 md:px-3">
               {shown.map((i) => (
                 <ItemRow
                   key={i.id}
