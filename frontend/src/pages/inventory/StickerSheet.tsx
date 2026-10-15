@@ -68,8 +68,9 @@ function Sticker({ item, qr }: { item: InventoryItem; qr: string | undefined }) 
       </div>
 
       {/* bottom bar */}
-      <div className="bg-[#b83c28] px-2 py-1 text-center text-[10px] font-bold uppercase tracking-[0.3em] text-white">
-        Property of {COMPANY}
+      <div className="bg-[#b83c28] px-2 py-1 text-center text-white">
+        <div className="text-[10px] font-bold uppercase tracking-[0.3em]">Property of {COMPANY}</div>
+        <div className="text-[7px] uppercase tracking-[0.2em] text-white/90">Do not remove without authorization</div>
       </div>
     </div>
   )

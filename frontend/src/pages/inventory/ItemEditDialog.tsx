@@ -70,42 +70,57 @@ export function ItemEditDialog({
   }
 
   return (
-    <Modal label={`Edit ${item.assetTag}`} onClose={onClose}>
+    <Modal label={`Edit ${item.assetTag}`} onClose={onClose} className="max-w-2xl">
       <form onSubmit={save} className="space-y-3">
         <h2 className="text-lg font-semibold">Edit item</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Asset tag <span className="font-semibold text-gray-800 dark:text-gray-200">{item.assetTag}</span> can't be changed (the printed
-          sticker points to it).
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Item description">
-            <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
-          </Field>
-          <Field label="Brand / model">
-            <input value={brandModel} onChange={(e) => setBrandModel(e.target.value)} className="field" />
-          </Field>
-          <Field label="Serial number">
-            <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
-          </Field>
-          <Field label="Date of purchase">
-            <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field" />
-          </Field>
-          <Field label="Category (optional)">
-            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" />
-          </Field>
-          <Field label="Status">
-            {assigned ? (
-              <p className="field flex items-center text-sm text-gray-500">{STATUS_LABEL.assigned} (return it first to change)</p>
-            ) : (
-              <select value={status} onChange={(e) => setStatus(e.target.value as InventoryItem['status'])} className="field">
-                {EDITABLE_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
+        <div className="grid gap-3 sm:grid-cols-6">
+          <div className="sm:col-span-2">
+            <Field label="Asset ID">
+              <p className="field flex items-center font-semibold text-gray-800 dark:text-gray-200" title="The printed sticker points to this, so it can't be changed">
+                {item.assetTag}
+              </p>
+            </Field>
+          </div>
+          <div className="sm:col-span-4">
+            <Field label="Item description">
+              <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Brand / model">
+              <input value={brandModel} onChange={(e) => setBrandModel(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Serial number">
+              <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Date of purchase">
+              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-3">
+            <Field label="Category (optional)">
+              <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-3">
+            <Field label="Status">
+              {assigned ? (
+                <p className="field flex items-center text-sm text-gray-500">{STATUS_LABEL.assigned} (return it first to change)</p>
+              ) : (
+                <select value={status} onChange={(e) => setStatus(e.target.value as InventoryItem['status'])} className="field">
+                  {EDITABLE_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+          </div>
         </div>
         <Field label="Notes">
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="field" />

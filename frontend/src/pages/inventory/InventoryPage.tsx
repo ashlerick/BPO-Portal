@@ -81,25 +81,37 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
   return (
     <CardForm onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-start gap-4">
-        <div className="grid min-w-[18rem] flex-1 gap-3 sm:grid-cols-2">
-          <Field label="Item description">
-            <input required value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="e.g. Monitor" />
-          </Field>
-          <Field label="Brand / model">
-            <input value={brandModel} onChange={(e) => setBrandModel(e.target.value)} className="field" placeholder="e.g. Acer 24000" />
-          </Field>
-          <Field label="Serial number">
-            <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
-          </Field>
-          <Field label="Date of purchase">
-            <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field" />
-          </Field>
-          <Field label="Category (optional)">
-            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" placeholder="Laptop, Phone…" />
-          </Field>
-          <Field label="Asset ID (optional)">
-            <input value={tag} onChange={(e) => setTag(e.target.value)} className="field" placeholder={nextTag ? `Auto: ${nextTag}` : 'Auto'} />
-          </Field>
+        <div className="grid min-w-[18rem] flex-1 gap-3 sm:grid-cols-6">
+          <div className="sm:col-span-2">
+            <Field label="Asset ID (optional)">
+              <input value={tag} onChange={(e) => setTag(e.target.value)} className="field" placeholder={nextTag ? `Auto: ${nextTag}` : 'Auto'} />
+            </Field>
+          </div>
+          <div className="sm:col-span-4">
+            <Field label="Item description">
+              <input required value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="e.g. Monitor" />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Brand / model">
+              <input value={brandModel} onChange={(e) => setBrandModel(e.target.value)} className="field" placeholder="e.g. Acer 24000" />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Serial number">
+              <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Date of purchase">
+              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field" />
+            </Field>
+          </div>
+          <div className="sm:col-span-6">
+            <Field label="Category (optional)">
+              <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" placeholder="Laptop, Phone…" />
+            </Field>
+          </div>
         </div>
         <div className="flex flex-col items-center gap-1 text-center">
           <QrImage value={itemPayload({ assetTag: previewTag, name, category, serialNumber: serial, brandModel, purchaseDate })} label={previewTag} size={120} />
