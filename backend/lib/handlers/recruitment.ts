@@ -4,6 +4,7 @@ import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { deleteObject, getDownloadUrl, putObject } from '../s3.js'
+import { formatDisplayName } from '../names.js'
 import { forbid, isHrOrAdmin, notFound, parseBody, queryString } from './util.js'
 
 // Recruitment, HR/Admin only. One handler, three collections chosen by
@@ -52,9 +53,24 @@ async function applyBanner(
 
 // Never expose the storage key; give HR a short-lived image URL instead.
 // Never expose the bucket key: HR gets a short-lived download link instead.
-async function applicantView<T extends { resumeKey: string | null }>(a: T) {
+async function referrerNames(ids: (string | null)[]) {
+  const wanted = [...new Set(ids.filter((x): x is string => !!x))]
+  if (wanted.length === 0) return new Map<string, string>()
+  const people = await prisma.employee.findMany({ where: { id: { in: wanted } }, include: { user: true } })
+  return new Map(people.map((p) => [p.id, formatDisplayName(p.user.firstName, p.user.middleName, p.user.lastName)]))
+}
+
+async function applicantView<T extends { resumeKey: string | null; referredById: string | null }>(
+  a: T,
+  names?: Map<string, string>,
+) {
   const { resumeKey, ...rest } = a
-  return { ...rest, resumeUrl: resumeKey ? await getDownloadUrl(resumeKey, 3600).catch(() => null) : null }
+  const map = names ?? (await referrerNames([a.referredById]))
+  return {
+    ...rest,
+    referredByName: a.referredById ? (map.get(a.referredById) ?? null) : null,
+    resumeUrl: resumeKey ? await getDownloadUrl(resumeKey, 3600).catch(() => null) : null,
+  }
 }
 
 async function openingView<T extends { bannerKey: string | null }>(o: T) {
@@ -149,10 +165,11 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
         orderBy: { createdAt: 'desc' },
       })
       await logAudit(req.auth.sub, 'view', 'applicants', null)
+      const names = await referrerNames(rows.map((r) => r.referredById))
       return res.status(200).json(
         await Promise.all(
           rows.map(async ({ jobOpening, ...a }) => ({
-            ...(await applicantView(a)),
+            ...(await applicantView(a, names)),
             jobTitle: jobOpening.title,
             jobDepartment: jobOpening.department,
           })),

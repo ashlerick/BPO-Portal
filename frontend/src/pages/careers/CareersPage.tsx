@@ -19,12 +19,28 @@ interface PublicOpening {
   bannerUrl: string | null
 }
 
-function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => void }) {
+interface Referrer {
+  id: string
+  name: string
+}
+
+function ApplyForm({
+  opening,
+  referrers,
+  onDone,
+  onCancel,
+}: {
+  opening: PublicOpening
+  referrers: Referrer[]
+  onDone: () => void
+  onCancel: () => void
+}) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [information, setInformation] = useState('')
   const [resumeLink, setResumeLink] = useState('')
+  const [referredById, setReferredById] = useState('')
   const [resumeFile, setResumeFile] = useState<File | undefined>()
   const [website, setWebsite] = useState('') // honeypot, hidden from people
   const [busy, setBusy] = useState(false)
@@ -50,6 +66,7 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
         information,
         resumeLink,
         resume,
+        referredById: referredById || null,
         website,
       })
       onDone()
@@ -87,6 +104,19 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
           <input type="url" value={resumeLink} onChange={(e) => setResumeLink(e.target.value)} placeholder="https://…" className="field" />
         </label>
       </div>
+      {referrers.length > 0 && (
+        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+          Referred by an employee? (optional)
+          <select value={referredById} onChange={(e) => setReferredById(e.target.value)} className="field">
+            <option value="">No, I found this myself</option>
+            {referrers.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
         Tell us about yourself (optional)
         <textarea rows={3} maxLength={2000} value={information} onChange={(e) => setInformation(e.target.value)} className="field" />
@@ -103,9 +133,14 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
           {error}
         </p>
       )}
-      <Button type="submit" variant="primary" disabled={busy}>
-        {busy ? 'Sending…' : 'Submit application'}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" variant="primary" disabled={busy}>
+          {busy ? 'Sending…' : 'Submit application'}
+        </Button>
+        <Button type="button" onClick={onCancel} disabled={busy}>
+          ← Back
+        </Button>
+      </div>
     </form>
   )
 }
@@ -116,12 +151,17 @@ export function CareersPage() {
   const [error, setError] = useState<string | null>(null)
   const [applying, setApplying] = useState<string | null>(null)
   const [sent, setSent] = useState<string[]>([])
+  const [referrers, setReferrers] = useState<Referrer[]>([])
 
   useEffect(() => {
     api
       .get<PublicOpening[]>('/hr/careers')
       .then(setOpenings)
       .catch(() => setError('We could not load the open positions. Please try again later.'))
+    api
+      .get<Referrer[]>('/hr/careers?referrers=1')
+      .then(setReferrers)
+      .catch(() => setReferrers([]))
   }, [])
 
   return (
@@ -167,6 +207,8 @@ export function CareersPage() {
                 ) : applying === o.id ? (
                   <ApplyForm
                     opening={o}
+                    referrers={referrers}
+                    onCancel={() => setApplying(null)}
                     onDone={() => {
                       setSent((prev) => [...prev, o.id])
                       setApplying(null)

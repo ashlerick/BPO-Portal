@@ -4,9 +4,11 @@ import { prisma } from '../prisma.js'
 import { withCors } from '../middleware.js'
 import { getDownloadUrl, putObject } from '../s3.js'
 import { notifyRole } from '../notify.js'
+import { formatDisplayName } from '../names.js'
 
 // PUBLIC careers endpoint, no sign-in: /api/hr/careers.
 //   GET   open job openings (title, department, description, banner)
+//   GET ?referrers=1  active employees' names, for the "who referred you" choice
 //   POST  {jobOpeningId, name, email, phone?, information?, resumeLink?, resume?}
 //         resume is an optional file {name, contentType, base64}: PDF or Word, under 3MB
 //         creates an applicant (status "applied", source "careers")
@@ -51,6 +53,7 @@ const applySchema = z.object({
     })
     .optional()
     .nullable(),
+  referredById: z.string().uuid().optional().nullable().or(z.literal('')),
   // Honeypot: real people never see or fill this field.
   website: z.string().max(200).optional(),
 })
@@ -58,6 +61,19 @@ const applySchema = z.object({
 export async function handler(req: VercelRequest, res: VercelResponse) {
   withCors(res)
   if (req.method === 'OPTIONS') return res.status(204).end()
+
+  if (req.method === 'GET' && req.query.referrers) {
+    // Names only (no emails, roles or departments), active staff only.
+    const people = await prisma.employee.findMany({
+      where: { status: 'active', user: { active: true } },
+      include: { user: true },
+    })
+    const list = people
+      .map((p) => ({ id: p.id, name: formatDisplayName(p.user.firstName, p.user.middleName, p.user.lastName) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(200).json(list)
+  }
 
   if (req.method === 'GET') {
     const rows = await prisma.jobOpening.findMany({
@@ -116,8 +132,15 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
       resumeFile = { buffer, ext, contentType: data.resume.contentType, name: data.resume.name }
     }
 
+    let referredById: string | null = null
+    if (data.referredById) {
+      const referrer = await prisma.employee.findUnique({ where: { id: data.referredById }, select: { id: true } })
+      referredById = referrer?.id ?? null
+    }
+
     const created = await prisma.applicant.create({
       data: {
+        referredById,
         jobOpeningId: opening.id,
         name: data.name,
         email: data.email,

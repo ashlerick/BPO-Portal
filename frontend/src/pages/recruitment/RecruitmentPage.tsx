@@ -49,6 +49,7 @@ interface Applicant {
   resumeLink: string | null
   resumeUrl: string | null
   resumeName: string | null
+  referredByName: string | null
   hiredUserId: string | null
   createdAt: string
   interviews: Interview[]
@@ -241,6 +242,7 @@ function ApplicantCard({ applicant, onUpdated, onDeleted }: { applicant: Applica
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               {applicant.source === 'careers' && <Badge tone="purple">Applied online</Badge>}
               {applicant.hiredUserId && <Badge tone="green">Now an employee</Badge>}
+              {applicant.referredByName && <Badge tone="blue">Referred by {applicant.referredByName}</Badge>}
               {applicant.resumeUrl && (
                 <a href={applicant.resumeUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400">
                   Resume file{applicant.resumeName ? ` (${applicant.resumeName})` : ''} ↗
