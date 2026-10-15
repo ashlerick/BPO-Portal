@@ -5,7 +5,7 @@ import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { deleteObject, getDownloadUrl, putObject } from '../s3.js'
 import { formatDisplayName } from '../names.js'
-import { forbid, isHrOrAdmin, notFound, parseBody, queryString } from './util.js'
+import { dateOnlyPattern, forbid, isHrOrAdmin, notFound, parseBody, queryString, toDate } from './util.js'
 
 // Recruitment, HR/Admin only. One handler, three collections chosen by
 // ?kind= : openings | applicants | interviews.
@@ -53,6 +53,9 @@ async function applyBanner(
 
 // Never expose the storage key; give HR a short-lived image URL instead.
 // Never expose the bucket key: HR gets a short-lived download link instead.
+const fullName = (first?: string | null, middle?: string | null, last?: string | null) =>
+  [first, middle, last].filter(Boolean).join(' ')
+
 async function referrerNames(ids: (string | null)[]) {
   const wanted = [...new Set(ids.filter((x): x is string => !!x))]
   if (wanted.length === 0) return new Map<string, string>()
@@ -80,9 +83,13 @@ async function openingView<T extends { bannerKey: string | null }>(o: T) {
 
 const applicantSchema = z.object({
   jobOpeningId: z.string().uuid(),
-  name: z.string().trim().min(1).max(160),
+  firstName: z.string().trim().min(1).max(60),
+  middleName: z.string().trim().max(60).nullable().optional(),
+  lastName: z.string().trim().min(1).max(60),
   email: z.string().trim().email().nullable().optional(),
   phone: z.string().trim().max(40).nullable().optional(),
+  birthDate: z.string().regex(dateOnlyPattern, 'Dates must be YYYY-MM-DD').nullable().optional(),
+  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).nullable().optional(),
   information: z.string().trim().max(3000).nullable().optional(),
   status: z.enum(APPLICANT_STATUSES).optional(),
   decisionNote: z.string().trim().max(1000).nullable().optional(),
@@ -180,7 +187,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       const data = parseBody(applicantSchema, req.body, res)
       if (!data) return
       const created = await prisma.applicant.create({
-        data: { ...data, ...(data.status && FINAL_APPLICANT.includes(data.status) ? { decidedAt: new Date() } : {}) },
+        data: {
+          ...data,
+          name: fullName(data.firstName, data.middleName, data.lastName),
+          birthDate: data.birthDate ? toDate(data.birthDate) : null,
+          ...(data.status && FINAL_APPLICANT.includes(data.status) ? { decidedAt: new Date() } : {}),
+        },
         include: { jobOpening: { select: { title: true } }, interviews: true },
       })
       logAudit(req.auth.sub, 'create', 'applicant', created.id)
@@ -190,11 +202,21 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (req.method === 'PUT' && sub) {
       const data = parseBody(applicantSchema.omit({ jobOpeningId: true }).partial(), req.body, res)
       if (!data) return
-      if (!(await prisma.applicant.findUnique({ where: { id: sub } }))) return notFound(res, 'Applicant not found')
+      const existing = await prisma.applicant.findUnique({ where: { id: sub } })
+      if (!existing) return notFound(res, 'Applicant not found')
+      const touchesName = data.firstName !== undefined || data.middleName !== undefined || data.lastName !== undefined
       const updated = await prisma.applicant.update({
         where: { id: sub },
         data: {
           ...data,
+          ...(touchesName && {
+            name: fullName(
+              data.firstName ?? existing.firstName,
+              data.middleName !== undefined ? data.middleName : existing.middleName,
+              data.lastName ?? existing.lastName,
+            ),
+          }),
+          ...(data.birthDate !== undefined && { birthDate: data.birthDate ? toDate(data.birthDate) : null }),
           ...(data.status !== undefined && { decidedAt: FINAL_APPLICANT.includes(data.status) ? new Date() : null }),
         },
         include: { jobOpening: { select: { title: true } }, interviews: { orderBy: { scheduledAt: 'asc' } } },

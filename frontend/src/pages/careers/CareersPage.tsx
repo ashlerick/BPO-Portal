@@ -36,7 +36,11 @@ function ApplyForm({
   onDone: () => void
   onCancel: () => void
 }) {
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [middleName, setMiddleName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [birthDate, setBirthDate] = useState('')
+  const [gender, setGender] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [information, setInformation] = useState('')
@@ -61,7 +65,11 @@ function ApplyForm({
         : undefined
       await api.post('/hr/careers', {
         jobOpeningId: opening.id,
-        name,
+        firstName,
+        middleName,
+        lastName,
+        birthDate,
+        gender,
         email,
         phone,
         information,
@@ -80,10 +88,18 @@ function ApplyForm({
 
   return (
     <form onSubmit={submit} className="mt-4 space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Full name
-          <input required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" className="field" />
+          First name
+          <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" className="field" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+          Middle name (optional)
+          <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} autoComplete="additional-name" className="field" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+          Last name
+          <input required value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" className="field" />
         </label>
         <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
           Email
@@ -92,6 +108,20 @@ function ApplyForm({
         <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
           Phone (optional)
           <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" className="field" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+          Birthday (optional)
+          <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} autoComplete="bday" className="field" />
+        </label>
+        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+          Gender (optional)
+          <select value={gender} onChange={(e) => setGender(e.target.value)} className="field">
+            <option value="">Not set</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="prefer_not_to_say">Prefer not to say</option>
+          </select>
         </label>
       </div>
       <div className="rounded-lg border border-dashed border-black/20 p-3 dark:border-white/20">

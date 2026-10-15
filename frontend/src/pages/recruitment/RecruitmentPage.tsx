@@ -40,6 +40,11 @@ interface Applicant {
   jobOpeningId: string
   jobTitle: string
   name: string
+  firstName: string | null
+  middleName: string | null
+  lastName: string | null
+  birthDate: string | null
+  gender: string | null
   email: string | null
   phone: string | null
   information: string | null
@@ -124,7 +129,11 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
 
 function ApplicantForm({ openings, onCreated }: { openings: Opening[]; onCreated: (a: Applicant) => void }) {
   const [jobOpeningId, setJobOpeningId] = useState('')
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [middleName, setMiddleName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [birthDate, setBirthDate] = useState('')
+  const [gender, setGender] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [information, setInformation] = useState('')
@@ -139,13 +148,21 @@ function ApplicantForm({ openings, onCreated }: { openings: Opening[]; onCreated
       onCreated(
         await api.post<Applicant>('/hr/recruitment?kind=applicants', {
           jobOpeningId,
-          name,
+          firstName,
+          middleName: middleName || null,
+          lastName,
+          birthDate: birthDate || null,
+          gender: gender || null,
           email: email || null,
           phone: phone || null,
           information: information || null,
         }),
       )
-      setName('')
+      setFirstName('')
+      setMiddleName('')
+      setLastName('')
+      setBirthDate('')
+      setGender('')
       setEmail('')
       setPhone('')
       setInformation('')
@@ -169,8 +186,26 @@ function ApplicantForm({ openings, onCreated }: { openings: Opening[]; onCreated
             ))}
           </select>
         </Field>
-        <Field label="Name">
-          <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
+        <Field label="First name">
+          <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} className="field" />
+        </Field>
+        <Field label="Middle name (optional)">
+          <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} className="field" />
+        </Field>
+        <Field label="Last name">
+          <input required value={lastName} onChange={(e) => setLastName(e.target.value)} className="field" />
+        </Field>
+        <Field label="Birthday (optional)">
+          <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} className="field" />
+        </Field>
+        <Field label="Gender (optional)">
+          <select value={gender} onChange={(e) => setGender(e.target.value)} className="field">
+            <option value="">Not set</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="prefer_not_to_say">Prefer not to say</option>
+          </select>
         </Field>
         <Field label="Email (optional)">
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="field" />

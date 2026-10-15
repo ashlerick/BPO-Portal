@@ -5,11 +5,12 @@ import { withCors } from '../middleware.js'
 import { getDownloadUrl, putObject } from '../s3.js'
 import { notifyRole } from '../notify.js'
 import { formatDisplayName } from '../names.js'
+import { dateOnlyPattern, toDate } from './util.js'
 
 // PUBLIC careers endpoint, no sign-in: /api/hr/careers.
 //   GET   open job openings (title, department, description, banner)
 //   GET ?referrers=1  active employees' names, for the "who referred you" choice
-//   POST  {jobOpeningId, name, email, phone?, information?, resumeLink?, resume?}
+//   POST  {jobOpeningId, firstName, middleName?, lastName, email, birthDate?, gender?, phone?, information?, resumeLink?, resume?}
 //         resume is an optional file {name, contentType, base64}: PDF or Word, under 3MB
 //         creates an applicant (status "applied", source "careers")
 // This is the only unauthenticated write in the API, so it is deliberately
@@ -35,7 +36,11 @@ function looksLike(ext: string, b: Buffer): boolean {
 
 const applySchema = z.object({
   jobOpeningId: z.string().uuid(),
-  name: z.string().trim().min(2, 'Please enter your full name').max(120),
+  firstName: z.string().trim().min(1, 'Please enter your first name').max(60),
+  middleName: z.string().trim().max(60).optional().or(z.literal('')),
+  lastName: z.string().trim().min(1, 'Please enter your last name').max(60),
+  birthDate: z.string().regex(dateOnlyPattern, 'Enter your birthday as a date').optional().or(z.literal('')),
+  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional().or(z.literal('')),
   email: z.string().trim().toLowerCase().email('Enter a valid email address').max(160),
   phone: z.string().trim().max(40).optional().or(z.literal('')),
   information: z.string().trim().max(2000).optional().or(z.literal('')),
@@ -142,7 +147,12 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
       data: {
         referredById,
         jobOpeningId: opening.id,
-        name: data.name,
+        name: [data.firstName, data.middleName, data.lastName].filter(Boolean).join(' '),
+        firstName: data.firstName,
+        middleName: data.middleName || null,
+        lastName: data.lastName,
+        birthDate: data.birthDate ? toDate(data.birthDate) : null,
+        gender: data.gender || null,
         email: data.email,
         phone: data.phone || null,
         information: data.information || null,
@@ -158,7 +168,7 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
     await notifyRole(['hr', 'admin'], {
       type: 'applicant',
       title: 'New job application',
-      body: `${data.name} applied for ${opening.title}`,
+      body: `${[data.firstName, data.lastName].join(' ')} applied for ${opening.title}`,
       link: '/recruitment',
     })
     return res.status(201).json({ ok: true })

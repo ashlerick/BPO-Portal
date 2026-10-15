@@ -448,9 +448,16 @@ model Applicant {
   id            String      @id @default(uuid())
   jobOpening    JobOpening  @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
   jobOpeningId  String
+  // name is "First Middle Last", kept in step with the parts below.
   name          String
+  firstName     String?
+  middleName    String?
+  lastName      String?
   email         String?
   phone         String?
+  birthDate     DateTime?
+  // male | female | other | prefer_not_to_say
+  gender        String?
   // Free-text applicant information (background, source, expected salary…).
   information   String?
   // applied | screening | interview | offer | hired | rejected | withdrawn

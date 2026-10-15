@@ -22,6 +22,11 @@ interface Shift {
 interface ApplicantOption {
   id: string
   name: string
+  firstName: string | null
+  middleName: string | null
+  lastName: string | null
+  birthDate: string | null
+  gender: string | null
   email: string | null
   phone: string | null
   status: string
@@ -91,14 +96,18 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
     setApplicantId(id)
     const a = applicants.find((x) => x.id === id)
     if (!a) return
+    // Older applicants only have a full name: split it as a fallback.
     const parts = a.name.trim().split(/\s+/)
-    const lastName = parts.length > 1 ? parts[parts.length - 1] : ''
-    const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0]
+    const lastName = a.lastName ?? (parts.length > 1 ? parts[parts.length - 1] : '')
+    const firstName = a.firstName ?? (parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0])
     const dept = departments.find((d) => a.jobDepartment && d.name.toLowerCase() === a.jobDepartment.toLowerCase())
     setF((prev) => ({
       ...prev,
       firstName,
+      middleName: a.middleName ?? prev.middleName,
       lastName,
+      birthDate: a.birthDate ? a.birthDate.slice(0, 10) : prev.birthDate,
+      gender: a.gender ?? prev.gender,
       email: a.email ?? prev.email,
       phone: a.phone ?? prev.phone,
       position: a.jobTitle,
