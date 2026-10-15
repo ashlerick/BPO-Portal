@@ -22,13 +22,14 @@ export function DesktopAppButton() {
     <a
       href={DESKTOP_APP_URL}
       download
-      title="Download the BPO Time desktop app for Windows"
+      title="Download the BPO Time desktop app for Windows (beta)"
       className="flex items-center gap-2 rounded-xl border border-white/15 bg-brand-950/85 px-3 py-2 text-xs font-semibold text-gray-100 shadow-lg backdrop-blur transition hover:bg-brand-950"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
         <path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       Desktop app
+      <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">Beta</span>
     </a>
   )
 }
