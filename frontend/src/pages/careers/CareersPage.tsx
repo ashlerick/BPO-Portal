@@ -181,7 +181,7 @@ export function CareersPage() {
   const { theme, toggleTheme } = useTheme()
   const [openings, setOpenings] = useState<PublicOpening[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [applying, setApplying] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [sent, setSent] = useState<string[]>([])
   const [referrers, setReferrers] = useState<Referrer[]>([])
   const [zoom, setZoom] = useState<{ url: string; title: string } | null>(null)
@@ -196,6 +196,8 @@ export function CareersPage() {
       .then(setReferrers)
       .catch(() => setReferrers([]))
   }, [])
+
+  const selected = openings?.find((o) => o.id === selectedId) ?? null
 
   return (
     <div className="mx-auto min-h-svh max-w-5xl px-4 py-8">
@@ -214,14 +216,6 @@ export function CareersPage() {
           {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
         </button>
       </div>
-
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      {!openings && !error && <p className="text-sm text-gray-500 dark:text-gray-400">Loading positions…</p>}
-      {openings && openings.length === 0 && (
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">There are no open positions right now. Please check back soon.</p>
-        </Card>
-      )}
 
       {zoom && (
         <div
@@ -242,50 +236,91 @@ export function CareersPage() {
         </div>
       )}
 
-      <ul className="space-y-4">
-        {openings?.map((o) => (
-          <li key={o.id}>
-            <Card className="overflow-hidden !p-0">
-              {o.bannerUrl && (
-                <button
-                  type="button"
-                  onClick={() => setZoom({ url: o.bannerUrl as string, title: o.title })}
-                  className="block w-full cursor-zoom-in bg-black/20"
-                  aria-label={`View the ${o.title} poster full size`}
-                >
-                  <img src={o.bannerUrl} alt={`${o.title} poster`} className="mx-auto block h-auto w-full" />
-                  <span className="block bg-black/30 py-1 text-center text-xs text-gray-200">Click the poster to view it full size</span>
-                </button>
+      {selected ? (
+        // Focus view: only the chosen position, with its poster and the form.
+        <div>
+          <button
+            type="button"
+            onClick={() => setSelectedId(null)}
+            className="mb-4 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+          >
+            ← All positions
+          </button>
+          <Card className="overflow-hidden !p-0">
+            {selected.bannerUrl && (
+              <button
+                type="button"
+                onClick={() => setZoom({ url: selected.bannerUrl as string, title: selected.title })}
+                className="block w-full cursor-zoom-in bg-black/20"
+                aria-label={`View the ${selected.title} poster full size`}
+              >
+                <img src={selected.bannerUrl} alt={`${selected.title} poster`} className="mx-auto block h-auto w-full" />
+                <span className="block bg-black/30 py-1 text-center text-xs text-gray-200">Click the poster to view it full size</span>
+              </button>
+            )}
+            <div className="p-5">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{selected.title}</h2>
+              {selected.department && <p className="text-sm text-gray-500 dark:text-gray-400">{selected.department}</p>}
+              {selected.description && (
+                <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{selected.description}</p>
               )}
-              <div className="p-5">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{o.title}</h2>
-                {o.department && <p className="text-sm text-gray-500 dark:text-gray-400">{o.department}</p>}
-                {o.description && <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{o.description}</p>}
-
-                {sent.includes(o.id) ? (
-                  <p className="mt-4 rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
+              {sent.includes(selected.id) ? (
+                <div className="mt-4">
+                  <p className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
                     Thank you! Your application was received. We will be in touch.
                   </p>
-                ) : applying === o.id ? (
-                  <ApplyForm
-                    opening={o}
-                    referrers={referrers}
-                    onCancel={() => setApplying(null)}
-                    onDone={() => {
-                      setSent((prev) => [...prev, o.id])
-                      setApplying(null)
-                    }}
-                  />
-                ) : (
-                  <Button variant="primary" className="mt-4" onClick={() => setApplying(o.id)}>
-                    Apply for this position
+                  <Button className="mt-3" onClick={() => setSelectedId(null)}>
+                    ← Back to all positions
                   </Button>
-                )}
-              </div>
-            </Card>
-          </li>
-        ))}
-      </ul>
+                </div>
+              ) : (
+                <ApplyForm
+                  opening={selected}
+                  referrers={referrers}
+                  onCancel={() => setSelectedId(null)}
+                  onDone={() => setSent((prev) => [...prev, selected.id])}
+                />
+              )}
+            </div>
+          </Card>
+        </div>
+      ) : (
+        <>
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+        {!openings && !error && <p className="text-sm text-gray-500 dark:text-gray-400">Loading positions…</p>}
+        {openings && openings.length === 0 && (
+          <Card>
+            <p className="text-sm text-gray-600 dark:text-gray-400">There are no open positions right now. Please check back soon.</p>
+          </Card>
+        )}
+
+
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {openings?.map((o) => (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(o.id)}
+                  className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-black/10 bg-white/70 text-left transition hover:border-brand-500/60 hover:shadow-md dark:border-white/10 dark:bg-white/[0.04]"
+                >
+                  {o.bannerUrl && (
+                    <span className="block aspect-[3/2] w-full bg-black/20">
+                      <img src={o.bannerUrl} alt="" className="h-full w-full object-contain" />
+                    </span>
+                  )}
+                  <span className="flex flex-1 flex-col gap-0.5 p-3">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{o.title}</span>
+                    {o.department && <span className="text-xs text-gray-500 dark:text-gray-400">{o.department}</span>}
+                    <span className="mt-2 text-xs font-medium text-brand-600 dark:text-brand-400">
+                      {sent.includes(o.id) ? 'Application sent ✓' : 'View and apply →'}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   )
 }
