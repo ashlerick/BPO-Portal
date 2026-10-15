@@ -62,7 +62,8 @@ export const defaultNavGroups: NavGroup[] = [
   {
     label: 'Forms',
     items: [
-      { to: '/forms', label: 'Forms', icon: 'requests' },
+      // The category holds the real forms directly (no hub page). Petty Cash
+      // Liquidation joins it when it is built.
       { to: '/freedom-wall', label: 'Freedom Wall', icon: 'wall' },
     ],
   },

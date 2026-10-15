@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import { RequireAuth } from './auth/RequireAuth'
 import { ThemeProvider } from './theme/ThemeContext'
@@ -12,7 +12,6 @@ import { CalendarPage } from './pages/calendar/CalendarPage'
 import { DashboardPage } from './pages/dashboard/DashboardPage'
 import { DocumentsPage } from './pages/documents/DocumentsPage'
 import { CareersPage } from './pages/careers/CareersPage'
-import { FormsPage } from './pages/forms/FormsPage'
 import { InventoryItemPage } from './pages/inventory/InventoryItemPage'
 import { InventoryPage } from './pages/inventory/InventoryPage'
 import { FreedomWallPage } from './pages/forms/FreedomWallPage'
@@ -120,7 +119,7 @@ export default function App() {
               <Route path="/inventory/:tag" element={<InventoryItemPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
-              <Route path="/forms" element={<FormsPage />} />
+              <Route path="/forms" element={<Navigate to="/freedom-wall" replace />} />
               <Route path="/freedom-wall" element={<FreedomWallPage />} />
               <Route path="/leave" element={<LeaveRequestsPage />} />
               <Route path="/attendance" element={<AttendancePage />} />

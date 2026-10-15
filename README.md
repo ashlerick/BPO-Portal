@@ -49,7 +49,7 @@ bpo_plan.md, new_plan.md  Plans
 
 ## Features
 
-**General (everyone):** Dashboard (pending tasks, to-dos, announcements, notifications, reminders, overview), Announcements, Attendance (time in/out, history, late/undertime, shifts, weekly tracker, corrections), Leave Requests, Calendar, Weekly Reports, Performance (KPI scorecard, evaluations, coaching), My Profile, Benefits, HR Requests, Documents, Forms (incl. **Freedom Wall**), Notifications, Settings.
+**General (everyone):** Dashboard (pending tasks, to-dos, announcements, notifications, reminders, overview), Announcements, Attendance (time in/out, history, late/undertime, shifts, weekly tracker, corrections), Leave Requests, Calendar, Weekly Reports, Performance (KPI scorecard, evaluations, coaching), My Profile, Benefits, HR Requests, Documents, Forms (**Freedom Wall**), Notifications, Settings.
 
 **HR / Admin:** Employee Management, Recruitment (job openings with posters, applicants, interviews, decisions), Onboarding and Offboarding checklists, Payroll (payslip links, salary history), Benefits Administration, Employee Relations / Disciplinary, **Inventory**.
 
@@ -170,7 +170,7 @@ A Vercel cron (`vercel.json`) calls `/api/hr/inventory-reminders` on the 1st of 
 
 The features in `new_plan.md` are built. What is left:
 
-- **Petty Cash Liquidation** form is still "Under construction" (needs a layout from HR).
+- **Petty Cash Liquidation** is not built (needs a layout from HR). When it is, add its link to the Forms group in `frontend/src/layouts/nav.ts`. The old Forms hub page is gone: `/forms` redirects to the Freedom Wall.
 - **Email notifications:** notifications are in-app only.
 - **Custom domain:** not set up (needs a purchased domain).
 - **User acceptance testing and production launch** are for the team to do; remember the go-live switch (`RESTRICTED_HR_ONLY=1`) and the Google OAuth consent screen.
