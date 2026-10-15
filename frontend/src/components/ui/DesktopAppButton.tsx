@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { api } from '../../services/api'
 
 // "Open the desktop app" for the top-right corner of the portal on a PC. It
 // starts the BPO Time app through its bpotime:// link; when nothing opens, it
@@ -14,7 +15,9 @@ import { useEffect, useRef, useState } from 'react'
 // once with ?desktop=on (and hide it with ?desktop=off).
 export const DESKTOP_APP_READY = true
 
-const LINK = 'bpotime://open'
+// Plain launch (used when a sign-in code could not be fetched): bpotime://open
+// Launch with sign-in: bpotime://connect?code=<one-time code>
+const OPEN_LINK = 'bpotime://open'
 const RELEASES_URL = 'https://github.com/ashlerick/BPO-Time/releases/latest'
 const SEEN_KEY = 'bpotime:opened'
 const FLAG_KEY = 'bpotime:enabled'
@@ -61,7 +64,6 @@ export function DesktopAppButton() {
     applyUrlSwitch()
     return DESKTOP_APP_READY || readFlag(FLAG_KEY) === '1'
   })
-  const [seen, setSeen] = useState(() => readFlag(SEEN_KEY) === '1')
   const [asking, setAsking] = useState(false)
   const [trying, setTrying] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -87,10 +89,19 @@ export function DesktopAppButton() {
 
   if (!enabled || !canUseHere()) return null
 
-  function open() {
+  async function open() {
     setAsking(false)
     setTrying(true)
     left.current = false
+    // Already signed in here, so hand the app a one-time code: it signs itself in,
+    // with no password and no second login. The code lasts 60 seconds and works once.
+    let link = OPEN_LINK
+    try {
+      const { code } = await api.post<{ code: string }>('/hr/device-code', {})
+      link = `bpotime://connect?code=${encodeURIComponent(code)}`
+    } catch {
+      // no code: the app still opens, and can ask the person to sign in itself
+    }
     const away = () => {
       left.current = true
     }
@@ -100,7 +111,7 @@ export function DesktopAppButton() {
     window.addEventListener('blur', away)
     document.addEventListener('visibilitychange', onVisibility)
 
-    window.location.href = LINK
+    window.location.href = link
 
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => {
@@ -110,7 +121,6 @@ export function DesktopAppButton() {
       if (left.current) {
         // the browser handed focus to something else: the app started
         writeFlag(SEEN_KEY, '1')
-        setSeen(true)
       } else {
         setAsking(true)
       }
@@ -123,7 +133,7 @@ export function DesktopAppButton() {
         type="button"
         onClick={open}
         disabled={trying}
-        title={seen ? 'Open the BPO Time desktop app (beta)' : 'Open or download the BPO Time desktop app for Windows (beta)'}
+        title="Launch the BPO Time desktop app (beta). You are signed in to it automatically."
         className="flex items-center gap-2 rounded-xl border border-white/15 bg-brand-950/85 px-3 py-2 text-xs font-semibold text-gray-100 shadow-lg backdrop-blur transition hover:bg-brand-950 disabled:opacity-70"
       >
         {/* a wrench: this is a beta, still being built */}
@@ -134,7 +144,7 @@ export function DesktopAppButton() {
             strokeLinejoin="round"
           />
         </svg>
-        {trying ? 'Opening…' : 'Beta'}
+        {trying ? 'Opening…' : 'Launch App (BETA)'}
       </button>
 
       {asking && (

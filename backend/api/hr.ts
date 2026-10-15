@@ -15,6 +15,7 @@ import { handler as birthdays } from '../lib/handlers/birthdays.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
+import { createCode, deviceMe, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -36,6 +37,9 @@ const authed = requireAuth(async (req, res) => {
   if (resource === 'shifts') return shifts(req, res)
   if (resource === 'birthdays') return birthdays(req, res)
   if (resource === 'new-hire') return newHire(req, res)
+  if (resource === 'device-code' && req.method === 'POST') return createCode(req, res)
+  if (resource === 'devices' && req.method === 'GET') return listDevices(req, res)
+  if (resource === 'devices' && req.method === 'DELETE') return revokeDevice(req, res)
 
   res.status(404).json({ message: 'Not found' })
 })
@@ -46,5 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.resource === 'careers') return careers(req, res)
   // Called by the monthly Vercel cron; checks its own CRON_SECRET.
   if (req.query.resource === 'inventory-reminders') return inventoryReminders(req, res)
+  // The desktop app signs in with a one-time code, then a device token (not the portal login).
+  if (req.query.resource === 'device-token') return exchangeCode(req, res)
+  if (req.query.resource === 'device-me') return deviceMe(req, res)
   return authed(req, res)
 }

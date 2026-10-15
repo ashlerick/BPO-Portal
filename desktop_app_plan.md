@@ -104,12 +104,35 @@ Rules:
 - The 10-second function limit and the free database tier are not a problem at this volume (one small
   upload per person every few minutes).
 
+### 5.5a Device sign-in API, v1 (built in the portal)
+
+Base: `https://backend-xi-six-41.vercel.app/api`. The routes sit on the portal's `hr` dispatcher because
+of the 12-function limit; treat these paths as the contract.
+
+| Call | Auth | Purpose |
+|---|---|---|
+| `POST /hr/device-code` | portal login (JWT) | Returns `{ code, expiresInSeconds }`. One-time, 60 seconds. Called by the portal's **Launch App (BETA)** button |
+| `POST /hr/device-token` | none (the code is the credential) | Body `{ code, deviceName }`. Returns `{ token, deviceId, user: { id, name, firstName } }`. The code is spent atomically; a reused or expired code gets 400 with a readable message |
+| `GET /hr/device-me` | `Authorization: Bearer <device token>` | Who this PC is signed in as, `{ user, device }`. **401 means drop the token and show "Launch App from the portal" again** (revoked, or account deactivated) |
+| `GET /hr/devices` | portal login | The signed-in person's connected PCs |
+| `DELETE /hr/devices/:id` | portal login | Disconnect one PC (Settings > Desktop app) |
+
+Flow: the portal button calls `device-code`, then navigates to `bpotime://connect?code=<code>`. If the
+code could not be fetched it navigates to plain `bpotime://open` and the app asks the person to press
+Launch App from the portal. The app takes `code` from the link, calls `device-token`, stores `token` in
+the Windows credential store (never in a file), then calls `device-me` to show the person's name.
+
+- The device token is opaque, stored hashed on the server, scoped to the device endpoints (and the
+  later time-tracking endpoints) only. It is **not** accepted by the rest of the portal API.
+- The app must use its own constant for the API base and ignore any address in a link.
+- Time-tracking upload and summary endpoints are not built yet (next milestone).
+
 ### 5.6 Download button in the portal
 
 - A **Desktop app** button sits at the top-right of the portal next to the clocks, on a PC only (hidden
   on phones and tablets, on non-Windows computers, and inside the app itself).
 - It downloads the installer from the **app repo's** GitHub Releases (`BPO-Time-Setup.exe`).
-- The button carries a **Beta** badge while the app is in beta. Remove the badge in
+- The button reads **Launch App (BETA)** while the app is in beta. Remove the badge in
   `DesktopAppButton.tsx` when it is released properly.
 - It is already built (`frontend/src/components/ui/DesktopAppButton.tsx`) but **hidden** until the first
   release exists. To switch it on: publish the installer, then set `DESKTOP_APP_URL` to that repo's release asset and `DESKTOP_APP_READY = true` in that file.

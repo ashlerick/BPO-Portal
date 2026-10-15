@@ -7,6 +7,7 @@ import { api, ApiError } from '../../services/api'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
+import { useToast } from '../../components/ui/Toast'
 import { useTheme } from '../../theme/ThemeContext'
 import { ChangePasswordCard } from '../hris/HrisPage'
 
@@ -84,6 +85,73 @@ function NotificationPreferences() {
   )
 }
 
+interface ConnectedDevice {
+  id: string
+  name: string
+  createdAt: string
+  lastSeenAt: string | null
+}
+
+const deviceWhen = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
+
+// PCs where the BPO Time desktop app is signed in as you. Disconnecting one
+// signs the app out there at once.
+function ConnectedDevices() {
+  const toast = useToast()
+  const [devices, setDevices] = useState<ConnectedDevice[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    api
+      .get<ConnectedDevice[]>('/hr/devices')
+      .then(setDevices)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load your devices'))
+  }, [])
+
+  async function disconnect(d: ConnectedDevice) {
+    if (!window.confirm(`Disconnect ${d.name}? The desktop app on that PC will be signed out.`)) return
+    try {
+      await api.delete(`/hr/devices/${d.id}`)
+      setDevices((prev) => prev?.filter((x) => x.id !== d.id) ?? prev)
+      toast.success(`${d.name} disconnected`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not disconnect that PC')
+    }
+  }
+
+  if (error) return <ErrorState message={error} />
+  if (!devices) return <LoadingState />
+
+  return (
+    <div>
+      <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+        PCs where the BPO Time desktop app is signed in as you. Press <strong>Launch App (BETA)</strong> at the
+        top of the portal to connect one.
+      </p>
+      {devices.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">No PC is connected yet.</p>
+      ) : (
+        <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+          {devices.map((d) => (
+            <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+              <span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{d.name}</span>
+                <span className="block text-xs text-gray-500 dark:text-gray-400">
+                  Connected {deviceWhen.format(new Date(d.createdAt))}
+                  {d.lastSeenAt ? ` · last seen ${deviceWhen.format(new Date(d.lastSeenAt))}` : ''}
+                </span>
+              </span>
+              <Button size="sm" onClick={() => disconnect(d)}>
+                Disconnect
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { user } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -121,6 +189,10 @@ export function SettingsPage() {
 
         <Section id="settings.notifications" title="Notification preferences">
           <NotificationPreferences />
+        </Section>
+
+        <Section id="settings.devices" title="Desktop app" hint="Connected PCs">
+          <ConnectedDevices />
         </Section>
 
         <Section id="settings.appearance" title="Dark / light mode" hint={theme === 'dark' ? 'Dark' : 'Light'}>
