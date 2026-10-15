@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { api, ApiError } from '../../services/api'
 import { useTheme } from '../../theme/ThemeContext'
+import { FILE_INPUT_CLASS, readFileAsBase64 } from '../../utils/files'
+
+const MAX_RESUME_BYTES = 3 * 1024 * 1024
+const RESUME_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
 // Public careers page: no sign-in. Lists open positions (with banner image)
 // and takes applications, which land in HR's Recruitment page.
@@ -22,6 +25,7 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
   const [phone, setPhone] = useState('')
   const [information, setInformation] = useState('')
   const [resumeLink, setResumeLink] = useState('')
+  const [resumeFile, setResumeFile] = useState<File | undefined>()
   const [website, setWebsite] = useState('') // honeypot, hidden from people
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -30,7 +34,14 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
     e.preventDefault()
     setBusy(true)
     setError(null)
+    if (resumeFile && resumeFile.size > MAX_RESUME_BYTES) {
+      setBusy(false)
+      return setError('Your resume must be under 3MB')
+    }
     try {
+      const resume = resumeFile
+        ? { name: resumeFile.name, contentType: resumeFile.type, base64: await readFileAsBase64(resumeFile) }
+        : undefined
       await api.post('/hr/careers', {
         jobOpeningId: opening.id,
         name,
@@ -38,6 +49,7 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
         phone,
         information,
         resumeLink,
+        resume,
         website,
       })
       onDone()
@@ -63,8 +75,15 @@ function ApplyForm({ opening, onDone }: { opening: PublicOpening; onDone: () => 
           Phone (optional)
           <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" className="field" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Resume link (optional)
+      </div>
+      <div className="rounded-lg border border-dashed border-black/20 p-3 dark:border-white/20">
+        <label className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-400">
+          Attach your resume (optional, PDF or Word, under 3MB)
+          <input type="file" accept={RESUME_ACCEPT} onChange={(e) => setResumeFile(e.target.files?.[0])} className={FILE_INPUT_CLASS} />
+        </label>
+        {resumeFile && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {resumeFile.name}</p>}
+        <label className="mt-3 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+          Or paste a link to it (optional)
           <input type="url" value={resumeLink} onChange={(e) => setResumeLink(e.target.value)} placeholder="https://…" className="field" />
         </label>
       </div>
@@ -163,13 +182,6 @@ export function CareersPage() {
           </li>
         ))}
       </ul>
-
-      <p className="mt-8 text-center text-xs text-gray-500 dark:text-gray-400">
-        Employee?{' '}
-        <Link to="/login" className="text-brand-600 dark:text-brand-400">
-          Sign in to the portal
-        </Link>
-      </p>
     </div>
   )
 }

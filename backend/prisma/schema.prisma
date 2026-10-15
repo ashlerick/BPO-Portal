@@ -457,6 +457,9 @@ model Applicant {
   // internal (entered by HR) | careers (applied on the public page)
   source        String      @default("internal")
   resumeLink    String?
+  // An uploaded resume (PDF/Word) stored in the bucket, from the careers page.
+  resumeKey     String?
+  resumeName    String?
   // Set when this applicant was turned into an employee through Onboarding.
   hiredUserId   String?
   createdAt     DateTime    @default(now())

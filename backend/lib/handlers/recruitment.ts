@@ -51,6 +51,12 @@ async function applyBanner(
 }
 
 // Never expose the storage key; give HR a short-lived image URL instead.
+// Never expose the bucket key: HR gets a short-lived download link instead.
+async function applicantView<T extends { resumeKey: string | null }>(a: T) {
+  const { resumeKey, ...rest } = a
+  return { ...rest, resumeUrl: resumeKey ? await getDownloadUrl(resumeKey, 3600).catch(() => null) : null }
+}
+
 async function openingView<T extends { bannerKey: string | null }>(o: T) {
   const { bannerKey, ...rest } = o
   return { ...rest, bannerUrl: bannerKey ? await getDownloadUrl(bannerKey, 3600).catch(() => null) : null }
@@ -143,9 +149,15 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
         orderBy: { createdAt: 'desc' },
       })
       await logAudit(req.auth.sub, 'view', 'applicants', null)
-      return res
-        .status(200)
-        .json(rows.map(({ jobOpening, ...a }) => ({ ...a, jobTitle: jobOpening.title, jobDepartment: jobOpening.department })))
+      return res.status(200).json(
+        await Promise.all(
+          rows.map(async ({ jobOpening, ...a }) => ({
+            ...(await applicantView(a)),
+            jobTitle: jobOpening.title,
+            jobDepartment: jobOpening.department,
+          })),
+        ),
+      )
     }
     if (req.method === 'POST') {
       const data = parseBody(applicantSchema, req.body, res)
@@ -156,7 +168,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       })
       logAudit(req.auth.sub, 'create', 'applicant', created.id)
       const { jobOpening, ...rest } = created
-      return res.status(201).json({ ...rest, jobTitle: jobOpening.title })
+      return res.status(201).json({ ...(await applicantView(rest)), jobTitle: jobOpening.title })
     }
     if (req.method === 'PUT' && sub) {
       const data = parseBody(applicantSchema.omit({ jobOpeningId: true }).partial(), req.body, res)
@@ -172,7 +184,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       })
       logAudit(req.auth.sub, 'update', 'applicant', sub)
       const { jobOpening, ...rest } = updated
-      return res.status(200).json({ ...rest, jobTitle: jobOpening.title })
+      return res.status(200).json({ ...(await applicantView(rest)), jobTitle: jobOpening.title })
     }
     if (req.method === 'DELETE' && sub) {
       await prisma.applicant.deleteMany({ where: { id: sub } })
