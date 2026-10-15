@@ -9,10 +9,10 @@ import { useEffect, useRef, useState } from 'react'
 // another program. That is a good signal, not a guarantee, so a miss is
 // presented as a question ("didn't open?"), never as an error.
 
-// Hidden for everyone until the app has a public release. Testers can turn it
-// on for their own browser by opening the portal once with ?desktop=on
-// (and off again with ?desktop=off).
-export const DESKTOP_APP_READY = false
+// Shown to everyone on a Windows PC as a beta. To hide it again for everyone,
+// set this to false; a single browser can still show it by opening the portal
+// once with ?desktop=on (and hide it with ?desktop=off).
+export const DESKTOP_APP_READY = true
 
 const LINK = 'bpotime://open'
 const RELEASES_URL = 'https://github.com/ashlerick/BPO-Time/releases/latest'
@@ -126,12 +126,15 @@ export function DesktopAppButton() {
         title={seen ? 'Open the BPO Time desktop app (beta)' : 'Open or download the BPO Time desktop app for Windows (beta)'}
         className="flex items-center gap-2 rounded-xl border border-white/15 bg-brand-950/85 px-3 py-2 text-xs font-semibold text-gray-100 shadow-lg backdrop-blur transition hover:bg-brand-950 disabled:opacity-70"
       >
+        {/* a wrench: this is a beta, still being built */}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="12" rx="2" />
-          <path d="M8 20h8M12 16v4" strokeLinecap="round" />
+          <path
+            d="M14.7 6.3a4 4 0 0 0-5.4 5.1L3.5 17.2a1.8 1.8 0 0 0 2.6 2.6l5.8-5.8a4 4 0 0 0 5.1-5.4l-2.6 2.6-2.2-.5-.5-2.2z"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
-        {trying ? 'Opening…' : seen ? 'Open app' : 'Desktop app'}
-        <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">Beta</span>
+        {trying ? 'Opening…' : 'Beta'}
       </button>
 
       {asking && (
