@@ -331,7 +331,7 @@ export function InventoryPage() {
   const [selected, setSelected] = useState<string[]>([])
   const [printing, setPrinting] = useState(false)
   const [filter, setFilter] = useState('')
-  const [grouped, setGrouped] = useState(true)
+  const [grouped, setGrouped] = useState(false)
   const [dueOnly, setDueOnly] = useState(false)
   const [tab, setTab] = useState('items')
 
@@ -425,14 +425,6 @@ export function InventoryPage() {
                 <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
                 Group by person
               </label>
-              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={allShownSelected}
-                  onChange={(e) => setSelected(e.target.checked ? shown.map((i) => i.id) : [])}
-                />
-                Select all
-              </label>
               <Button size="sm" onClick={() => setTab('scan')}>
                 Scan QR
               </Button>
@@ -442,7 +434,41 @@ export function InventoryPage() {
             </div>
           </div>
           {items && shown.length === 0 && <EmptyState label={dueOnly ? 'Everything is checked for this month.' : 'No items.'} />}
-          {shown.length > 0 && grouped && (
+          {shown.length > 0 && (
+            <div className={grouped ? '' : 'md:overflow-x-auto'}>
+              <div
+                className={`mb-2 flex items-center gap-3 rounded-lg bg-black/[0.04] px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:bg-white/[0.05] dark:text-gray-400 ${
+                  grouped ? '' : 'md:grid md:grid-cols-[1.25rem_3rem_6.5rem_minmax(9rem,1fr)_10rem_6.5rem_9rem] md:gap-x-3 md:min-w-[52rem]'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  aria-label="Select all items"
+                  checked={allShownSelected}
+                  onChange={(e) => setSelected(e.target.checked ? shown.map((i) => i.id) : [])}
+                  className="h-5 w-5 md:h-auto md:w-auto"
+                />
+                <span className="normal-case md:hidden">
+                  {allShownSelected ? 'All selected' : `Select all (${shown.length})`}
+                  {selected.length > 0 && !allShownSelected ? ` · ${selected.length} selected` : ''}
+                </span>
+                {grouped ? (
+                  <span className="hidden normal-case md:inline">
+                    {allShownSelected ? 'All selected' : `Select all (${shown.length})`}
+                    {selected.length > 0 && !allShownSelected ? ` · ${selected.length} selected` : ''}
+                  </span>
+                ) : (
+                  <>
+                    <span className="hidden md:block">QR</span>
+                    <span className="hidden md:block">Tag</span>
+                    <span className="hidden md:block">Item</span>
+                    <span className="hidden md:block">Condition</span>
+                    <span className="hidden md:block">Status</span>
+                    <span className="hidden md:block" />
+                  </>
+                )}
+              </div>
+          {grouped && (
             <div className="space-y-2">
               {groups.map((g) => (
                 <PersonFolder
@@ -456,8 +482,8 @@ export function InventoryPage() {
               ))}
             </div>
           )}
-          {shown.length > 0 && !grouped && (
-            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200 md:space-y-0 md:overflow-x-auto">
+          {!grouped && (
+            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200 md:space-y-0">
               {shown.map((i) => (
                 <ItemRow
                   key={i.id}
@@ -467,6 +493,8 @@ export function InventoryPage() {
                   onChanged={load}
                 />
               ))}
+            </div>
+          )}
             </div>
           )}
               </>
