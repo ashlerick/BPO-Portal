@@ -8,7 +8,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly } from '../../utils/dates'
 import { ConditionSelect } from './ConditionSelect'
-import { QrImage } from './qr'
+import { itemPayload, QrImage } from './qr'
 import { CONDITION_LABEL, CONDITION_TONE, STATUS_LABEL, STATUS_TONE, type InventoryDetail } from './types'
 
 // What a QR sticker opens: /inventory/<assetTag>. HR/Admin see the item and
@@ -46,7 +46,7 @@ export function InventoryItemPage() {
         <p>Held by: {item.assignedToName ?? 'Nobody (in storage)'}</p>
         {item.notes && <p className="text-gray-600 dark:text-gray-400">{item.notes}</p>}
         <div className="pt-2">
-          <QrImage assetTag={item.assetTag} size={112} />
+          <QrImage value={itemPayload(item)} label={item.assetTag} size={112} />
         </div>
       </Card>
       {isHr && (

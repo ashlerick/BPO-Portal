@@ -2,7 +2,7 @@ import QRCode from 'qrcode'
 import { useEffect, useState } from 'react'
 import { Button } from '../../components/ui/Button'
 import { Field } from '../../components/ui/Field'
-import { itemUrl, portalBase } from './qr'
+import { itemPayload, portalBase } from './qr'
 import type { InventoryItem } from './types'
 
 // Printable QR stickers. Each code opens /inventory/<assetTag> on the
@@ -17,7 +17,7 @@ export function StickerSheet({ items, onClose }: { items: InventoryItem[]; onClo
     Promise.all(
       items.map(
         async (i) =>
-          [i.id, await QRCode.toDataURL(itemUrl(i.assetTag, base), { margin: 1, width: 220 })] as const,
+          [i.id, await QRCode.toDataURL(itemPayload(i, base), { margin: 1, width: 220 })] as const,
       ),
     ).then((pairs) => {
       if (!cancelled) setCodes(Object.fromEntries(pairs))

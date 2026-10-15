@@ -10,7 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { api, ApiError } from '../../services/api'
 import { ConditionSelect } from './ConditionSelect'
-import { QrImage } from './qr'
+import { itemPayload, QrImage } from './qr'
 import { StickerSheet } from './StickerSheet'
 import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
 
@@ -36,7 +36,7 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
   }, [])
   useEffect(loadNext, [loadNext])
 
-  // The sticker is previewed live: the typed tag, else the one the item will get.
+  // The sticker is previewed live from every field: the typed tag, else the one the item will get.
   const previewTag = tag.trim() || nextTag
 
   async function submit(e: FormEvent) {
@@ -81,7 +81,7 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
           </Field>
         </div>
         <div className="flex flex-col items-center gap-1 text-center">
-          <QrImage assetTag={previewTag} size={120} />
+          <QrImage value={itemPayload({ assetTag: previewTag, name, category, serialNumber: serial })} label={previewTag} size={120} />
           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{previewTag || '…'}</span>
           <span className="text-[11px] text-gray-500 dark:text-gray-400">Sticker preview</span>
         </div>
@@ -174,7 +174,7 @@ function ItemRow({
     <div className={`${ROW_GRID} ${MIN_W} border-b border-black/5 py-2 last:border-0 dark:border-white/5`}>
       <input type="checkbox" aria-label={`Select ${item.assetTag}`} checked={checked} onChange={(e) => onToggle(e.target.checked)} />
       <Link to={to} aria-label={`Open ${item.assetTag}`}>
-        <QrImage assetTag={item.assetTag} size={44} />
+        <QrImage value={itemPayload(item)} label={item.assetTag} size={44} />
       </Link>
       <Link to={to} className="truncate font-medium text-brand-600 dark:text-brand-400">
         {item.assetTag}
