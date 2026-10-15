@@ -101,7 +101,15 @@ Rules:
 - The 10-second function limit and the free database tier are not a problem at this volume (one small
   upload per person every few minutes).
 
-### 5.6 Distribution
+### 5.6 Download button in the portal
+
+- A **Desktop app** button sits at the top-right of the portal next to the clocks, on a PC only (hidden
+  on phones and tablets, on non-Windows computers, and inside the app itself).
+- It downloads the installer from GitHub Releases (`BPO-Time-Setup.exe`).
+- It is already built (`frontend/src/components/ui/DesktopAppButton.tsx`) but **hidden** until the first
+  release exists. To switch it on: publish the installer, then set `DESKTOP_APP_READY = true` in that file.
+
+### 5.7 Distribution
 
 - Windows installer built with electron-builder, published to GitHub Releases, with auto-update.
 - A code-signing certificate (about USD 100 to 400 a year) avoids the "unrecognised app" warning.
