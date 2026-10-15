@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { describeIssue } from '../../lib/handlers/util.js'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import type { User } from '@prisma/client'
@@ -141,7 +142,7 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse) {
 
   const parsed = changePasswordSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid request' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid request' })
     return
   }
 
@@ -171,7 +172,7 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse) {
 async function handleSetPassword(req: VercelRequest, res: VercelResponse) {
   const parsed = setPasswordSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid request' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid request' })
     return
   }
 

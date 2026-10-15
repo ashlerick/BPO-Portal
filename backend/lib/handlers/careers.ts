@@ -4,7 +4,7 @@ import { prisma } from '../prisma.js'
 import { withCors } from '../middleware.js'
 import { getDownloadUrl, putObject } from '../s3.js'
 import { notifyRole } from '../notify.js'
-import { dateOnlyPattern, toDate } from './util.js'
+import { dateOnlyPattern, describeIssue, toDate } from './util.js'
 
 // PUBLIC careers endpoint, no sign-in: /api/hr/careers.
 //   GET   open job openings (title, department, description, banner)
@@ -57,7 +57,7 @@ const applySchema = z.object({
     .optional()
     .nullable(),
   // Typed by the applicant; never matched against, or listed from, the employee records.
-  referrerName: z.string().trim().max(120).optional().or(z.literal('')),
+  referrerName: z.string().trim().max(120).nullable().optional().or(z.literal('')),
   // Honeypot: real people never see or fill this field.
   website: z.string().max(200).optional(),
 })
@@ -85,7 +85,8 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
     const parsed = applySchema.safeParse(req.body)
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Please check the form and try again' })
+      const issue = parsed.error.issues[0]
+      return res.status(400).json({ message: issue ? describeIssue(issue) : 'Please check the form and try again' })
     }
     const data = parsed.data
 

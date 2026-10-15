@@ -5,6 +5,7 @@ import { api, ApiError } from '../../services/api'
 import { useTheme } from '../../theme/ThemeContext'
 import { readFileAsBase64 } from '../../utils/files'
 import { FilePicker } from '../../components/ui/FilePicker'
+import { useToast } from '../../components/ui/Toast'
 
 const MAX_RESUME_BYTES = 3 * 1024 * 1024
 const RESUME_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -39,6 +40,7 @@ function ApplyForm({
   const [information, setInformation] = useState('')
   const [resumeLink, setResumeLink] = useState('')
   const [referrerName, setReferrerName] = useState('')
+  const toast = useToast()
   const [resumeFile, setResumeFile] = useState<File | undefined>()
   const [website, setWebsite] = useState('') // honeypot, hidden from people
   const [busy, setBusy] = useState(false)
@@ -49,8 +51,11 @@ function ApplyForm({
     setBusy(true)
     setError(null)
     if (resumeFile && resumeFile.size > MAX_RESUME_BYTES) {
+      const message = `Your resume file is ${(resumeFile.size / (1024 * 1024)).toFixed(1)}MB; it must be under 3MB. Please attach a smaller file or paste a link instead.`
       setBusy(false)
-      return setError('Your resume must be under 3MB')
+      setError(message)
+      toast.error(message)
+      return
     }
     try {
       const resume = resumeFile
@@ -72,8 +77,14 @@ function ApplyForm({
         website,
       })
       onDone()
+      toast.success('Application sent. Thank you, we will be in touch.')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not send your application. Please try again.')
+      const message =
+        err instanceof ApiError && err.message
+          ? err.message
+          : 'We could not send your application. Please check your internet connection and try again.'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }

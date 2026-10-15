@@ -1,4 +1,5 @@
 import type { VercelResponse } from '@vercel/node'
+import { describeIssue } from '../lib/handlers/util.js'
 import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
@@ -164,7 +165,7 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
 async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string) {
   const parsed = updateUserSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid update payload' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid update payload' })
     return
   }
 

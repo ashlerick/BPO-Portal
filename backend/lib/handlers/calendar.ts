@@ -1,4 +1,5 @@
 import type { VercelResponse } from '@vercel/node'
+import { describeIssue } from './util.js'
 import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
@@ -42,7 +43,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (!sub && req.method === 'POST') {
     const parsed = upsertSchema.safeParse(req.body)
     if (!parsed.success) {
-      res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid event' })
+      res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid event' })
       return
     }
     const { startDate, endDate, ...rest } = parsed.data

@@ -1,4 +1,5 @@
 import type { VercelResponse } from '@vercel/node'
+import { describeIssue } from '../lib/handlers/util.js'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
@@ -170,7 +171,7 @@ async function handleMe(req: AuthedRequest, res: VercelResponse) {
 async function handleUpdateMe(req: AuthedRequest, res: VercelResponse) {
   const parsed = contactSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid contact details' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid contact details' })
     return
   }
 
@@ -241,7 +242,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   }
   const parsed = updateSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid update payload' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid update payload' })
     return
   }
 

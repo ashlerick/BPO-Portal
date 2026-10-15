@@ -1,5 +1,5 @@
 import type { VercelResponse } from '@vercel/node'
-import type { ZodType } from 'zod'
+import type { ZodIssue, ZodType } from 'zod'
 import type { Role } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
@@ -33,10 +33,42 @@ export function notFound(res: VercelResponse, what = 'Not found') {
 
 // Validates a request body; on failure it has already answered 400 and
 // returns null.
+// Zod's own wording ("Invalid input", "Required") tells a person nothing.
+// Messages we wrote ourselves in a schema pass through unchanged; the
+// generic ones are rebuilt as "<Field> is required" / "is not valid" / ...
+const ZOD_DEFAULT = /^(Invalid |Required$|Expected |String must |Number must |Array must |Too (small|big))/i
+
+function fieldLabel(path: (string | number)[]): string {
+  const key = [...path].reverse().find((p) => typeof p === 'string') as string | undefined
+  if (!key) return 'This field'
+  const words = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+export function describeIssue(issue: ZodIssue): string {
+  if (!ZOD_DEFAULT.test(issue.message)) return issue.message
+  const field = fieldLabel(issue.path)
+  switch (issue.code) {
+    case 'invalid_type':
+      return issue.received === 'undefined' || issue.received === 'null' ? `${field} is required` : `${field} is not in the expected format`
+    case 'too_small':
+      return issue.minimum === 1 || issue.minimum === 0 ? `${field} is required` : `${field} is too short`
+    case 'too_big':
+      return `${field} is too long`
+    case 'invalid_enum_value':
+      return `${field} must be one of the listed options`
+    default:
+      return `${field} is not valid`
+  }
+}
+
+// Validates a request body. On failure it answers 400 with a descriptive
+// message (what is wrong and with which field) and returns null.
 export function parseBody<T>(schema: ZodType<T>, body: unknown, res: VercelResponse): T | null {
   const parsed = schema.safeParse(body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid request' })
+    const issue = parsed.error.issues[0]
+    res.status(400).json({ message: issue ? describeIssue(issue) : 'The request could not be understood' })
     return null
   }
   return parsed.data

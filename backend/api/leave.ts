@@ -1,4 +1,5 @@
 import type { VercelResponse } from '@vercel/node'
+import { describeIssue } from '../lib/handlers/util.js'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
 import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
@@ -379,7 +380,7 @@ async function handleMarkAbsent(req: AuthedRequest, res: VercelResponse) {
 
   const parsed = markAbsentSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid request' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid request' })
     return
   }
 
@@ -425,7 +426,7 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
 
   const parsed = correctAttendanceSchema.safeParse(req.body)
   if (!parsed.success) {
-    res.status(400).json({ message: parsed.error.issues[0]?.message ?? 'Invalid request' })
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid request' })
     return
   }
 
