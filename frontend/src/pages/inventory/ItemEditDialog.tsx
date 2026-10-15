@@ -1,0 +1,135 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Button } from '../../components/ui/Button'
+import { Field, FormError } from '../../components/ui/Field'
+import { api, ApiError } from '../../services/api'
+import { STATUS_LABEL, type InventoryItem } from './types'
+
+// Admin only: change an item's details or delete it (a soft delete: it
+// disappears from the portal, the record stays in the database).
+// The asset tag is shown but not editable, because it is what the printed
+// QR sticker points to.
+const EDITABLE_STATUSES: InventoryItem['status'][] = ['available', 'repair', 'lost', 'retired']
+
+export function ItemEditDialog({
+  item,
+  onClose,
+  onSaved,
+  onDeleted,
+}: {
+  item: InventoryItem
+  onClose: () => void
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const [name, setName] = useState(item.name)
+  const [category, setCategory] = useState(item.category ?? '')
+  const [serial, setSerial] = useState(item.serialNumber ?? '')
+  const [notes, setNotes] = useState(item.notes ?? '')
+  const [status, setStatus] = useState(item.status)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const assigned = !!item.assignedToId
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api.put(`/hr/inventory/${item.id}`, {
+        name,
+        category: category.trim() || null,
+        serialNumber: serial.trim() || null,
+        notes: notes.trim() || null,
+        // Status can't change while someone holds the item (it is "assigned").
+        ...(!assigned && status !== item.status && { status }),
+      })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the item')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete ${item.assetTag} (${item.name})? It will be hidden from the portal.`)) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.delete(`/hr/inventory/${item.id}`)
+      onDeleted()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete the item')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Edit ${item.assetTag}`}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <form
+        onSubmit={save}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg space-y-3 rounded-2xl border border-black/10 bg-white p-5 text-gray-900 shadow-2xl dark:border-white/10 dark:bg-gray-900 dark:text-gray-100"
+      >
+        <h2 className="text-lg font-semibold">Edit item</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Asset tag <span className="font-semibold text-gray-800 dark:text-gray-200">{item.assetTag}</span> can't be changed (the printed
+          sticker points to it).
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Item name">
+            <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
+          </Field>
+          <Field label="Category">
+            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" />
+          </Field>
+          <Field label="Serial number">
+            <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
+          </Field>
+          <Field label="Status">
+            {assigned ? (
+              <p className="field flex items-center text-sm text-gray-500">{STATUS_LABEL.assigned} (return it first to change)</p>
+            ) : (
+              <select value={status} onChange={(e) => setStatus(e.target.value as InventoryItem['status'])} className="field">
+                {EDITABLE_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        </div>
+        <Field label="Notes">
+          <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="field" />
+        </Field>
+        <FormError message={error} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button type="button" onClick={remove} disabled={busy} className="!border-red-500/50 !text-red-600 dark:!text-red-400">
+            Delete item
+          </Button>
+          <div className="flex gap-2">
+            <Button type="button" onClick={onClose} disabled={busy}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={busy}>
+              {busy ? 'Saving…' : 'Save changes'}
+            </Button>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
+}

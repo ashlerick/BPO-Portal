@@ -26,6 +26,7 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
   const since = new Date(inventoryMonthStart())
   const items = await prisma.inventoryItem.findMany({
     where: {
+      deletedAt: null,
       status: { in: ['available', 'assigned', 'repair'] },
       OR: [{ conditionCheckedAt: null }, { conditionCheckedAt: { lt: since } }],
     },

@@ -5,7 +5,7 @@ import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { notifyUsers } from '../notify.js'
 import { formatDisplayName } from '../names.js'
-import { forbid, isHrOrAdmin, myEmployee, notFound, parseBody, queryString } from './util.js'
+import { forbid, hasRole, isHrOrAdmin, myEmployee, notFound, parseBody, queryString } from './util.js'
 
 // Inventory under /hr/inventory. One item has at most ONE current holder;
 // one employee can hold many. HR/Admin manage everything.
@@ -13,7 +13,8 @@ import { forbid, isHrOrAdmin, myEmployee, notFound, parseBody, queryString } fro
 //   GET ?mine=1          the signed-in employee's own items (anyone)
 //   GET /:idOrTag        one item + history (HR/Admin); its holder sees it too
 //   POST                 create an item (asset tag generated if not given)
-//   PUT /:id             edit details / status
+//   PUT /:id             edit details / status (Admin only)
+//   DELETE /:id          soft delete (Admin only; return the item first)
 //   POST /:id?action=assign   {employeeId} — refused while someone holds it
 //   POST /:id?action=return   {note?}
 //   POST /:id?action=check    {condition, note?} — the monthly condition check
@@ -101,14 +102,14 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (queryString(req, 'mine')) {
       const me = await myEmployee(req)
       if (!me) return res.status(200).json([])
-      const rows = await prisma.inventoryItem.findMany({ where: { assignedToId: me.id }, include, orderBy: { name: 'asc' } })
+      const rows = await prisma.inventoryItem.findMany({ where: { assignedToId: me.id, deletedAt: null }, include, orderBy: { name: 'asc' } })
       return res.status(200).json(rows.map(serialize))
     }
     if (!hr) return forbid(res)
     if (queryString(req, 'nexttag')) return res.status(200).json({ assetTag: await nextTag() })
     const employeeId = queryString(req, 'employeeId')
     const rows = await prisma.inventoryItem.findMany({
-      where: employeeId ? { assignedToId: employeeId } : {},
+      where: { deletedAt: null, ...(employeeId && { assignedToId: employeeId }) },
       include,
       orderBy: [{ assetTag: 'asc' }],
     })
@@ -118,7 +119,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (sub && req.method === 'GET') {
     // The id in the URL may be the asset tag a QR sticker carries.
     const item = await prisma.inventoryItem.findFirst({
-      where: { OR: [{ id: sub }, { assetTag: sub }] },
+      where: { OR: [{ id: sub }, { assetTag: sub }], deletedAt: null },
       include,
     })
     if (!item) return notFound(res, 'Item not found')
@@ -150,7 +151,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
 
   // ---- the monthly check: HR/Admin on any item, a holder on their own
   if (sub && action === 'check' && req.method === 'POST') {
-    const item = await prisma.inventoryItem.findUnique({ where: { id: sub } })
+    const item = await prisma.inventoryItem.findFirst({ where: { id: sub, deletedAt: null } })
     if (!item) return notFound(res, 'Item not found')
     if (!hr) {
       const me = await myEmployee(req)
@@ -193,10 +194,23 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     return res.status(201).json(serialize(created))
   }
 
+  if (sub && !action && req.method === 'DELETE') {
+    if (!hasRole(req, 'admin')) return forbid(res)
+    const existing = await prisma.inventoryItem.findFirst({ where: { id: sub, deletedAt: null } })
+    if (!existing) return notFound(res, 'Item not found')
+    if (existing.assignedToId) {
+      return res.status(409).json({ message: 'Return the item from its holder before deleting it' })
+    }
+    await prisma.inventoryItem.update({ where: { id: sub }, data: { deletedAt: new Date() } })
+    await logAudit(req.auth.sub, 'delete', 'inventory_item', sub)
+    return res.status(204).end()
+  }
+
   if (sub && !action && req.method === 'PUT') {
+    if (!hasRole(req, 'admin')) return forbid(res)
     const data = parseBody(updateSchema, req.body, res)
     if (!data) return
-    const existing = await prisma.inventoryItem.findUnique({ where: { id: sub } })
+    const existing = await prisma.inventoryItem.findFirst({ where: { id: sub, deletedAt: null } })
     if (!existing) return notFound(res, 'Item not found')
     if (data.status && existing.assignedToId) {
       return res.status(409).json({ message: 'Return the item from its holder before changing its status' })
@@ -209,7 +223,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (sub && action === 'assign' && req.method === 'POST') {
     const data = parseBody(assignSchema, req.body, res)
     if (!data) return
-    const item = await prisma.inventoryItem.findUnique({ where: { id: sub } })
+    const item = await prisma.inventoryItem.findFirst({ where: { id: sub, deletedAt: null } })
     if (!item) return notFound(res, 'Item not found')
     if (item.assignedToId) {
       return res.status(409).json({ message: 'This item is already assigned. Return it first.' })
@@ -235,7 +249,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (sub && action === 'return' && req.method === 'POST') {
     const data = parseBody(returnSchema, req.body ?? {}, res)
     if (!data) return
-    const item = await prisma.inventoryItem.findUnique({ where: { id: sub } })
+    const item = await prisma.inventoryItem.findFirst({ where: { id: sub, deletedAt: null } })
     if (!item) return notFound(res, 'Item not found')
     if (!item.assignedToId) return res.status(409).json({ message: 'This item is not assigned to anyone' })
     await prisma.inventoryAssignment.updateMany({

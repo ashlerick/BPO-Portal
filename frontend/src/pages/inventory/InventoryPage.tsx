@@ -9,7 +9,9 @@ import { Field, FormError } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Tabs } from '../../components/ui/Tabs'
 import { api, ApiError } from '../../services/api'
+import { useAuth } from '../../auth/AuthContext'
 import { ConditionSelect } from './ConditionSelect'
+import { ItemEditDialog } from './ItemEditDialog'
 import { itemPayload, QrImage, QrPopup } from './qr'
 import { StickerSheet } from './StickerSheet'
 import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
@@ -171,6 +173,9 @@ function ItemRow({
 }) {
   const to = `/inventory/${encodeURIComponent(item.assetTag)}`
   const [showQr, setShowQr] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const { effectiveRoles } = useAuth()
+  const isAdmin = effectiveRoles.includes('admin')
   return (
     <div className={`${ROW_GRID} ${MIN_W} border-b border-black/5 py-2 last:border-0 dark:border-white/5`}>
       <input type="checkbox" aria-label={`Select ${item.assetTag}`} checked={checked} onChange={(e) => onToggle(e.target.checked)} />
@@ -203,9 +208,28 @@ function ItemRow({
       <span>
         <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
       </span>
-      <span className="flex justify-end">
+      <span className="flex flex-wrap items-center justify-end gap-1.5">
+        {isAdmin && (
+          <Button size="sm" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+        )}
         <AssignControl item={item} onChanged={onChanged} />
       </span>
+      {editing && (
+        <ItemEditDialog
+          item={item}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false)
+            onChanged()
+          }}
+          onDeleted={() => {
+            setEditing(false)
+            onChanged()
+          }}
+        />
+      )}
     </div>
   )
 }

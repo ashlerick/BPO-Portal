@@ -439,6 +439,8 @@ model JobOpening {
   closedAt    DateTime?
   // Optional banner image (object key in storage; served by short-lived URLs).
   bannerKey   String?
+  // Soft delete: hidden everywhere, kept in the database.
+  deletedAt   DateTime?
   applicants  Applicant[]
 
   @@map("job_openings")
@@ -696,6 +698,8 @@ model InventoryItem {
   // Latest monthly-check result: excellent | good | fair | poor | damaged
   condition          String?
   conditionCheckedAt DateTime?
+  // Soft delete: hidden everywhere, kept in the database.
+  deletedAt    DateTime?
   createdBy    String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

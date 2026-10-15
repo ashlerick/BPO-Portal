@@ -11,6 +11,7 @@ import { formatDateOnly } from '../../utils/dates'
 import { humanize } from '../../utils/text'
 import { readFileAsBase64 } from '../../utils/files'
 import { FilePicker } from '../../components/ui/FilePicker'
+import { useAuth } from '../../auth/AuthContext'
 
 type OpeningStatus = 'open' | 'on_hold' | 'closed'
 type ApplicantStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected' | 'withdrawn'
@@ -462,7 +463,108 @@ function BannerControl({ opening, onChanged }: { opening: Opening; onChanged: (o
   )
 }
 
+// Admin only: reword an opening, or delete it (a soft delete: it leaves the
+// portal and the careers page, the record stays in the database).
+function OpeningAdminControls({
+  opening,
+  onChanged,
+  onDeleted,
+}: {
+  opening: Opening
+  onChanged: (o: Opening) => void
+  onDeleted: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState(opening.title)
+  const [department, setDepartment] = useState(opening.department ?? '')
+  const [description, setDescription] = useState(opening.description ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      onChanged(
+        await api.put<Opening>(`/hr/recruitment?kind=openings&sub=${opening.id}`, {
+          title,
+          department: department.trim() || null,
+          description: description.trim() || null,
+        }),
+      )
+      setOpen(false)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save the opening')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    const n = opening.applicantCount
+    const warn = n > 0 ? ` It has ${n} applicant${n === 1 ? '' : 's'}; they stay on record.` : ''
+    if (!window.confirm(`Delete the "${opening.title}" opening? It will be hidden from the portal and the careers page.${warn}`)) return
+    setBusy(true)
+    try {
+      await api.delete(`/hr/recruitment?kind=openings&sub=${opening.id}`)
+      onDeleted(opening.id)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete the opening')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <Button size="sm" onClick={() => setOpen(true)}>
+        Edit
+      </Button>
+      <Button size="sm" onClick={remove} disabled={busy} className="!border-red-500/50 !text-red-600 dark:!text-red-400">
+        Delete
+      </Button>
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Edit ${opening.title}`}
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+        >
+          <form
+            onSubmit={save}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg space-y-3 rounded-2xl border border-black/10 bg-white p-5 text-gray-900 shadow-2xl dark:border-white/10 dark:bg-gray-900 dark:text-gray-100"
+          >
+            <h2 className="text-lg font-semibold">Edit job opening</h2>
+            <Field label="Job title">
+              <input required value={title} onChange={(e) => setTitle(e.target.value)} className="field" />
+            </Field>
+            <Field label="Department (optional)">
+              <input value={department} onChange={(e) => setDepartment(e.target.value)} className="field" />
+            </Field>
+            <Field label="Description (optional)">
+              <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="field" />
+            </Field>
+            <FormError message={error} />
+            <div className="flex justify-end gap-2">
+              <Button type="button" onClick={() => setOpen(false)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={busy}>
+                {busy ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+    </>
+  )
+}
+
 export function RecruitmentPage() {
+  const { effectiveRoles } = useAuth()
+  const isAdmin = effectiveRoles.includes('admin')
   const [openings, setOpenings] = useState<Opening[] | null>(null)
   const [applicants, setApplicants] = useState<Applicant[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -528,6 +630,13 @@ export function RecruitmentPage() {
                           <Button size="sm" onClick={() => setOpeningStatus(o, 'closed')}>
                             Close
                           </Button>
+                          {isAdmin && (
+                            <OpeningAdminControls
+                              opening={o}
+                              onChanged={(u) => setOpenings((prev) => prev?.map((x) => (x.id === u.id ? u : x)) ?? null)}
+                              onDeleted={(id) => setOpenings((prev) => prev?.filter((x) => x.id !== id) ?? null)}
+                            />
+                          )}
                         </div>
                       </Card>
                     </li>

@@ -5,7 +5,7 @@ import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { deleteObject, getDownloadUrl, putObject } from '../s3.js'
 import { formatDisplayName } from '../names.js'
-import { dateOnlyPattern, forbid, isHrOrAdmin, notFound, parseBody, queryString, toDate } from './util.js'
+import { dateOnlyPattern, forbid, hasRole, isHrOrAdmin, notFound, parseBody, queryString, toDate } from './util.js'
 
 // Recruitment, HR/Admin only. One handler, three collections chosen by
 // ?kind= : openings | applicants | interviews.
@@ -111,6 +111,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (kind === 'openings') {
     if (req.method === 'GET') {
       const rows = await prisma.jobOpening.findMany({
+        where: { deletedAt: null },
         include: { _count: { select: { applicants: true } } },
         orderBy: { openedAt: 'desc' },
       })
@@ -137,8 +138,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (req.method === 'PUT' && sub) {
       const data = parseBody(openingSchema.partial(), req.body, res)
       if (!data) return
-      const existing = await prisma.jobOpening.findUnique({ where: { id: sub } })
+      const existing = await prisma.jobOpening.findFirst({ where: { id: sub, deletedAt: null } })
       if (!existing) return notFound(res, 'Job opening not found')
+      // HR can hold, reopen, close and change the poster; rewording the
+      // opening itself is Admin-only.
+      const editsText = data.title !== undefined || data.department !== undefined || data.description !== undefined
+      if (editsText && !hasRole(req, 'admin')) return forbid(res)
       const { banner, ...fields } = data
       const key = await applyBanner(sub, banner, existing.bannerKey)
       if (typeof key === 'object' && key !== null) return res.status(400).json({ message: key.error })
@@ -156,8 +161,15 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       return res.status(200).json({ ...(await openingView(rest)), applicantCount: _count.applicants })
     }
     if (req.method === 'DELETE' && sub) {
-      await prisma.jobOpening.deleteMany({ where: { id: sub } })
-      logAudit(req.auth.sub, 'delete', 'job_opening', sub)
+      // Soft delete, Admin only: it disappears from the portal and the
+      // careers page, but the row (and its applicants) stay in the database.
+      if (!hasRole(req, 'admin')) return forbid(res)
+      const done = await prisma.jobOpening.updateMany({
+        where: { id: sub, deletedAt: null },
+        data: { deletedAt: new Date(), status: 'closed', closedAt: new Date() },
+      })
+      if (done.count === 0) return notFound(res, 'Job opening not found')
+      await logAudit(req.auth.sub, 'delete', 'job_opening', sub)
       return res.status(204).end()
     }
   }

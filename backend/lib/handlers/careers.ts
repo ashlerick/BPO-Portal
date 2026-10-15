@@ -82,7 +82,7 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     const rows = await prisma.jobOpening.findMany({
-      where: { status: 'open' },
+      where: { status: 'open', deletedAt: null },
       orderBy: { openedAt: 'desc' },
       select: { id: true, title: true, department: true, description: true, bannerKey: true, openedAt: true },
     })
@@ -107,7 +107,7 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
     if (data.website) return res.status(201).json({ ok: true })
 
     const opening = await prisma.jobOpening.findUnique({ where: { id: data.jobOpeningId } })
-    if (!opening || opening.status !== 'open') {
+    if (!opening || opening.status !== 'open' || opening.deletedAt) {
       return res.status(404).json({ message: 'This position is no longer open' })
     }
 
