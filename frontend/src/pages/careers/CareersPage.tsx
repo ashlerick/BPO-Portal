@@ -196,7 +196,7 @@ export function CareersPage() {
         {openings?.map((o) => (
           <li key={o.id}>
             <Card className="overflow-hidden !p-0">
-              {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-40 w-full object-cover sm:h-52" />}
+              {o.bannerUrl && <img src={o.bannerUrl} alt="" className="block h-auto w-full" />}
               <div className="p-5">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{o.title}</h2>
                 {o.department && <p className="text-sm text-gray-500 dark:text-gray-400">{o.department}</p>}

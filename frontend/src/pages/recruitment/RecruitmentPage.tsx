@@ -478,7 +478,7 @@ export function RecruitmentPage() {
                   .map((o) => (
                     <li key={o.id}>
                       <Card className="flex flex-wrap items-center justify-between gap-2 !py-3">
-                        {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-14 w-24 rounded object-cover" />}
+                        {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-14 w-24 rounded bg-black/20 object-contain" />}
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-gray-900 dark:text-gray-100">{o.title}</div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
