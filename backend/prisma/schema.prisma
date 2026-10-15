@@ -699,6 +699,9 @@ model KpiScore {
 model FreedomPost {
   id        String   @id @default(uuid())
   body      String
+  // The random display name picked for this post ("Anonymous Sleepy Koala").
+  // Never derived from the author.
+  alias     String?
   hidden    Boolean  @default(false)
   createdAt DateTime @default(now())
 

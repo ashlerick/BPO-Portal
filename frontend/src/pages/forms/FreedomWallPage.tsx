@@ -11,8 +11,22 @@ import { api, ApiError } from '../../services/api'
 interface Post {
   id: string
   body: string
+  alias: string
+  emoji: string
   hidden: boolean
   createdAt: string
+}
+
+// The circle behind the animal takes a colour from the name, so the same
+// name always looks the same.
+const TINTS = [
+  'bg-emerald-500/25', 'bg-sky-500/25', 'bg-amber-500/25', 'bg-rose-500/25', 'bg-violet-500/25',
+  'bg-teal-500/25', 'bg-orange-500/25', 'bg-fuchsia-500/25', 'bg-lime-500/25', 'bg-cyan-500/25',
+]
+function tintFor(name: string): string {
+  let h = 0
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return TINTS[h % TINTS.length]
 }
 
 const fmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
@@ -74,6 +88,15 @@ export function FreedomWallPage() {
           {posts.map((p) => (
             <li key={p.id}>
               <Card className="space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg ${tintFor(p.alias)}`}
+                    aria-hidden="true"
+                  >
+                    {p.emoji}
+                  </span>
+                  <span className="min-w-0 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{p.alias}</span>
+                </div>
                 <p className={`whitespace-pre-wrap text-sm ${p.hidden ? 'text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>{p.body}</p>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <span>
