@@ -63,7 +63,7 @@ async function referrerNames(ids: (string | null)[]) {
   return new Map(people.map((p) => [p.id, formatDisplayName(p.user.firstName, p.user.middleName, p.user.lastName)]))
 }
 
-async function applicantView<T extends { resumeKey: string | null; referredById: string | null }>(
+async function applicantView<T extends { resumeKey: string | null; referredById: string | null; referrerName: string | null }>(
   a: T,
   names?: Map<string, string>,
 ) {
@@ -71,7 +71,7 @@ async function applicantView<T extends { resumeKey: string | null; referredById:
   const map = names ?? (await referrerNames([a.referredById]))
   return {
     ...rest,
-    referredByName: a.referredById ? (map.get(a.referredById) ?? null) : null,
+    referredByName: a.referrerName ?? (a.referredById ? (map.get(a.referredById) ?? null) : null),
     resumeUrl: resumeKey ? await getDownloadUrl(resumeKey, 3600).catch(() => null) : null,
   }
 }

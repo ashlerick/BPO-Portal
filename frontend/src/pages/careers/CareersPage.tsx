@@ -20,19 +20,12 @@ interface PublicOpening {
   bannerUrl: string | null
 }
 
-interface Referrer {
-  id: string
-  name: string
-}
-
 function ApplyForm({
   opening,
-  referrers,
   onDone,
   onCancel,
 }: {
   opening: PublicOpening
-  referrers: Referrer[]
   onDone: () => void
   onCancel: () => void
 }) {
@@ -45,7 +38,7 @@ function ApplyForm({
   const [phone, setPhone] = useState('')
   const [information, setInformation] = useState('')
   const [resumeLink, setResumeLink] = useState('')
-  const [referredById, setReferredById] = useState('')
+  const [referrerName, setReferrerName] = useState('')
   const [resumeFile, setResumeFile] = useState<File | undefined>()
   const [website, setWebsite] = useState('') // honeypot, hidden from people
   const [busy, setBusy] = useState(false)
@@ -75,7 +68,7 @@ function ApplyForm({
         information,
         resumeLink,
         resume,
-        referredById: referredById || null,
+        referrerName: referrerName.trim() || null,
         website,
       })
       onDone()
@@ -138,19 +131,16 @@ function ApplyForm({
           className="field !py-1.5"
         />
       </div>
-      {referrers.length > 0 && (
-        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
-          Referred by an employee?
-          <select value={referredById} onChange={(e) => setReferredById(e.target.value)} className="field !py-1.5">
-            <option value="">No, I found this myself</option>
-            {referrers.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+        Referred by (optional)
+        <input
+          value={referrerName}
+          onChange={(e) => setReferrerName(e.target.value)}
+          maxLength={120}
+          placeholder="Type the name of the employee who referred you"
+          className="field !py-1.5"
+        />
+      </label>
       <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
         About you (optional)
         <textarea rows={2} maxLength={2000} value={information} onChange={(e) => setInformation(e.target.value)} className="field !py-1.5" />
@@ -185,7 +175,6 @@ export function CareersPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [sent, setSent] = useState<string[]>([])
-  const [referrers, setReferrers] = useState<Referrer[]>([])
   const [zoom, setZoom] = useState<{ url: string; title: string } | null>(null)
 
   useEffect(() => {
@@ -193,10 +182,6 @@ export function CareersPage() {
       .get<PublicOpening[]>('/hr/careers')
       .then(setOpenings)
       .catch(() => setError('We could not load the open positions. Please try again later.'))
-    api
-      .get<Referrer[]>('/hr/careers?referrers=1')
-      .then(setReferrers)
-      .catch(() => setReferrers([]))
   }, [])
 
   const selected = openings?.find((o) => o.id === selectedId) ?? null
@@ -288,8 +273,7 @@ export function CareersPage() {
                   <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Apply for this position</h3>
                   <ApplyForm
                     opening={selected}
-                    referrers={referrers}
-                    onCancel={() => setSelectedId(null)}
+                      onCancel={() => setSelectedId(null)}
                     onDone={() => setSent((prev) => [...prev, selected.id])}
                   />
                 </>

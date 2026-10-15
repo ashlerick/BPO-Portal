@@ -472,7 +472,9 @@ model Applicant {
   // An uploaded resume (PDF/Word) stored in the bucket, from the careers page.
   resumeKey     String?
   resumeName    String?
-  // The employee who referred this applicant (chosen on the careers page).
+  // Who referred this applicant, as the applicant typed it on the careers page.
+  referrerName  String?
+  // Older applicants picked an employee from a list; kept so they still display.
   referredById  String?
   // Set when this applicant was turned into an employee through Onboarding.
   hiredUserId   String?
