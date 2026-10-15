@@ -24,14 +24,28 @@ function readTab(id: string | undefined, valid: string[], fallback: string): str
   }
 }
 
-export function Tabs({ id, tabs, defaultId }: { id?: string; tabs: TabItem[]; defaultId?: string }) {
+export function Tabs({
+  id,
+  tabs,
+  defaultId,
+  active: controlled,
+  onChange,
+}: {
+  id?: string
+  tabs: TabItem[]
+  defaultId?: string
+  // Set both to let the page switch tabs itself (e.g. a "Scan" button).
+  active?: string
+  onChange?: (id: string) => void
+}) {
   const ids = tabs.map((t) => t.id)
   const [active, setActive] = useState(() => readTab(id, ids, defaultId && ids.includes(defaultId) ? defaultId : (ids[0] ?? '')))
-  const current = tabs.find((t) => t.id === active) ?? tabs[0]
+  const current = tabs.find((t) => t.id === (controlled ?? active)) ?? tabs[0]
   if (!current) return null
 
   function pick(tabId: string) {
     setActive(tabId)
+    onChange?.(tabId)
     if (!id) return
     try {
       localStorage.setItem(STORAGE_PREFIX + id, tabId)

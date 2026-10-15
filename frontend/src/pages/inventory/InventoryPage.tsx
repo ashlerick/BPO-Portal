@@ -20,8 +20,9 @@ import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
 
 // Every row, in every person's folder, shares these column widths so the
 // tag, item, condition and status line up from one folder to the next.
-const ROW_GRID = 'grid grid-cols-[1.25rem_3rem_6.5rem_minmax(9rem,1fr)_10rem_6.5rem_9rem] items-center gap-x-3'
-const MIN_W = 'min-w-[52rem]'
+// Phones: each item is its own card (stacked). md and up: one aligned row.
+const ROW_GRID =
+  'md:grid md:grid-cols-[1.25rem_3rem_6.5rem_minmax(9rem,1fr)_10rem_6.5rem_9rem] md:items-center md:gap-x-3 md:min-w-[52rem]'
 
 function AddItemForm({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState('')
@@ -188,38 +189,49 @@ function ItemRow({
   const { effectiveRoles } = useAuth()
   const isAdmin = effectiveRoles.includes('admin')
   return (
-    <div className={`${ROW_GRID} ${MIN_W} border-b border-black/5 py-2 last:border-0 dark:border-white/5`}>
-      <input type="checkbox" aria-label={`Select ${item.assetTag}`} checked={checked} onChange={(e) => onToggle(e.target.checked)} />
-      <button
-        type="button"
-        onClick={() => setShowQr(true)}
-        aria-label={`Show the QR code for ${item.assetTag}`}
-        className="cursor-zoom-in rounded"
-      >
-        <QrImage value={itemPayload(item)} label={item.assetTag} size={44} />
-      </button>
-      {showQr && (
-        <QrPopup item={item} onClose={() => setShowQr(false)}>
-          <Link
-            to={to}
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            Open item
+    <div
+      className={`${ROW_GRID} flex flex-col gap-2.5 rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03] md:rounded-none md:border-0 md:border-b md:border-black/5 md:bg-transparent md:p-0 md:py-2 md:last:border-0 md:dark:border-white/5 md:dark:bg-transparent`}
+    >
+      <div className="flex items-start gap-3 md:contents">
+        <input
+          type="checkbox"
+          aria-label={`Select ${item.assetTag}`}
+          checked={checked}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-1 h-5 w-5 md:mt-0 md:h-auto md:w-auto"
+        />
+        <button
+          type="button"
+          onClick={() => setShowQr(true)}
+          aria-label={`Show the QR code for ${item.assetTag}`}
+          className="shrink-0 cursor-zoom-in rounded"
+        >
+          <QrImage value={itemPayload(item)} label={item.assetTag} size={52} />
+        </button>
+        {showQr && (
+          <QrPopup item={item} onClose={() => setShowQr(false)}>
+            <Link to={to} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+              Open item
+            </Link>
+          </QrPopup>
+        )}
+        <div className="flex min-w-0 flex-1 flex-col md:contents">
+          <Link to={to} className="truncate font-semibold text-brand-600 dark:text-brand-400 md:font-medium">
+            {item.assetTag}
           </Link>
-        </QrPopup>
-      )}
-      <Link to={to} className="truncate font-medium text-brand-600 dark:text-brand-400">
-        {item.assetTag}
-      </Link>
-      <span className="min-w-0 truncate">
-        {item.name}
-        {item.category && <span className="text-gray-500 dark:text-gray-400"> · {item.category}</span>}
-      </span>
-      <ConditionSelect item={item} onChanged={onChanged} />
-      <span>
-        <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
-      </span>
-      <span className="flex flex-wrap items-center justify-end gap-1.5">
+          <span className="min-w-0 break-words text-sm md:truncate">
+            {item.name}
+            {item.category && <span className="text-gray-500 dark:text-gray-400"> · {item.category}</span>}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 md:contents">
+        <ConditionSelect item={item} onChanged={onChanged} />
+        <span>
+          <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
+        </span>
+      </div>
+      <span className="flex flex-wrap items-center gap-2 border-t border-black/5 pt-2.5 dark:border-white/10 md:justify-end md:gap-1.5 md:border-0 md:pt-0">
         {isAdmin && (
           <Button size="sm" onClick={() => setEditing(true)}>
             Edit
@@ -297,7 +309,7 @@ function PersonFolder({
         </button>
       </div>
       {open && (
-        <div className="overflow-x-auto border-t border-black/10 px-3 text-sm text-gray-800 dark:border-white/10 dark:text-gray-200">
+        <div className="space-y-2 border-t border-black/10 p-2 text-sm text-gray-800 dark:border-white/10 dark:text-gray-200 md:space-y-0 md:overflow-x-auto md:px-3 md:py-0">
           {group.items.map((i) => (
             <ItemRow
               key={i.id}
@@ -321,6 +333,7 @@ export function InventoryPage() {
   const [filter, setFilter] = useState('')
   const [grouped, setGrouped] = useState(true)
   const [dueOnly, setDueOnly] = useState(false)
+  const [tab, setTab] = useState('items')
 
   const load = useCallback(() => {
     api
@@ -372,6 +385,8 @@ export function InventoryPage() {
       <PageHeader title="Inventory" description="Company items. Each item has one holder; one person can hold many." />
       <Tabs
         id="inventory"
+        active={tab}
+        onChange={setTab}
         tabs={[
           {
             id: 'items',
@@ -418,6 +433,9 @@ export function InventoryPage() {
                 />
                 Select all
               </label>
+              <Button size="sm" onClick={() => setTab('scan')}>
+                Scan QR
+              </Button>
               <Button variant="primary" size="sm" disabled={selected.length === 0} onClick={() => setPrinting(true)}>
                 Print QR stickers ({selected.length})
               </Button>
@@ -439,7 +457,7 @@ export function InventoryPage() {
             </div>
           )}
           {shown.length > 0 && !grouped && (
-            <div className="overflow-x-auto text-sm text-gray-800 dark:text-gray-200">
+            <div className="space-y-2 text-sm text-gray-800 dark:text-gray-200 md:space-y-0 md:overflow-x-auto">
               {shown.map((i) => (
                 <ItemRow
                   key={i.id}
