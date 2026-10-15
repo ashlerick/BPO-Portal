@@ -423,7 +423,7 @@ export function MyProfile({ extraTabs = [] }: { extraTabs?: TabItem[] }) {
                   id: 'personal',
                   label: 'Personal',
                   content: (
-                    <SectionStack>
+                    <SectionStack tabs={false}>
           <Section id="profile.personal" title="Personal information" defaultOpen>
             <DetailList
               rows={[
@@ -448,7 +448,7 @@ export function MyProfile({ extraTabs = [] }: { extraTabs?: TabItem[] }) {
                   id: 'work',
                   label: 'Work',
                   content: (
-                    <SectionStack>
+                    <SectionStack tabs={false}>
           <Section id="profile.position" title="Position" hint={profile.position ?? undefined} defaultOpen>
             <DetailList
               rows={[

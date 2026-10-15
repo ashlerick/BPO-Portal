@@ -6,6 +6,7 @@ import { Card, CardForm } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
+import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import { formatDateOnly } from '../../utils/dates'
 import type { Dependent, Enrollment } from '../hr/types'
@@ -247,7 +248,7 @@ function MyBenefits() {
   const tone = { pending: 'amber', enrolled: 'green', waived: 'gray', terminated: 'red' } as const
 
   return (
-    <SectionStack>
+    <SectionStack tabs={false}>
       <Section id="benefits.mine" title="My enrollment status" hint="Your HMO and benefit enrollments" defaultOpen>
         {!enrollments ? (
           <LoadingState />
@@ -332,48 +333,60 @@ export function BenefitsPage() {
   return (
     <div>
       <PageHeader title="Benefits" />
-
-      {canManage && (
-        <div className="mb-4">
-          <CreateForm onCreated={(b) => setData((prev) => (prev ? [...prev, b] : [b]))} />
-        </div>
-      )}
-
-      <div className="mb-3">
-        <MyBenefits />
-      </div>
-
-      {loading && <LoadingState />}
-      {error && <ErrorState message={error} />}
-      {data && data.length === 0 && <EmptyState label="No benefits published yet." />}
-
-      {data && data.length > 0 && (
-        <SectionStack>
-          {Array.from(groupByCategory(data)).map(([category, benefits]) => (
-            <Section
-              key={category}
-              id={`benefits.${category.toLowerCase().replace(/\s+/g, '-')}`}
-              title={category}
-              hint={`${benefits.length} ${benefits.length === 1 ? 'item' : 'items'}`}
-              defaultOpen
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                {benefits.map((benefit) => (
-                  <BenefitCard
-                    key={benefit.id}
-                    benefit={benefit}
-                    canManage={canManage}
-                    onUpdated={(updated) =>
-                      setData((prev) => prev?.map((b) => (b.id === updated.id ? updated : b)) ?? null)
-                    }
-                    onDeleted={(id) => setData((prev) => prev?.filter((b) => b.id !== id) ?? null)}
-                  />
-                ))}
-              </div>
-            </Section>
-          ))}
-        </SectionStack>
-      )}
+      <Tabs
+        id="benefits"
+        tabs={[
+          { id: 'mine', label: 'My benefits', content: <MyBenefits /> },
+          {
+            id: 'catalog',
+            label: 'Available benefits',
+            badge: data ? data.length : undefined,
+            content: (
+              <>
+                {loading && <LoadingState />}
+                {error && <ErrorState message={error} />}
+                {data && data.length === 0 && <EmptyState label="No benefits published yet." />}
+                {data && data.length > 0 && (
+                  <SectionStack tabs={false}>
+                    {Array.from(groupByCategory(data)).map(([category, benefits]) => (
+                      <Section
+                        key={category}
+                        id={`benefits.${category.toLowerCase().replace(/\s+/g, '-')}`}
+                        title={category}
+                        hint={`${benefits.length} ${benefits.length === 1 ? 'item' : 'items'}`}
+                        defaultOpen
+                      >
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {benefits.map((benefit) => (
+                            <BenefitCard
+                              key={benefit.id}
+                              benefit={benefit}
+                              canManage={canManage}
+                              onUpdated={(updated) =>
+                                setData((prev) => prev?.map((b) => (b.id === updated.id ? updated : b)) ?? null)
+                              }
+                              onDeleted={(id) => setData((prev) => prev?.filter((b) => b.id !== id) ?? null)}
+                            />
+                          ))}
+                        </div>
+                      </Section>
+                    ))}
+                  </SectionStack>
+                )}
+              </>
+            ),
+          },
+          ...(canManage
+            ? [
+                {
+                  id: 'add',
+                  label: 'Add a benefit',
+                  content: <CreateForm onCreated={(b) => setData((prev) => (prev ? [...prev, b] : [b]))} />,
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   )
 }

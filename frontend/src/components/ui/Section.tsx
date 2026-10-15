@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { Children, Fragment, isValidElement, useState, type ReactElement, type ReactNode } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import type { Role } from '../../auth/types'
 import { cardClass } from './Card'
+import { Tabs } from './Tabs'
 
 // A collapsible section: a header row with a chevron, content underneath.
 // Every page in the portal is a stack of these (see new_plan.md §1) — the
@@ -98,7 +99,51 @@ export function Section({ id, title, hint, aside, defaultOpen = false, roles, ch
   )
 }
 
-// Vertical stack with consistent spacing, so pages don't repeat the wrapper.
-export function SectionStack({ children }: { children: ReactNode }) {
-  return <div className="space-y-3">{children}</div>
+// Fragments hold Sections too, so look through them.
+function flatten(nodes: ReactNode): ReactNode[] {
+  const out: ReactNode[] = []
+  Children.toArray(nodes).forEach((n) => {
+    if (isValidElement(n) && n.type === Fragment) out.push(...flatten((n.props as { children?: ReactNode }).children))
+    else out.push(n)
+  })
+  return out
+}
+
+// A stack of sections. Two or more Sections become tabs, one per section,
+// so a page with many cards shows one at a time; anything that is not a
+// Section is shown under the tabs. `tabs={false}` keeps the plain
+// collapsible stack (for stacks already inside a tab).
+export function SectionStack({ children, tabs = true }: { children: ReactNode; tabs?: boolean }) {
+  const { effectiveRoles } = useAuth()
+  const items = flatten(children)
+  const isSection = (n: ReactNode): n is ReactElement<SectionProps> => isValidElement(n) && n.type === Section
+  const sections = items.filter(isSection).filter((s) => !s.props.roles || s.props.roles.some((r) => effectiveRoles.includes(r)))
+
+  if (!tabs || sections.length < 2) return <div className="space-y-3">{children}</div>
+
+  const others = items.filter((n) => !isSection(n))
+  const stackId = sections.find((s) => s.props.id)?.props.id
+  const tabId = (s: ReactElement<SectionProps>, i: number) => s.props.id ?? `${i}-${s.props.title}`
+  const open = sections.find((s) => s.props.defaultOpen)
+
+  return (
+    <div>
+      <Tabs
+        id={stackId ? `stack:${stackId}` : undefined}
+        defaultId={open ? tabId(open, sections.indexOf(open)) : undefined}
+        tabs={sections.map((s, i) => ({
+          id: tabId(s, i),
+          label: s.props.title,
+          badge: s.props.aside,
+          content: (
+            <section className={`${cardClass} p-4`}>
+              {s.props.hint && <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{s.props.hint}</p>}
+              {s.props.children}
+            </section>
+          ),
+        }))}
+      />
+      {others.length > 0 && <div className="mt-3 space-y-3">{others}</div>}
+    </div>
+  )
 }

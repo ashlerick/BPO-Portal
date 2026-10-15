@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { isValidElement, useState, type ReactNode } from 'react'
 
 // A row of tabs over one panel, for pages that would otherwise be a long
 // stack of cards. Only the active tab's content is rendered. `id` makes the
@@ -10,7 +10,7 @@ export interface TabItem {
   id: string
   label: string
   // Small count or marker next to the label, e.g. "3".
-  badge?: string | number
+  badge?: ReactNode
   content: ReactNode
 }
 
@@ -24,9 +24,9 @@ function readTab(id: string | undefined, valid: string[], fallback: string): str
   }
 }
 
-export function Tabs({ id, tabs }: { id?: string; tabs: TabItem[] }) {
+export function Tabs({ id, tabs, defaultId }: { id?: string; tabs: TabItem[]; defaultId?: string }) {
   const ids = tabs.map((t) => t.id)
-  const [active, setActive] = useState(() => readTab(id, ids, ids[0] ?? ''))
+  const [active, setActive] = useState(() => readTab(id, ids, defaultId && ids.includes(defaultId) ? defaultId : (ids[0] ?? '')))
   const current = tabs.find((t) => t.id === active) ?? tabs[0]
   if (!current) return null
 
@@ -62,8 +62,8 @@ export function Tabs({ id, tabs }: { id?: string; tabs: TabItem[] }) {
               }`}
             >
               {t.label}
-              {t.badge !== undefined && t.badge !== 0 && t.badge !== '' && (
-                <span className="rounded-full bg-amber-500/20 px-1.5 text-xs text-amber-600 dark:text-amber-400">{t.badge}</span>
+              {t.badge !== undefined && t.badge !== null && t.badge !== false && t.badge !== 0 && t.badge !== '' && (
+                isValidElement(t.badge) ? t.badge : <span className="rounded-full bg-amber-500/20 px-1.5 text-xs text-amber-600 dark:text-amber-400">{t.badge}</span>
               )}
             </button>
           )

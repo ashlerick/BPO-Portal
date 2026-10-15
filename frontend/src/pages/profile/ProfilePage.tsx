@@ -22,7 +22,7 @@ function MyPayslips() {
   const { data, loading, error } = useApiData<MyPayslip[]>('/restricted/payroll?kind=mine')
 
   return (
-    <SectionStack>
+    <SectionStack tabs={false}>
       <Section id="profile.payslips" title="Payslips" hint={data ? `${data.length} available` : undefined}>
         {error && <ErrorState message={error} />}
         {loading && <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>}
@@ -61,7 +61,7 @@ function MyItems() {
 
   const due = data?.filter((i) => !i.checkedThisMonth).length ?? 0
   return (
-    <SectionStack>
+    <SectionStack tabs={false}>
       <Section id="profile.items" title="Company items" hint={data ? `${data.length} assigned` : undefined} defaultOpen>
         {error && <ErrorState message={error} />}
         {data && data.length === 0 && <EmptyState label="No company items assigned to you." />}
