@@ -180,7 +180,7 @@ export function FreedomWallPage() {
               <div
                 role="dialog"
                 aria-label="Choose an emoji"
-                className="absolute bottom-16 left-3 z-20 w-[min(20rem,calc(100%-1.5rem))] rounded-xl border border-black/15 bg-white p-2 shadow-xl"
+                className="absolute left-3 top-full z-20 mt-2 max-h-[60svh] w-[min(20rem,calc(100%-1.5rem))] overflow-y-auto rounded-xl border border-black/15 bg-white p-2 shadow-xl"
               >
                 <div className="grid grid-cols-8 gap-0.5">
                   {PICKER_EMOJI.map((emoji) => (
