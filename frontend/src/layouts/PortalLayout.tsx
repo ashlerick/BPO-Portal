@@ -364,7 +364,7 @@ export function PortalLayout() {
 
   return (
     <div className="min-h-svh md:flex">
-      <WorldClock />
+      <WorldClock variant="floating" />
       {/* ---- Desktop sidebar: fixed to the left edge, full height ---- */}
       <aside
         className={`sticky top-0 hidden h-svh shrink-0 flex-col border-r border-white/10 bg-brand-950 text-gray-200 transition-[width] duration-200 md:flex ${
@@ -452,6 +452,7 @@ export function PortalLayout() {
           <div aria-hidden="true" onClick={() => setMenuOpen(false)} className="fixed inset-0 z-30 bg-black/40 md:hidden" />
         )}
 
+        <WorldClock variant="strip" />
         <main className="min-w-0 flex-1 px-4 py-6 md:px-8">
           <div className="mx-auto w-full max-w-6xl">
             <Outlet />
