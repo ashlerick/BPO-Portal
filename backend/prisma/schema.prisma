@@ -697,7 +697,7 @@ model InventoryItem {
   notes        String?
   assignedTo   Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedToId String?
-  // Latest monthly-check result: excellent | good | fair | poor | damaged
+  // Latest monthly-check result: good | fair | poor | damaged
   condition          String?
   conditionCheckedAt DateTime?
   // Soft delete: hidden everywhere, kept in the database.

@@ -37,7 +37,7 @@ const updateSchema = z.object({
   // 'assigned' is only ever set by assigning.
   status: z.enum(['available', 'repair', 'lost', 'retired']).optional(),
 })
-const CONDITIONS = ['excellent', 'good', 'fair', 'poor', 'damaged'] as const
+const CONDITIONS = ['good', 'fair', 'poor', 'damaged'] as const
 const checkSchema = z.object({
   condition: z.enum(CONDITIONS),
   note: z.string().trim().max(500).nullable().optional(),

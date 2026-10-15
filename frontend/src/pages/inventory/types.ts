@@ -1,4 +1,4 @@
-export type Condition = 'excellent' | 'good' | 'fair' | 'poor' | 'damaged'
+export type Condition = 'good' | 'fair' | 'poor' | 'damaged'
 
 export interface InventoryItem {
   id: string
@@ -37,10 +37,9 @@ export const STATUS_TONE: Record<InventoryItem['status'], 'green' | 'blue' | 'am
   retired: 'gray',
 }
 
-export const CONDITIONS: Condition[] = ['excellent', 'good', 'fair', 'poor', 'damaged']
+export const CONDITIONS: Condition[] = ['good', 'fair', 'poor', 'damaged']
 
 export const CONDITION_LABEL: Record<Condition, string> = {
-  excellent: 'Excellent',
   good: 'Good',
   fair: 'Fair',
   poor: 'Poor',
@@ -48,7 +47,6 @@ export const CONDITION_LABEL: Record<Condition, string> = {
 }
 
 export const CONDITION_TONE: Record<Condition, 'green' | 'blue' | 'amber' | 'red' | 'gray'> = {
-  excellent: 'green',
   good: 'green',
   fair: 'amber',
   poor: 'red',
