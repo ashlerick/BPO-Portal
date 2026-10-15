@@ -300,3 +300,9 @@ A Vercel cron (`vercel.json`, 1st of each month, 01:00 UTC) calls `/api/hr/inven
 It notifies each item holder to check their items' condition and sends HR/Admin a summary.
 It needs a `CRON_SECRET` environment variable (Production); without it the endpoint refuses
 every call and no reminders are sent. Vercel adds the matching `Authorization` header itself.
+
+## Migrations are no longer run by the Vercel build
+
+`postinstall` used to run `prisma migrate deploy`, which intermittently failed the build with
+`P1002` (advisory lock timeout). It now only runs `prisma generate`. **Always apply migrations by
+hand before deploying the backend**: `cd backend && npx prisma migrate deploy`.
