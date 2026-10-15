@@ -87,8 +87,8 @@ function ApplyForm({
   }
 
   return (
-    <form onSubmit={submit} className="mt-4 space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
-      <div className="grid gap-3 sm:grid-cols-3">
+    <form onSubmit={submit} className="mt-3 space-y-3 border-t border-black/10 pt-3 dark:border-white/10">
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
           First name
           <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" className="field" />
@@ -151,7 +151,7 @@ function ApplyForm({
       )}
       <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
         Tell us about yourself (optional)
-        <textarea rows={3} maxLength={2000} value={information} onChange={(e) => setInformation(e.target.value)} className="field" />
+        <textarea rows={2} maxLength={2000} value={information} onChange={(e) => setInformation(e.target.value)} className="field" />
       </label>
       {/* Honeypot: off-screen, not focusable. */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
@@ -200,7 +200,7 @@ export function CareersPage() {
   const selected = openings?.find((o) => o.id === selectedId) ?? null
 
   return (
-    <div className="mx-auto min-h-svh max-w-5xl px-4 py-8">
+    <div className="mx-auto min-h-svh max-w-6xl px-4 py-6">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-10 w-10" />
@@ -237,32 +237,36 @@ export function CareersPage() {
       )}
 
       {selected ? (
-        // Focus view: only the chosen position, with its poster and the form.
+        // Focus view: only the chosen position. Poster and form sit side by
+        // side and fit the window, so both are visible without scrolling.
         <div>
           <button
             type="button"
             onClick={() => setSelectedId(null)}
-            className="mb-4 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+            className="mb-3 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
           >
             ← All positions
           </button>
-          <Card className="overflow-hidden !p-0">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,30rem)]">
             {selected.bannerUrl && (
               <button
                 type="button"
                 onClick={() => setZoom({ url: selected.bannerUrl as string, title: selected.title })}
-                className="block w-full cursor-zoom-in bg-black/20"
+                className="flex cursor-zoom-in items-start justify-center self-start overflow-hidden rounded-xl border border-black/10 bg-black/20 dark:border-white/10 lg:sticky lg:top-4"
                 aria-label={`View the ${selected.title} poster full size`}
               >
-                <img src={selected.bannerUrl} alt={`${selected.title} poster`} className="mx-auto block h-auto w-full" />
-                <span className="block bg-black/30 py-1 text-center text-xs text-gray-200">Click the poster to view it full size</span>
+                <img
+                  src={selected.bannerUrl}
+                  alt={`${selected.title} poster`}
+                  className="block h-auto max-h-[70svh] w-full object-contain lg:max-h-[calc(100svh-7rem)]"
+                />
               </button>
             )}
-            <div className="p-5">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{selected.title}</h2>
+            <Card className="self-start !p-4 lg:max-h-[calc(100svh-7rem)] lg:overflow-y-auto">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{selected.title}</h2>
               {selected.department && <p className="text-sm text-gray-500 dark:text-gray-400">{selected.department}</p>}
               {selected.description && (
-                <p className="mt-3 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{selected.description}</p>
+                <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{selected.description}</p>
               )}
               {sent.includes(selected.id) ? (
                 <div className="mt-4">
@@ -281,8 +285,8 @@ export function CareersPage() {
                   onDone={() => setSent((prev) => [...prev, selected.id])}
                 />
               )}
-            </div>
-          </Card>
+            </Card>
+          </div>
         </div>
       ) : (
         <>
