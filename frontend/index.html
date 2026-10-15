@@ -31,6 +31,10 @@
           var decoded = l.search
             .slice(1)
             .split('&')
+            .filter(function (s) {
+              // The cache-busting value 404.html adds is not part of the real URL.
+              return s.indexOf('_cb=') !== 0
+            })
             .map(function (s) {
               return s.replace(/~and~/g, '&')
             })

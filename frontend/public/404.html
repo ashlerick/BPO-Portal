@@ -21,6 +21,11 @@
           l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') +
           '/?/' +
           l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+          // A value that changes every time, so the browser can never answer this
+          // redirect from a cached copy of the app's entry page (which would keep
+          // showing the previous release for up to 10 minutes after a deploy).
+          // index.html removes it again before React Router sees the URL.
+          '&_cb=' + Date.now() +
           (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
           l.hash,
       )
