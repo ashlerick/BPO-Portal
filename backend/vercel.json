@@ -6,6 +6,7 @@
       "maxDuration": 10
     }
   },
+  "crons": [{ "path": "/api/hr/inventory-reminders", "schedule": "0 1 1 * *" }],
   "rewrites": [
     { "source": "/api/auth/forgot-password", "destination": "/api/auth/set-password?action=forgot" },
     { "source": "/api/auth/admin-reset-password", "destination": "/api/auth/set-password?action=admin-reset" },

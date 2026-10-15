@@ -11,6 +11,7 @@ export const NOTIFICATION_TYPES = {
   todo: 'New to-dos assigned to you',
   applicant: 'New job applications',
   inventory: 'Company items assigned to you',
+  inventory_check: 'Monthly reminder to check your company items',
 } as const
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES

@@ -293,3 +293,10 @@ Backblaze B2 Free, Gmail API. Two things to watch:
   business use.
 - **Neon's free tier gives only a 6-hour backup/recovery window** (see `bpo_plan.md` Phase 7) —
   worth upgrading before this holds real HR data at any real organization's scale.
+
+## Monthly inventory check reminder
+
+A Vercel cron (`vercel.json`, 1st of each month, 01:00 UTC) calls `/api/hr/inventory-reminders`.
+It notifies each item holder to check their items' condition and sends HR/Admin a summary.
+It needs a `CRON_SECRET` environment variable (Production); without it the endpoint refuses
+every call and no reminders are sent. Vercel adds the matching `Authorization` header itself.

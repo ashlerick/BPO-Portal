@@ -17,6 +17,7 @@ import { forbid, isHrOrAdmin, myEmployee, notFound, parseBody, queryString } fro
 //   POST /:id?action=assign   {employeeId} — refused while someone holds it
 //   POST /:id?action=return   {note?}
 //   POST /:id?action=check    {condition, note?} — the monthly condition check
+//                             (HR/Admin on any item, a holder on their own)
 //   GET ?nexttag=1            the asset tag the next new item would get
 // Assigning and returning are audit-logged and kept as history rows.
 
@@ -50,6 +51,10 @@ type ItemRow = Awaited<ReturnType<typeof prisma.inventoryItem.findMany<{ include
 // "YYYY-MM" in Manila time, so a check made late on the 31st counts for that month.
 function currentMonth(): string {
   return new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 7)
+}
+
+export function inventoryMonthStart(): number {
+  return monthStart()
 }
 
 function monthStart(): number {
@@ -143,6 +148,33 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     })
   }
 
+  // ---- the monthly check: HR/Admin on any item, a holder on their own
+  if (sub && action === 'check' && req.method === 'POST') {
+    const item = await prisma.inventoryItem.findUnique({ where: { id: sub } })
+    if (!item) return notFound(res, 'Item not found')
+    if (!hr) {
+      const me = await myEmployee(req)
+      if (!me || item.assignedToId !== me.id) return forbid(res)
+    }
+    const data = parseBody(checkSchema, req.body, res)
+    if (!data) return
+    // Re-checking in the same month replaces that month's result.
+    const month = currentMonth()
+    const now = new Date()
+    await prisma.inventoryCheck.upsert({
+      where: { itemId_month: { itemId: sub, month } },
+      create: { itemId: sub, month, condition: data.condition, note: data.note ?? null, checkedBy: req.auth.sub },
+      update: { condition: data.condition, note: data.note ?? null, checkedBy: req.auth.sub, checkedAt: now },
+    })
+    const updated = await prisma.inventoryItem.update({
+      where: { id: sub },
+      data: { condition: data.condition, conditionCheckedAt: now },
+      include,
+    })
+    await logAudit(req.auth.sub, 'check', 'inventory_item', sub)
+    return res.status(200).json(serialize(updated))
+  }
+
   // ---- writes: HR/Admin only
   if (!hr) return forbid(res)
 
@@ -198,28 +230,6 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     await notifyUsers([employee.userId], { type: 'inventory', title: 'A company item was assigned to you', body: item.name, link: '/profile' })
     const fresh = await prisma.inventoryItem.findUnique({ where: { id: sub }, include })
     return res.status(200).json(serialize(fresh!))
-  }
-
-  if (sub && action === 'check' && req.method === 'POST') {
-    const data = parseBody(checkSchema, req.body, res)
-    if (!data) return
-    const item = await prisma.inventoryItem.findUnique({ where: { id: sub } })
-    if (!item) return notFound(res, 'Item not found')
-    // Re-checking in the same month replaces that month's result.
-    const month = currentMonth()
-    const now = new Date()
-    await prisma.inventoryCheck.upsert({
-      where: { itemId_month: { itemId: sub, month } },
-      create: { itemId: sub, month, condition: data.condition, note: data.note ?? null, checkedBy: req.auth.sub },
-      update: { condition: data.condition, note: data.note ?? null, checkedBy: req.auth.sub, checkedAt: now },
-    })
-    const updated = await prisma.inventoryItem.update({
-      where: { id: sub },
-      data: { condition: data.condition, conditionCheckedAt: now },
-      include,
-    })
-    await logAudit(req.auth.sub, 'check', 'inventory_item', sub)
-    return res.status(200).json(serialize(updated))
   }
 
   if (sub && action === 'return' && req.method === 'POST') {

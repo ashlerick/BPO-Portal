@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button'
 import { CardForm } from '../../components/ui/Card'
 import { Field, FormError } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { Section, SectionStack } from '../../components/ui/Section'
+import { Tabs } from '../../components/ui/Tabs'
 import { api, ApiError } from '../../services/api'
 import { ConditionSelect } from './ConditionSelect'
 import { itemPayload, QrImage } from './qr'
@@ -317,12 +317,15 @@ export function InventoryPage() {
   return (
     <div>
       <PageHeader title="Inventory" description="Company items. Each item has one holder; one person can hold many." />
-      <SectionStack>
-        <Section id="inventory.add" title="Add an item">
-          <AddItemForm onAdded={load} />
-        </Section>
-
-        <Section id="inventory.items" title="Items" hint={items ? `${items.length} total` : undefined} defaultOpen>
+      <Tabs
+        id="inventory"
+        tabs={[
+          {
+            id: 'items',
+            label: 'Items',
+            badge: checkable.length - checkedCount,
+            content: (
+              <>
           {items && checkable.length > 0 && (
             <div className="mb-4 rounded-xl border border-black/10 bg-black/[0.02] p-3 dark:border-white/10 dark:bg-white/[0.03]">
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -395,8 +398,12 @@ export function InventoryPage() {
               ))}
             </div>
           )}
-        </Section>
-      </SectionStack>
+              </>
+            ),
+          },
+          { id: 'add', label: 'Add an item', content: <AddItemForm onAdded={load} /> },
+        ]}
+      />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
 import { Card, CardForm } from '../../components/ui/Card'
 import { Section, SectionStack } from '../../components/ui/Section'
+import { Tabs, type TabItem } from '../../components/ui/Tabs'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components/ui/PasswordInput'
@@ -373,7 +374,9 @@ export function ChangePasswordCard() {
   )
 }
 
-export function MyProfile() {
+// `extraTabs` lets the page add its own tabs (payslips, items) after the
+// profile's Personal and Work tabs.
+export function MyProfile({ extraTabs = [] }: { extraTabs?: TabItem[] }) {
   const [profile, setProfile] = useState<MyEmployeeProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -411,8 +414,16 @@ export function MyProfile() {
       {notFound && (
         <p className="text-sm text-gray-500 dark:text-gray-400">No employee profile on file for your account yet.</p>
       )}
-      {profile && (
-        <SectionStack>
+      <Tabs
+        id="profile"
+        tabs={[
+          ...(profile
+            ? [
+                {
+                  id: 'personal',
+                  label: 'Personal',
+                  content: (
+                    <SectionStack>
           <Section id="profile.personal" title="Personal information" defaultOpen>
             <DetailList
               rows={[
@@ -424,13 +435,21 @@ export function MyProfile() {
               <ContactDetailsCard profile={profile} part="personal" onSaved={setProfile} />
             </div>
           </Section>
-          <Section id="profile.contact" title="Contact information" hint="Phone and address">
+          <Section id="profile.contact" title="Contact information" hint="Phone and address" defaultOpen>
             <ContactDetailsCard profile={profile} part="contact" onSaved={setProfile} />
           </Section>
-          <Section id="profile.emergency" title="Emergency contact">
+          <Section id="profile.emergency" title="Emergency contact" defaultOpen>
             <ContactDetailsCard profile={profile} part="emergency" onSaved={setProfile} />
           </Section>
-          <Section id="profile.position" title="Position" hint={profile.position ?? undefined}>
+                    </SectionStack>
+                  ),
+                },
+                {
+                  id: 'work',
+                  label: 'Work',
+                  content: (
+                    <SectionStack>
+          <Section id="profile.position" title="Position" hint={profile.position ?? undefined} defaultOpen>
             <DetailList
               rows={[
                 ['Position', profile.position ?? '—'],
@@ -440,7 +459,7 @@ export function MyProfile() {
               ]}
             />
           </Section>
-          <Section id="profile.department" title="Department" hint={profile.department ?? undefined}>
+          <Section id="profile.department" title="Department" hint={profile.department ?? undefined} defaultOpen>
             <DetailList
               rows={[
                 ['Department', profile.department ?? '—'],
@@ -448,14 +467,20 @@ export function MyProfile() {
               ]}
             />
           </Section>
-          <Section id="profile.supervisor" title="Supervisor" hint={profile.supervisor ?? undefined}>
+          <Section id="profile.supervisor" title="Supervisor" hint={profile.supervisor ?? undefined} defaultOpen>
             <DetailList rows={[['Supervisor', profile.supervisor ?? 'Not assigned yet']]} />
           </Section>
-          <Section id="profile.employment" title="Employment information">
+          <Section id="profile.employment" title="Employment information" defaultOpen>
             <DetailList rows={employmentFields} />
           </Section>
-        </SectionStack>
-      )}
+                    </SectionStack>
+                  ),
+                },
+              ]
+            : []),
+          ...extraTabs,
+        ]}
+      />
     </div>
   )
 }

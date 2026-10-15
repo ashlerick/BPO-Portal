@@ -14,6 +14,7 @@ import { handler as shifts } from '../lib/handlers/shifts.js'
 import { handler as birthdays } from '../lib/handlers/birthdays.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
+import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -39,8 +40,11 @@ const authed = requireAuth(async (req, res) => {
   res.status(404).json({ message: 'Not found' })
 })
 
-// /api/hr/careers is public (the careers page); everything else needs a login.
+// /api/hr/careers is public (the careers page); everything else needs a login
+// (except the cron endpoint, which has its own secret).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.resource === 'careers') return careers(req, res)
+  // Called by the monthly Vercel cron; checks its own CRON_SECRET.
+  if (req.query.resource === 'inventory-reminders') return inventoryReminders(req, res)
   return authed(req, res)
 }
