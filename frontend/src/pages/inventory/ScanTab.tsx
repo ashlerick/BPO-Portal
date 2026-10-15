@@ -60,20 +60,22 @@ export function ScanTab() {
   const nextKey = useRef(1)
   const [active, setActive] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [rows, setRows] = useState<ScanRow[]>([])
+  // One scan at a time: the camera stops once it reads a code.
+  const [result, setResult] = useState<ScanRow | null>(null)
   const [pasted, setPasted] = useState('')
 
   const handleText = useCallback(
     async (raw: string) => {
-      // The camera sees the same code many times a second: ignore repeats.
+      // The camera loop can fire again before it has stopped: take only one.
       const now = Date.now()
-      if (lastRef.current.text === raw && now - lastRef.current.at < 3000) return
+      if (now - lastRef.current.at < 1500) return
       lastRef.current = { text: raw, at: now }
+      setActive(false)
 
       const payload = parsePayload(raw)
       const key = nextKey.current++
       if (!payload?.assetTag) {
-        setRows((prev) => [{ key, at: new Date(), raw, payload: null, item: null, lookup: 'not_inventory' }, ...prev])
+        setResult({ key, at: new Date(), raw, payload: null, item: null, lookup: 'not_inventory' })
         toast.info('That QR code is not an inventory sticker')
         return
       }
@@ -87,7 +89,7 @@ export function ScanTab() {
           toast.error('Could not look the item up. Showing what the sticker holds.')
         }
       }
-      setRows((prev) => [{ key, at: new Date(), raw, payload, item, lookup }, ...prev])
+      setResult({ key, at: new Date(), raw, payload, item, lookup })
       toast.success(`Scanned ${payload.assetTag}${payload.name ? ` (${payload.name})` : ''}`)
     },
     [toast],
@@ -187,7 +189,7 @@ export function ScanTab() {
     }
   }
 
-  const latest = rows[0]
+  const latest = result
 
   return (
     <div className="space-y-4">
@@ -197,9 +199,16 @@ export function ScanTab() {
             <video ref={videoRef} playsInline muted className={`h-full w-full object-cover ${active ? '' : 'hidden'}`} />
             {!active && (
               <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-sm text-gray-300">
-                <span>Point the camera at an item's QR sticker.</span>
-                <Button variant="primary" onClick={() => setActive(true)}>
-                  Start camera
+                <span>{result ? 'Scanned. Scan another item?' : "Point the camera at an item's QR sticker."}</span>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setResult(null)
+                    lastRef.current = { text: '', at: 0 }
+                    setActive(true)
+                  }}
+                >
+                  {result ? 'Scan another' : 'Start camera'}
                 </Button>
               </div>
             )}
@@ -250,10 +259,12 @@ export function ScanTab() {
         </div>
 
         <div className="min-w-0">
-          <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Last scan</h3>
+          <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Scanned item{latest ? <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{timeFmt.format(latest.at)}</span> : null}
+          </h3>
           {!latest ? (
             <p className="rounded-lg border border-dashed border-black/15 p-6 text-center text-sm text-gray-500 dark:border-white/15 dark:text-gray-400">
-              Nothing scanned yet. Start the camera and hold an item's sticker in the frame.
+              Start the camera and hold an item's sticker in the frame. The camera stops as soon as it reads it, and the item's details appear here.
             </p>
           ) : (
             <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
@@ -303,48 +314,6 @@ export function ScanTab() {
         </div>
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Scanned this session ({rows.length})</h3>
-          {rows.length > 0 && (
-            <Button size="sm" onClick={() => setRows([])}>
-              Clear
-            </Button>
-          )}
-        </div>
-        {rows.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
-            <table className="w-full min-w-[40rem] text-left text-sm">
-              <thead>
-                <tr className="border-b border-black/10 bg-black/[0.03] text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
-                  <th className="px-3 py-2 font-medium">Time</th>
-                  <th className="px-3 py-2 font-medium">Tag</th>
-                  <th className="px-3 py-2 font-medium">Item</th>
-                  <th className="px-3 py-2 font-medium">Category</th>
-                  <th className="px-3 py-2 font-medium">Serial</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium">Holder</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-black/5 dark:divide-white/10">
-                {rows.map((r) => (
-                  <tr key={r.key}>
-                    <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{timeFmt.format(r.at)}</td>
-                    <td className="px-3 py-2 font-medium">{r.payload?.assetTag ?? '—'}</td>
-                    <td className="px-3 py-2">{r.payload?.name ?? (r.payload ? '' : 'Not an inventory sticker')}</td>
-                    <td className="px-3 py-2">{r.payload?.category ?? ''}</td>
-                    <td className="px-3 py-2">{r.payload?.serialNumber ?? ''}</td>
-                    <td className="px-3 py-2">
-                      {r.item ? <Badge tone={STATUS_TONE[r.item.status]}>{STATUS_LABEL[r.item.status]}</Badge> : '—'}
-                    </td>
-                    <td className="px-3 py-2">{r.item ? (r.item.assignedToName ?? 'In storage') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   )
 }
