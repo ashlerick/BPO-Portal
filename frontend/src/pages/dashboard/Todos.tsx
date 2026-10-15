@@ -9,6 +9,7 @@ import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
 interface Todo {
   id: string
   title: string
+  description: string | null
   dueDate: string | null
   link: string | null
   status: 'open' | 'done'
@@ -61,11 +62,18 @@ export function MyTodos() {
           {todos.map((t) => {
             const overdue = t.status === 'open' && t.dueDate !== null && t.dueDate.slice(0, 10) < today
             return (
-              <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={t.status === 'done'} onChange={() => toggle(t)} />
-                  <span className={t.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'}>{t.title}</span>
-                </label>
+              <li key={t.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
+                <div className="min-w-0">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={t.status === 'done'} onChange={() => toggle(t)} />
+                    <span className={t.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'}>{t.title}</span>
+                  </label>
+                  {t.description && (
+                    <p className={`mt-1 whitespace-pre-line pl-6 text-xs ${t.status === 'done' ? 'text-gray-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                      {t.description}
+                    </p>
+                  )}
+                </div>
                 <span className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                   {t.dueDate && (
                     <span className={overdue ? 'font-medium text-red-600 dark:text-red-400' : undefined}>
@@ -94,6 +102,7 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
   const [people, setPeople] = useState<Person[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [link, setLink] = useState('')
   const [busy, setBusy] = useState(false)
@@ -119,11 +128,13 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
       const { assigned } = await api.post<{ assigned: number }>('/hr/todos', {
         employeeIds: selected,
         title,
+        description: description.trim() || null,
         dueDate: dueDate || null,
         link: link.trim() || null,
       })
       setMessage(`Assigned to ${assigned} ${assigned === 1 ? 'person' : 'people'}.`)
       setTitle('')
+      setDescription('')
       setDueDate('')
       setLink('')
       setSelected([])
@@ -141,6 +152,16 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
       <form onSubmit={submit} className="space-y-3">
         <Field label="Task">
           <input required value={title} onChange={(e) => setTitle(e.target.value)} className="field" placeholder="e.g. Sign employee handbook" />
+        </Field>
+        <Field label="Description (optional)">
+          <textarea
+            rows={3}
+            maxLength={2000}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="field"
+            placeholder="Add details, steps or context for the task"
+          />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Due date (optional)">

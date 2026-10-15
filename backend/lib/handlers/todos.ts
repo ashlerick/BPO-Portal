@@ -6,7 +6,7 @@ import { logAudit } from '../audit.js'
 import { notifyUsers } from '../notify.js'
 import { dateOnlyPattern, forbid, isHrOrAdmin, isSupervisorOf, myEmployee, notFound, parseBody, queryString, toDate } from './util.js'
 
-// To-dos under /hr/todos (the old sheet's "To Do's": task, due date, link).
+// To-dos under /hr/todos (the old sheet's "To Do's": task, description, due date, link).
 //   GET            own to-dos; ?employeeId= for HR/Admin or that employee's supervisor
 //   POST           assign to one or many employees (HR/Admin: anyone,
 //                  supervisor: their direct reports only)
@@ -28,6 +28,7 @@ const link = z
 const createSchema = z.object({
   employeeIds: z.array(z.string().uuid()).min(1).max(300),
   title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).nullable().optional(),
   dueDate: z.string().regex(dateOnlyPattern, 'Due date must be YYYY-MM-DD').nullable().optional(),
   link: link.nullable().optional(),
 })
@@ -38,6 +39,7 @@ function serialize(t: {
   id: string
   employeeId: string
   title: string
+  description: string | null
   dueDate: Date | null
   link: string | null
   status: string
@@ -48,6 +50,7 @@ function serialize(t: {
     id: t.id,
     employeeId: t.employeeId,
     title: t.title,
+    description: t.description,
     dueDate: t.dueDate,
     link: t.link,
     status: t.status,
@@ -95,6 +98,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       data: employees.map((e) => ({
         employeeId: e.id,
         title: data.title,
+        description: data.description?.trim() || null,
         dueDate: data.dueDate ? toDate(data.dueDate) : null,
         link: data.link ?? null,
         createdBy: req.auth.sub,

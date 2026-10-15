@@ -626,6 +626,8 @@ model Todo {
   employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   employeeId  String
   title       String
+  // Longer instructions or context for the task (optional).
+  description String?
   dueDate     DateTime?
   link        String?
   // open | done
