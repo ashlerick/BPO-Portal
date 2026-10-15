@@ -126,6 +126,11 @@ export function FreedomWallPage() {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
+    if (body.trim() === '') {
+      setError('Your note is still blank. Write something for the wall first ✍️')
+      areaRef.current?.focus()
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -148,11 +153,13 @@ export function FreedomWallPage() {
       >
         <textarea
           ref={areaRef}
-          required
           maxLength={1000}
           rows={3}
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value)
+            if (error) setError(null)
+          }}
           placeholder="Share a thought, idea or concern…"
           className="no-focus-ring block w-full resize-none rounded border-0 bg-transparent p-0 text-sm text-gray-900 placeholder:text-gray-500 focus:ring-0"
         />
@@ -192,7 +199,7 @@ export function FreedomWallPage() {
           </div>
           <button
             type="submit"
-            disabled={busy || body.trim() === ''}
+            disabled={busy}
             className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-semibold text-white shadow transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy ? 'Posting…' : 'Post anonymously'}
