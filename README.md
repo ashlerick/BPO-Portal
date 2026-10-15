@@ -3,6 +3,7 @@
 Internal portal for the JAE Philus OPC / Philus BPO Services team: attendance, leave, HR records, recruitment, onboarding, performance, payroll, inventory and more, in one place.
 
 - **Project plan:** [bpo_plan.md](./bpo_plan.md) (architecture and phases) and [new_plan.md](./new_plan.md) (HR's feature list and what was built).
+- **Desktop time-tracking app (planned, not built):** [desktop_app_plan.md](./desktop_app_plan.md).
 - **Transferring the project or going live:** [HANDOFF.md](./HANDOFF.md), the runbook for ownership transfer, the Gmail connection, the go-live switch and the monthly reminder.
 
 ## Live
