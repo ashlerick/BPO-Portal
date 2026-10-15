@@ -102,7 +102,7 @@ export function FreedomWallPage() {
       <PageHeader title="Freedom Wall" description="Post anonymously. Nobody — including HR — can see who wrote a post." />
       <form
         onSubmit={submit}
-        className="mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30"
+        className="mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-400/70"
       >
         <textarea
           required
@@ -111,7 +111,7 @@ export function FreedomWallPage() {
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Share a thought, idea or concern…"
-          className="block w-full resize-none rounded border-0 bg-transparent p-0 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
+          className="block w-full resize-none rounded border-0 bg-transparent p-0 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:outline-none focus-visible:outline-none focus:ring-0"
         />
         <FormError message={error} />
         <div className="mt-3 flex items-center justify-between gap-3">
