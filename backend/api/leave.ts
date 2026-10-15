@@ -116,7 +116,7 @@ async function handleCreateLeaveRequest(req: AuthedRequest, res: VercelResponse)
       `<p>Hi ${recipient.firstName},</p>
        <p>${requesterName} submitted a leave request for ${days} day(s), from ${startDate.toDateString()} to ${endDate.toDateString()}.</p>
        <p>Review it in the BPO Portal under Leave Requests.</p>`,
-    )
+    ).catch(() => undefined) // already logged by sendEmail; the request itself succeeded
   }
 
   await notifyRole(

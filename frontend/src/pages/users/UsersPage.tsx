@@ -87,7 +87,13 @@ function CreateUserForm({ onCreated }: { onCreated: (user: ManagedUser) => void 
           teamId: teamId || undefined,
         })
         onCreated(created)
-        setSuccess(`Account created — a setup link was emailed to ${created.email}.`)
+        const failed = (created as ManagedUser & { emailError?: string | null }).emailError
+        if (failed) {
+          setSuccess(null)
+          setError(`Account created for ${created.email}, but the setup email was not sent. ${failed}`)
+        } else {
+          setSuccess(`Account created — a setup link was emailed to ${created.email}.`)
+        }
         setEmail('')
         setFirstName('')
         setLastName('')

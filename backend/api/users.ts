@@ -10,6 +10,7 @@ import { logAudit } from '../lib/audit.js'
 import { isNotFoundError, isUniqueConstraintError } from '../lib/errors.js'
 import { formatDisplayName } from '../lib/names.js'
 import { activateAccount } from '../lib/accounts.js'
+import { EmailError } from '../lib/email.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): GET /users, POST /users, PUT /users/:id.
@@ -149,17 +150,25 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
 
   const setupUrl = `${requireEnv('FRONTEND_URL')}/set-password?token=${token}`
 
-  await sendEmail(
-    email,
-    'Set up your BPO Portal account',
-    `<p>Hi ${firstName},</p>
+  // The account already exists at this point, so a failed email must not
+  // look like a failed creation: say so and let the admin send a link later.
+  let emailError: string | null = null
+  try {
+    await sendEmail(
+      email,
+      'Set up your BPO Portal account',
+      `<p>Hi ${firstName},</p>
      <p>An administrator created an account for you on the BPO Portal.</p>
      <p><a href="${setupUrl}">Click here to set your password</a> and log in. This link expires in 48 hours.</p>
      <p>If you weren't expecting this, you can ignore this email.</p>`,
-  )
+    )
+  } catch (err) {
+    if (!(err instanceof EmailError)) throw err
+    emailError = err.message
+  }
 
   await logAudit(req.auth.sub, 'create', 'user', user.id)
-  res.status(201).json(serialize(user))
+  res.status(201).json({ ...serialize(user), emailError })
 }
 
 async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string) {
@@ -202,8 +211,16 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   // rather than a single catch-all "update". Awaited (unlike most
   // logAudit call sites) so the write is guaranteed to land before the
   // response returns, rather than racing the function's teardown.
+  let emailError: string | null = null
   if (activate) {
-    if (await activateAccount(id)) await logAudit(req.auth.sub, 'activate', 'user', id)
+    try {
+      if (await activateAccount(id)) await logAudit(req.auth.sub, 'activate', 'user', id)
+    } catch (err) {
+      // Activated, but the setup email could not go out.
+      if (!(err instanceof EmailError)) throw err
+      emailError = err.message
+      await logAudit(req.auth.sub, 'activate', 'user', id)
+    }
     const fresh = await prisma.user.findUnique({ where: { id }, select: userSelect })
     if (fresh) user = fresh
   }
@@ -211,7 +228,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   if (email !== undefined) await logAudit(req.auth.sub, 'update_email', 'user', id)
   if (nameChanged) await logAudit(req.auth.sub, 'update_name', 'user', id)
 
-  res.status(200).json(serialize(user))
+  res.status(200).json({ ...serialize(user), emailError })
 }
 
 async function handleDelete(req: AuthedRequest, res: VercelResponse, id: string) {

@@ -6,6 +6,7 @@ import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { hashPassword } from '../auth.js'
 import { activateAccount } from '../accounts.js'
+import { EmailError } from '../email.js'
 import { formatDisplayName } from '../names.js'
 import { isUniqueConstraintError } from '../errors.js'
 import { DEFAULT_TASKS } from './checklists.js'
@@ -174,9 +175,16 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     const user = await prisma.user.findUnique({ where: { id: sub } })
     if (!user) return notFound(res, 'Account not found')
     if (user.active) return res.status(409).json({ message: 'This account is already active' })
-    await activateAccount(sub)
+    let emailError: string | null = null
+    try {
+      await activateAccount(sub)
+    } catch (err) {
+      // The account is switched on; only the setup email failed.
+      if (!(err instanceof EmailError)) throw err
+      emailError = err.message
+    }
     await logAudit(req.auth.sub, 'activate', 'user', sub)
-    return res.status(200).json({ activated: true, email: user.email })
+    return res.status(200).json({ activated: true, email: user.email, emailError })
   }
 
   notFound(res)

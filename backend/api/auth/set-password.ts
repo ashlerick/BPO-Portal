@@ -5,7 +5,7 @@ import { z } from 'zod'
 import type { User } from '@prisma/client'
 import { prisma } from '../../lib/prisma.js'
 import { hashPassword, signToken, verifyPassword, verifyToken, type AuthTokenPayload } from '../../lib/auth.js'
-import { sendEmail } from '../../lib/email.js'
+import { EmailError, sendEmail } from '../../lib/email.js'
 import { logAudit } from '../../lib/audit.js'
 import { withCors } from '../../lib/middleware.js'
 import { formatDisplayName } from '../../lib/names.js'
@@ -231,13 +231,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  if (req.query.action === 'forgot') {
-    await handleForgotPassword(req, res)
-  } else if (req.query.action === 'admin-reset') {
-    await handleAdminResetPassword(req, res)
-  } else if (req.query.action === 'change') {
-    await handleChangePassword(req, res)
-  } else {
-    await handleSetPassword(req, res)
+  try {
+    if (req.query.action === 'forgot') {
+      await handleForgotPassword(req, res)
+    } else if (req.query.action === 'admin-reset') {
+      await handleAdminResetPassword(req, res)
+    } else if (req.query.action === 'change') {
+      await handleChangePassword(req, res)
+    } else {
+      await handleSetPassword(req, res)
+    }
+  } catch (err) {
+    if (res.headersSent) return
+    if (err instanceof EmailError) {
+      // Forgot-password answers the same either way (so it can't be used to
+      // find out who has an account); the failure is in the logs. An admin
+      // who triggered a reset is told exactly what happened.
+      if (req.query.action === 'forgot') {
+        res.status(200).json({ message: 'If that email is registered, a reset link is on its way.' })
+      } else {
+        res.status(502).json({ message: err.message })
+      }
+      return
+    }
+    // Answer with JSON and the CORS headers set above, otherwise the browser
+    // reports a crashed function as an unexplained "CORS error".
+    console.error('set-password failed:', err instanceof Error ? err.message : err)
+    res.status(500).json({ message: 'Something went wrong on our side. Please try again.' })
   }
 }
