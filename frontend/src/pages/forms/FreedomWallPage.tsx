@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState } from '../../components/AsyncState'
 import { Badge } from '../../components/ui/Badge'
-import { Button } from '../../components/ui/Button'
-import { CardForm } from '../../components/ui/Card'
 import { FormError } from '../../components/ui/Field'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { api, ApiError } from '../../services/api'
@@ -102,7 +100,10 @@ export function FreedomWallPage() {
   return (
     <div>
       <PageHeader title="Freedom Wall" description="Post anonymously. Nobody — including HR — can see who wrote a post." />
-      <CardForm onSubmit={submit} className="mb-4 space-y-3">
+      <form
+        onSubmit={submit}
+        className="mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30"
+      >
         <textarea
           required
           maxLength={1000}
@@ -110,13 +111,20 @@ export function FreedomWallPage() {
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder="Share a thought, idea or concern…"
-          className="field w-full"
+          className="block w-full resize-none rounded border-0 bg-transparent p-0 text-sm text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-0"
         />
         <FormError message={error} />
-        <Button type="submit" variant="primary" size="sm" disabled={busy || body.trim() === ''}>
-          {busy ? 'Posting…' : 'Post anonymously'}
-        </Button>
-      </CardForm>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-xs tabular-nums text-gray-600">{body.length} / 1000</span>
+          <button
+            type="submit"
+            disabled={busy || body.trim() === ''}
+            className="rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-semibold text-white shadow transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy ? 'Posting…' : 'Post anonymously'}
+          </button>
+        </div>
+      </form>
 
       {!posts && !error && null}
       {posts && posts.length === 0 && <EmptyState label="No posts yet. Be the first." />}
@@ -166,26 +174,27 @@ export function FreedomWallPage() {
                     </span>
                     {isHr && (
                       <span className="flex gap-2">
-                        <Button
-                          size="sm"
+                        <button
+                          type="button"
                           onClick={async () => {
                             await api.put(`/hr/freedom-wall/${p.id}`, { hidden: !p.hidden })
                             load()
                           }}
+                          className="rounded-md border border-black/40 bg-white px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-sm hover:bg-gray-100"
                         >
                           {p.hidden ? 'Unhide' : 'Hide'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
+                        </button>
+                        <button
+                          type="button"
                           onClick={async () => {
                             if (!window.confirm('Delete this post?')) return
                             await api.delete(`/hr/freedom-wall/${p.id}`)
                             load()
                           }}
+                          className="rounded-md border border-red-700 bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
                         >
                           Delete
-                        </Button>
+                        </button>
                       </span>
                     )}
                   </div>
