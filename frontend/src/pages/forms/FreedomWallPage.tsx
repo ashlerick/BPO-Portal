@@ -60,7 +60,8 @@ export function FreedomWallPage() {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [composing, setComposing] = useState(false)
+  const [noteVisible, setNoteVisible] = useState(true)
+  const noteRef = useRef<HTMLFormElement>(null)
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -138,6 +139,15 @@ export function FreedomWallPage() {
     })
   }
 
+  // Show the "write a note" button only while the note itself is off screen.
+  useEffect(() => {
+    const el = noteRef.current
+    if (!el) return
+    const io = new IntersectionObserver(([entry]) => setNoteVisible(entry.isIntersecting), { threshold: 0.1 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
   // close the picker on Escape or a click anywhere outside it
   useEffect(() => {
     if (!pickerOpen) return
@@ -166,7 +176,6 @@ export function FreedomWallPage() {
       const created = await api.post<Post>('/hr/freedom-wall', { body })
       setPosts((prev) => [created, ...(prev ?? [])])
       setBody('')
-      setComposing(false)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       toast.success('Posted anonymously')
     } catch (err) {
@@ -179,13 +188,10 @@ export function FreedomWallPage() {
   return (
     <div>
       <PageHeader title="Freedom Wall" description="Post anonymously. Nobody — including HR — can see who wrote a post." />
-      {/* Compose: a slim bar that stays in view on desktop, a corner button on phones. */}
-      <div className="sticky top-[4.25rem] z-30 mb-6 md:top-3">
-        {composing ? (
-          <div className="relative">
       <form
+        ref={noteRef}
         onSubmit={submit}
-        className="relative max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
+        className="relative z-30 mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
       >
         <textarea
           ref={areaRef}
@@ -242,41 +248,17 @@ export function FreedomWallPage() {
           </button>
         </div>
       </form>
-            <button
-              type="button"
-              onClick={() => setComposing(false)}
-              aria-label="Close the note"
-              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-gray-600 hover:bg-black/10"
-            >
-              ✕
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setComposing(true)
-              requestAnimationFrame(() => areaRef.current?.focus())
-            }}
-            className="hidden w-full max-w-xl items-center justify-between gap-3 rounded-md border border-yellow-300 bg-yellow-100 px-4 py-3 text-left text-sm text-gray-700 shadow-md shadow-black/30 hover:bg-yellow-50 md:flex"
-          >
-            <span>{body ? `Draft: ${body.slice(0, 40)}${body.length > 40 ? '…' : ''}` : 'Share a thought, idea or concern…'}</span>
-            <span className="text-xl" aria-hidden="true">
-              😊
-            </span>
-          </button>
-        )}
-      </div>
-      {!composing && (
+
+      {/* Back to the note: only while the note is scrolled out of view. */}
+      {!noteVisible && (
         <button
           type="button"
           onClick={() => {
             window.scrollTo({ top: 0, behavior: 'smooth' })
-            setComposing(true)
-            requestAnimationFrame(() => areaRef.current?.focus())
+            window.setTimeout(() => areaRef.current?.focus(), 350)
           }}
           aria-label="Write a note"
-          className="fixed bottom-5 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-300 text-2xl shadow-xl shadow-black/40 active:scale-95 md:hidden"
+          className="fixed bottom-5 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-300 text-2xl shadow-xl shadow-black/40 active:scale-95"
         >
           ✏️
         </button>
