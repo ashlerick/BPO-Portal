@@ -15,7 +15,7 @@ import { handler as birthdays } from '../lib/handlers/birthdays.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
-import { createCode, deviceMe, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
+import { createCode, deviceClockIn, deviceClockOut, deviceMe, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -53,5 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // The desktop app signs in with a one-time code, then a device token (not the portal login).
   if (req.query.resource === 'device-token') return exchangeCode(req, res)
   if (req.query.resource === 'device-me') return deviceMe(req, res)
+  if (req.query.resource === 'device-today') return deviceToday(req, res)
+  if (req.query.resource === 'device-clock-in') return deviceClockIn(req, res)
+  if (req.query.resource === 'device-clock-out') return deviceClockOut(req, res)
   return authed(req, res)
 }

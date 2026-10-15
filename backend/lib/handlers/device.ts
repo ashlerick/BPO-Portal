@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import { withCors, type AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
+import { minutesIntoManilaDay, todayInManila } from '../dates.js'
+import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 
@@ -13,6 +15,8 @@ import { notFound, parseBody, queryString } from './util.js'
 //   POST   /hr/device-token    (no login; the code is the credential)
 //                              {code, deviceName} -> { token, user }
 //   GET    /hr/device-me       (Bearer device token) -> who this PC is signed in as
+//   GET    /hr/device-today    (Bearer device token) -> today's attendance for this person
+//   POST   /hr/device-clock-in, /hr/device-clock-out (Bearer device token) -> same records as the Attendance page
 //   GET    /hr/devices         (portal login)   -> my connected PCs
 //   DELETE /hr/devices/:id     (portal login)   -> disconnect one
 //
@@ -121,20 +125,8 @@ export async function deviceMe(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' })
 
-  const header = req.headers.authorization
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined
-  if (!token) return res.status(401).json({ message: 'Missing device token' })
-
-  const device = await prisma.device.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } })
-  if (!device || device.revokedAt || !device.user.active) {
-    // The app should drop its token and show the sign-in screen again.
-    return res.status(401).json({ message: 'This PC is no longer connected. Press Launch App in the portal to connect again.' })
-  }
-
-  // note when this PC was last seen, at most once a minute
-  if (!device.lastSeenAt || Date.now() - device.lastSeenAt.getTime() > 60_000) {
-    await prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } })
-  }
+  const device = await authDevice(req, res)
+  if (!device) return
 
   return res.status(200).json({
     user: {
@@ -143,5 +135,115 @@ export async function deviceMe(req: VercelRequest, res: VercelResponse) {
       firstName: device.user.firstName,
     },
     device: { id: device.id, name: device.name },
+  })
+}
+
+// ---- time tracking: attendance through the device token ----
+// These read and write the same AttendanceRecord rows as the portal's own Attendance page
+// (api/leave.ts), so late/undertime reports and the weekly tracker keep working. Same rules:
+// one record per shift day, and check-in is only recorded between 7:30 PM and 5:30 AM Manila time.
+const CHECK_IN_WINDOW_START_MIN = 19 * 60 + 30
+const CHECK_IN_WINDOW_END_MIN = 5 * 60 + 30
+
+type DeviceWithUser = NonNullable<Awaited<ReturnType<typeof findDevice>>>
+
+async function findDevice(req: VercelRequest) {
+  const header = req.headers.authorization
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined
+  if (!token) return null
+  const device = await prisma.device.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } })
+  if (!device || device.revokedAt || !device.user.active) return null
+  return device
+}
+
+// Returns the device, or has already answered 401 (the app drops its token and asks to reconnect).
+async function authDevice(req: VercelRequest, res: VercelResponse): Promise<DeviceWithUser | null> {
+  const device = await findDevice(req)
+  if (!device) {
+    const hasToken = req.headers.authorization?.startsWith('Bearer ')
+    res.status(401).json({
+      message: hasToken
+        ? 'This PC is no longer connected. Press Launch App in the portal to connect again.'
+        : 'Missing device token',
+    })
+    return null
+  }
+  // note when this PC was last seen, at most once a minute
+  if (!device.lastSeenAt || Date.now() - device.lastSeenAt.getTime() > 60_000) {
+    await prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } })
+  }
+  return device
+}
+
+function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null } | null) {
+  return {
+    checkedIn: !!record?.checkInAt,
+    checkedOut: !!record?.checkOutAt,
+    status: record?.status ?? null,
+    checkInAt: record?.checkInAt ?? null,
+    checkOutAt: record?.checkOutAt ?? null,
+    // The server's clock is the reference; the app must not trust the PC clock for hours.
+    serverNow: new Date(),
+  }
+}
+
+async function deviceAttendance(
+  req: VercelRequest,
+  res: VercelResponse,
+  method: 'GET' | 'POST',
+  act: (employeeId: string, device: DeviceWithUser) => Promise<void>,
+) {
+  withCors(res)
+  if (req.method === 'OPTIONS') return res.status(204).end()
+  if (req.method !== method) return res.status(405).json({ message: 'Method not allowed' })
+  const device = await authDevice(req, res)
+  if (!device) return
+  const employee = await prisma.employee.findUnique({ where: { userId: device.userId } })
+  if (!employee) return res.status(404).json({ message: 'No employee profile on file yet. Ask HR to set one up.' })
+  await act(employee.id, device)
+}
+
+export async function deviceToday(req: VercelRequest, res: VercelResponse) {
+  return deviceAttendance(req, res, 'GET', async (employeeId) => {
+    const record = await prisma.attendanceRecord.findUnique({
+      where: { employeeId_date: { employeeId, date: todayInManila() } },
+    })
+    res.status(200).json(attendanceBody(record))
+  })
+}
+
+export async function deviceClockIn(req: VercelRequest, res: VercelResponse) {
+  return deviceAttendance(req, res, 'POST', async (employeeId, device) => {
+    const date = todayInManila()
+    const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
+    // The portal checks people in automatically at login, so "already in" is a normal answer, not an error.
+    if (existing?.checkInAt) return void res.status(200).json(attendanceBody(existing))
+
+    const minutesNow = minutesIntoManilaDay()
+    if (minutesNow > CHECK_IN_WINDOW_END_MIN && minutesNow < CHECK_IN_WINDOW_START_MIN) {
+      return void res.status(400).json({ message: 'Check-in is only recorded between 7:30 PM and 5:30 AM.' })
+    }
+    const data = { checkInAt: new Date(), checkInIp: getClientIp(req) }
+    const record = existing
+      ? await prisma.attendanceRecord.update({ where: { id: existing.id }, data })
+      : await prisma.attendanceRecord.create({ data: { employeeId, date, ...data } })
+    logAudit(device.userId, 'check_in', 'attendance', record.id)
+    res.status(201).json(attendanceBody(record))
+  })
+}
+
+export async function deviceClockOut(req: VercelRequest, res: VercelResponse) {
+  return deviceAttendance(req, res, 'POST', async (employeeId, device) => {
+    const existing = await prisma.attendanceRecord.findUnique({
+      where: { employeeId_date: { employeeId, date: todayInManila() } },
+    })
+    if (!existing?.checkInAt) return void res.status(400).json({ message: "You haven't clocked in today yet." })
+    if (existing.checkOutAt) return void res.status(200).json(attendanceBody(existing))
+    const record = await prisma.attendanceRecord.update({
+      where: { id: existing.id },
+      data: { checkOutAt: new Date(), checkOutIp: getClientIp(req) },
+    })
+    logAudit(device.userId, 'check_out', 'attendance', record.id)
+    res.status(200).json(attendanceBody(record))
   })
 }
