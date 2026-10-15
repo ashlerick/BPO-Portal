@@ -545,7 +545,7 @@ export function EmployeeRecordPage() {
       <PageHeader title={employee.name} description={[employee.position, employee.department, employee.email].filter(Boolean).join(' · ')} />
 
       <SectionStack>
-        <Section id="record.main" title="Complete employee record" hint="ID, position, department, supervisor, dates, status" defaultOpen>
+        <Section group="Record" id="record.main" title="Complete employee record" hint="ID, position, department, supervisor, dates, status" defaultOpen>
           <RecordForm
             employee={employee}
             departments={departments}
@@ -554,10 +554,10 @@ export function EmployeeRecordPage() {
             onSaved={(updated) => setEveryone((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
           />
         </Section>
-        <Section id="record.salary" title="Salary information" hint="Restricted" roles={['hr', 'admin']}>
+        <Section group="Salary" id="record.salary" title="Salary information" hint="Restricted" roles={['hr', 'admin']}>
           <SalarySection employeeId={employee.id} />
         </Section>
-        <Section id="record.emergency" title="Emergency contacts">
+        <Section group="Record" id="record.emergency" title="Emergency contacts">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-xs text-gray-500 dark:text-gray-400">Name</dt>
@@ -570,16 +570,16 @@ export function EmployeeRecordPage() {
           </dl>
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Employees keep this up to date themselves on My Profile.</p>
         </Section>
-        <Section id="record.dependents" title="Dependents">
+        <Section group="Family and history" id="record.dependents" title="Dependents">
           <DependentsSection employeeId={employee.id} />
         </Section>
-        <Section id="record.history" title="Employment history">
+        <Section group="Family and history" id="record.history" title="Employment history">
           <HistorySection employeeId={employee.id} />
         </Section>
-        <Section id="record.requirements" title="Government / HR requirements">
+        <Section group="Requirements and documents" id="record.requirements" title="Government / HR requirements">
           <RequirementsSection employeeId={employee.id} />
         </Section>
-        <Section id="record.documents" title="Employee documents" hint="Visible only to this employee and HR">
+        <Section group="Requirements and documents" id="record.documents" title="Employee documents" hint="Visible only to this employee and HR">
           <DocumentsSection employeeId={employee.id} />
         </Section>
       </SectionStack>

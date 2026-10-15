@@ -43,6 +43,9 @@ interface SectionProps {
   aside?: ReactNode
   defaultOpen?: boolean
   roles?: readonly Role[]
+  // Sections sharing a `group` become ONE tab (stacked inside it) when the
+  // stack is shown as tabs, so a long page doesn't end up with a tab per card.
+  group?: string
   children: ReactNode
 }
 
@@ -123,25 +126,43 @@ export function SectionStack({ children, tabs = true }: { children: ReactNode; t
 
   const others = items.filter((n) => !isSection(n))
   const stackId = sections.find((s) => s.props.id)?.props.id
-  const tabId = (s: ReactElement<SectionProps>, i: number) => s.props.id ?? `${i}-${s.props.title}`
-  const open = sections.find((s) => s.props.defaultOpen)
+
+  // One tab per group (or per section when it has no group), in page order.
+  const tabsByKey = new Map<string, { label: string; sections: ReactElement<SectionProps>[] }>()
+  sections.forEach((s, i) => {
+    const key = s.props.group ? `g:${s.props.group}` : `s:${s.props.id ?? `${i}-${s.props.title}`}`
+    const entry = tabsByKey.get(key) ?? { label: s.props.group ?? s.props.title, sections: [] }
+    entry.sections.push(s)
+    tabsByKey.set(key, entry)
+  })
+  const entries = [...tabsByKey.entries()]
+  const open = entries.find(([, e]) => e.sections.some((s) => s.props.defaultOpen))
 
   return (
     <div>
       <Tabs
         id={stackId ? `stack:${stackId}` : undefined}
-        defaultId={open ? tabId(open, sections.indexOf(open)) : undefined}
-        tabs={sections.map((s, i) => ({
-          id: tabId(s, i),
-          label: s.props.title,
-          badge: s.props.aside,
-          content: (
-            <section className={`${cardClass} p-4`}>
-              {s.props.hint && <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{s.props.hint}</p>}
-              {s.props.children}
-            </section>
-          ),
-        }))}
+        defaultId={open?.[0]}
+        tabs={entries.map(([key, e]) => {
+          const single = e.sections.length === 1 ? e.sections[0] : null
+          return {
+            id: key,
+            label: e.label,
+            badge: e.sections.find((s) => s.props.aside)?.props.aside,
+            content: single ? (
+              <section className={`${cardClass} p-4`}>
+                {single.props.hint && <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{single.props.hint}</p>}
+                {single.props.children}
+              </section>
+            ) : (
+              <div className="space-y-3">
+                {e.sections.map((s, i) => (
+                  <Section key={s.props.id ?? i} {...s.props} defaultOpen group={undefined} />
+                ))}
+              </div>
+            ),
+          }
+        })}
       />
       {others.length > 0 && <div className="mt-3 space-y-3">{others}</div>}
     </div>

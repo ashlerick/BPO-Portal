@@ -335,48 +335,48 @@ export function PerformancePage() {
     <div>
       <PageHeader title="Performance Management" description="Evaluations, coaching and improvement plans." />
       <SectionStack>
-        <Section id="perf.kpi" title="My KPI scorecard" hint="Monthly scores by core value">
+        <Section group="KPIs" id="perf.kpi" title="My KPI scorecard" hint="Monthly scores by core value">
           <KpiScorecard />
         </Section>
 
-        <Section id="perf.kpi-entry" title="Score KPIs" hint="Enter an employee's monthly scores" roles={['hr', 'admin']}>
+        <Section group="KPIs" id="perf.kpi-entry" title="Score KPIs" hint="Enter an employee's monthly scores" roles={['hr', 'admin']}>
           <KpiEntry />
         </Section>
 
-        <Section id="perf.kpi-settings" title="KPI settings" hint="Scale, formula and KPI list" roles={['hr', 'admin']}>
+        <Section group="KPIs" id="perf.kpi-settings" title="KPI settings" hint="Scale, formula and KPI list" roles={['hr', 'admin']}>
           <KpiSettings />
         </Section>
 
-        <Section id="perf.start" title="Start a performance evaluation" roles={['hr', 'admin']}>
+        <Section group="Evaluations" id="perf.start" title="Start a performance evaluation" roles={['hr', 'admin']}>
           <StartReviewForm onCreated={(r) => setReviews((prev) => (prev ? [r, ...prev] : [r]))} />
         </Section>
 
-        <Section id="perf.mine" title="My evaluations" hint="Self assessment and results" defaultOpen>
+        <Section group="Evaluations" id="perf.mine" title="My evaluations" hint="Self assessment and results" defaultOpen>
           {renderReviews(mine)}
         </Section>
 
         {(isSupervisor || isHr) && (
-          <Section id="perf.team" title={isHr ? 'Employee evaluations' : 'Supervisor evaluation: my team'} hint={`${team.length} evaluation${team.length === 1 ? '' : 's'}`} defaultOpen>
+          <Section group="Evaluations" id="perf.team" title={isHr ? 'Employee evaluations' : 'Supervisor evaluation: my team'} hint={`${team.length} evaluation${team.length === 1 ? '' : 's'}`} defaultOpen>
             {renderReviews(team)}
           </Section>
         )}
 
-        <Section id="perf.hr" title="HR review" hint={`${awaitingHr.length} waiting`} roles={['hr', 'admin']} aside={awaitingHr.length > 0 ? <Badge tone="amber">{awaitingHr.length}</Badge> : undefined}>
+        <Section group="Evaluations" id="perf.hr" title="HR review" hint={`${awaitingHr.length} waiting`} roles={['hr', 'admin']} aside={awaitingHr.length > 0 ? <Badge tone="amber">{awaitingHr.length}</Badge> : undefined}>
           {renderReviews(awaitingHr)}
         </Section>
 
-        <Section id="perf.history" title="Performance history" hint="Completed evaluations">
+        <Section group="Evaluations" id="perf.history" title="Performance history" hint="Completed evaluations">
           {renderReviews(reviews.filter((r) => r.status === 'completed'))}
         </Section>
 
-        <Section id="perf.coaching" title="Coaching" hint={`${notes.filter((n) => n.kind === 'coaching').length}`}>
+        <Section group="Coaching and plans" id="perf.coaching" title="Coaching" hint={`${notes.filter((n) => n.kind === 'coaching').length}`}>
           <div className="space-y-3">
             {(isHr || isSupervisor) && <NoteForm kind="coaching" canPickAnyone={isHr} onCreated={(n) => setNotes((prev) => (prev ? [n, ...prev] : [n]))} />}
             <NoteList notes={notes.filter((n) => n.kind === 'coaching')} canManage={isHr || isSupervisor} onUpdated={replaceNote} />
           </div>
         </Section>
 
-        <Section id="perf.plans" title="Improvement plans" hint={`${notes.filter((n) => n.kind === 'improvement_plan').length}`}>
+        <Section group="Coaching and plans" id="perf.plans" title="Improvement plans" hint={`${notes.filter((n) => n.kind === 'improvement_plan').length}`}>
           <div className="space-y-3">
             {(isHr || isSupervisor) && <NoteForm kind="improvement_plan" canPickAnyone={isHr} onCreated={(n) => setNotes((prev) => (prev ? [n, ...prev] : [n]))} />}
             <NoteList notes={notes.filter((n) => n.kind === 'improvement_plan')} canManage={isHr || isSupervisor} onUpdated={replaceNote} />

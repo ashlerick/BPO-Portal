@@ -9,6 +9,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
+import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
 import { AssignShift, LateReport, MySchedule, ShiftTemplates } from './Shifts'
@@ -375,7 +376,15 @@ export function AttendancePage() {
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
 
-      <SectionStack>
+      <Tabs
+        id="attendance"
+        tabs={[
+          {
+            id: 'today',
+            label: 'Today',
+            badge: attendanceStatus?.checkedIn && !attendanceStatus.checkOutAt ? 'In' : undefined,
+            content: (
+        <SectionStack tabs={false}>
         <Section
           id="attendance.today"
           title="Time in / Time out"
@@ -408,6 +417,20 @@ export function AttendancePage() {
           </p>
         </Section>
 
+        {(!isReviewer || employeeId) && (
+          <Section id="attendance.weekly" title="Weekly tracker" hint="Regular hours, overtime, working holiday" defaultOpen>
+            <WeeklyTracker employeeId={employeeId} reloadToken={reloadToken} />
+          </Section>
+        )}
+        </SectionStack>
+            ),
+          },
+          {
+            id: 'history',
+            label: 'History and reports',
+            badge: absences.length > 0 ? absences.length : undefined,
+            content: (
+        <SectionStack tabs={false}>
         <Section id="attendance.history" title="Attendance history" hint={`${from} to ${to}`} defaultOpen>
           {data && data.length === 0 && <EmptyState label="No attendance records in this range." />}
           {data && data.length > 0 && (
@@ -489,52 +512,6 @@ export function AttendancePage() {
           )}
         </Section>
 
-        <Section id="attendance.schedule" title="My shift schedule" hint="Set by HR">
-          <MySchedule />
-        </Section>
-
-        <Section id="attendance.late" title="Late / undertime records" hint={`${from} to ${to}`}>
-          <LateReport from={from} to={to} employeeId={employeeId} />
-        </Section>
-
-        <Section id="attendance.shifts" title="Shift schedules" hint="HR / Admin: define shifts" roles={['hr', 'admin']}>
-          <ShiftTemplates />
-        </Section>
-
-        <Section id="attendance.assign" title="Assign shifts" hint="HR / Admin: put employees on a shift" roles={['hr', 'admin']}>
-          <AssignShift />
-        </Section>
-
-        <Section
-          id="attendance.absences"
-          title="Absences"
-          hint={`${absences.length} in this range`}
-          aside={absences.length > 0 ? <Badge tone="amber">{absences.length}</Badge> : undefined}
-        >
-          {absences.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No absences in this range.</p>
-          ) : (
-            <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
-              {absences.map((r) => (
-                <li key={r.id} className="flex flex-wrap justify-between gap-2 py-2">
-                  <span className="text-gray-900 dark:text-gray-100">{isReviewer ? r.employeeName : 'Absent'}</span>
-                  <span className="text-gray-500 dark:text-gray-400">{formatDateOnly(r.date)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        {(!isReviewer || employeeId) && (
-          <Section id="attendance.weekly" title="Weekly tracker" hint="Regular hours, overtime, working holiday" defaultOpen>
-            <WeeklyTracker employeeId={employeeId} reloadToken={reloadToken} />
-          </Section>
-        )}
-
-        <Section id="attendance.corrections" title="Attendance corrections" hint="HR / Admin" roles={['hr', 'admin']}>
-          <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />
-        </Section>
-
         <Section id="attendance.summary" title="Attendance summary" hint={`${from} to ${to}`}>
           <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
@@ -562,7 +539,69 @@ export function AttendancePage() {
             </p>
           )}
         </Section>
-      </SectionStack>
+
+        <Section id="attendance.late" title="Late / undertime records" hint={`${from} to ${to}`}>
+          <LateReport from={from} to={to} employeeId={employeeId} />
+        </Section>
+
+        <Section
+          id="attendance.absences"
+          title="Absences"
+          hint={`${absences.length} in this range`}
+          aside={absences.length > 0 ? <Badge tone="amber">{absences.length}</Badge> : undefined}
+        >
+          {absences.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No absences in this range.</p>
+          ) : (
+            <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+              {absences.map((r) => (
+                <li key={r.id} className="flex flex-wrap justify-between gap-2 py-2">
+                  <span className="text-gray-900 dark:text-gray-100">{isReviewer ? r.employeeName : 'Absent'}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{formatDateOnly(r.date)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+        </SectionStack>
+            ),
+          },
+          {
+            id: 'shifts',
+            label: 'Shifts',
+            content: (
+        <SectionStack tabs={false}>
+        <Section id="attendance.schedule" title="My shift schedule" hint="Set by HR">
+          <MySchedule />
+        </Section>
+
+        <Section id="attendance.shifts" title="Shift schedules" hint="HR / Admin: define shifts" roles={['hr', 'admin']}>
+          <ShiftTemplates />
+        </Section>
+
+        <Section id="attendance.assign" title="Assign shifts" hint="HR / Admin: put employees on a shift" roles={['hr', 'admin']}>
+          <AssignShift />
+        </Section>
+        </SectionStack>
+            ),
+          },
+          ...(isReviewer
+            ? [
+                {
+                  id: 'corrections',
+                  label: 'Corrections',
+                  content: (
+        <SectionStack tabs={false}>
+        <Section id="attendance.corrections" title="Attendance corrections" hint="HR / Admin" roles={['hr', 'admin']}>
+          <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />
+        </Section>
+        </SectionStack>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
     </div>
   )
 }
