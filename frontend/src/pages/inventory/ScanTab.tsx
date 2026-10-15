@@ -53,14 +53,14 @@ function parsePayload(text: string): Payload | null {
   return null
 }
 
-export function ScanTab() {
+export function ScanTab({ autoStart = false }: { autoStart?: boolean }) {
   const toast = useToast()
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const lastRef = useRef<{ text: string; at: number }>({ text: '', at: 0 })
   const nextKey = useRef(1)
-  const [active, setActive] = useState(false)
+  const [active, setActive] = useState(autoStart)
   const [cameraError, setCameraError] = useState<string | null>(null)
   // One scan at a time: the camera stops once it reads a code.
   const [result, setResult] = useState<ScanRow | null>(null)

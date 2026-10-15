@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { EmptyState, ErrorState } from '../../components/AsyncState'
 import { EmployeeSelect } from '../../components/EmployeeSelect'
 import { Badge } from '../../components/ui/Badge'
@@ -357,7 +357,10 @@ export function InventoryPage() {
   const [filter, setFilter] = useState('')
   const [grouped, setGrouped] = useState(false)
   const [dueOnly, setDueOnly] = useState(false)
-  const [tab, setTab] = useState('items')
+  const [params] = useSearchParams()
+  // Arrived from the phone's quick scan button: open the scanner and start the camera.
+  const quickScan = params.get('tab') === 'scan'
+  const [tab, setTab] = useState(quickScan ? 'scan' : 'items')
 
   const load = useCallback(() => {
     api
@@ -525,7 +528,7 @@ export function InventoryPage() {
             ),
           },
           { id: 'add', label: 'Add an item', content: <AddItemForm onAdded={load} /> },
-          { id: 'scan', label: 'Scan QR', content: <ScanTab /> },
+          { id: 'scan', label: 'Scan QR', content: <ScanTab autoStart={quickScan} /> },
         ]}
       />
     </div>

@@ -5,6 +5,7 @@ import { ROLE_LABELS, type Role } from '../auth/types'
 import { api, ApiError } from '../services/api'
 import { useTheme } from '../theme/ThemeContext'
 import { NOTIFICATIONS_CHANGED, type NotificationsResponse } from '../pages/notifications/types'
+import { QuickScanButton } from '../components/ui/QuickScanButton'
 import { WorldClock } from '../components/ui/WorldClock'
 import { Icon, type IconName } from './icons'
 import { MENU_CHANGED, resolveNav, type MenuConfig, type VisibleGroup } from './nav'
@@ -365,6 +366,7 @@ export function PortalLayout() {
   return (
     <div className="min-h-svh md:flex">
       <WorldClock variant="floating" />
+      <QuickScanButton />
       {/* ---- Desktop sidebar: fixed to the left edge, full height ---- */}
       <aside
         className={`sticky top-0 hidden h-svh shrink-0 flex-col border-r border-white/10 bg-brand-950 text-gray-200 transition-[width] duration-200 md:flex ${
