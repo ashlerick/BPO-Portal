@@ -204,7 +204,7 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
 
 function readGroupOpen(key: string): boolean | null {
   try {
-    const v = localStorage.getItem(`navgroup:${key}`)
+    const v = localStorage.getItem(`navgroup2:${key}`)
     return v === null ? null : v === '1'
   } catch {
     return null
@@ -240,7 +240,7 @@ function NavGroupBlock({
   function toggle() {
     setOpen((prev) => {
       try {
-        localStorage.setItem(`navgroup:${group.key}`, prev ? '0' : '1')
+        localStorage.setItem(`navgroup2:${group.key}`, prev ? '0' : '1')
       } catch {
         // storage blocked: the group just won't remember its state
       }
@@ -257,7 +257,7 @@ function NavGroupBlock({
           type="button"
           onClick={toggle}
           aria-expanded={open}
-          className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition hover:text-gray-200"
+          className="no-focus-ring flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition hover:text-gray-200 focus-visible:text-gray-100"
         >
           {group.label}
           <Icon name="chevron" className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
