@@ -141,6 +141,12 @@ body {
   outline-offset: 2px;
 }
 
+/* For a field that sits inside something which already shows focus itself
+   (the Freedom Wall compose note). Declared after the rule above so it wins. */
+.no-focus-ring:focus-visible {
+  outline: none;
+}
+
 @layer base {
   h1,
   h2,
