@@ -1,10 +1,12 @@
 // "Download the desktop app" link for the top-right corner of the portal on a
 // PC. The desktop app (see desktop_app_plan.md) is not built yet, so the
 // button stays hidden until a release exists: set DESKTOP_APP_URL to the
-// installer's address (a GitHub Releases asset) and flip DESKTOP_APP_READY.
+// installer's address (a GitHub Releases asset in the desktop app's own repo)
+// and flip DESKTOP_APP_READY.
 
 export const DESKTOP_APP_READY = false
-export const DESKTOP_APP_URL = 'https://github.com/ashlerick/BPO-Portal/releases/latest/download/BPO-Time-Setup.exe'
+export const DESKTOP_APP_URL = // Placeholder: the app lives in its own repo; correct this when that repo exists.
+  'https://github.com/ashlerick/BPO-Time/releases/latest/download/BPO-Time-Setup.exe'
 
 // The first version is Windows only, and there is nothing to download when
 // the portal is already running inside the app itself.

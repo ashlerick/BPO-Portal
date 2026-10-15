@@ -47,8 +47,11 @@ Buy (D) instead if the goal is full monitoring with reports.
 - **Electron** (TypeScript, same stack as the portal; can reuse components and the API client).
   Alternative: Tauri (about 10 MB against about 100 MB, but Rust and more setup).
 - Idle time comes from the operating system (`powerMonitor.getSystemIdleTime`), not from the browser.
-- Lives in a new `desktop/` folder in this repo, as a third independent npm project next to
-  `frontend/` and `backend/`.
+- Lives in **its own repository** (working name `BPO-Time`), not in this one. The portal repo keeps only
+  what the app talks to: the backend endpoints, the "Allow this PC?" page and the download button.
+- The two repos are tied together only by the API (section 5.5). Changing an endpoint here means
+  checking the app's repo, so the API for the app should be kept small, versioned (for example
+  `/api/device/v1/...`) and documented in this file.
 
 ### 5.2 Docking
 
@@ -105,13 +108,14 @@ Rules:
 
 - A **Desktop app** button sits at the top-right of the portal next to the clocks, on a PC only (hidden
   on phones and tablets, on non-Windows computers, and inside the app itself).
-- It downloads the installer from GitHub Releases (`BPO-Time-Setup.exe`).
+- It downloads the installer from the **app repo's** GitHub Releases (`BPO-Time-Setup.exe`).
 - It is already built (`frontend/src/components/ui/DesktopAppButton.tsx`) but **hidden** until the first
-  release exists. To switch it on: publish the installer, then set `DESKTOP_APP_READY = true` in that file.
+  release exists. To switch it on: publish the installer, then set `DESKTOP_APP_URL` to that repo's release asset and `DESKTOP_APP_READY = true` in that file.
 
 ### 5.7 Distribution
 
-- Windows installer built with electron-builder, published to GitHub Releases, with auto-update.
+- Windows installer built with electron-builder, published to the app repo's GitHub Releases, with auto-update. Its builds and releases run from that
+  repo's own workflow, so this repo's deploys are not affected.
 - A code-signing certificate (about USD 100 to 400 a year) avoids the "unrecognised app" warning.
   Without one, people see a SmartScreen warning on install.
 
