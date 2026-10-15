@@ -473,6 +473,44 @@ function BannerControl({ opening, onChanged }: { opening: Opening; onChanged: (o
   )
 }
 
+// The poster thumbnail on an opening: click it to see the whole poster.
+function PosterThumb({ url, title }: { url: string; title: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`View the ${title} poster`}
+        title="Click to view the poster"
+        className="shrink-0 cursor-zoom-in rounded"
+      >
+        <img src={url} alt="" className="h-20 w-32 rounded bg-black/20 object-contain" />
+      </button>
+      {open && (
+        // Nothing to lose here, so a click outside closes it as well as Close.
+        <Modal label={`${title} poster`} onClose={() => setOpen(false)} closeOnBackdrop className="max-w-4xl">
+          <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+          <img src={url} alt={`${title} poster`} className="mx-auto block max-h-[75svh] w-full rounded object-contain" />
+          <div className="mt-4 flex justify-end gap-2">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Open in a new tab
+            </a>
+            <Button variant="primary" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </>
+  )
+}
+
 // Admin only: reword an opening, or delete it (a soft delete: it leaves the
 // portal and the careers page, the record stays in the database).
 function OpeningAdminControls({
@@ -622,7 +660,7 @@ export function RecruitmentPage() {
                   .map((o) => (
                     <li key={o.id}>
                       <Card className="flex flex-wrap items-center justify-between gap-2 !py-3">
-                        {o.bannerUrl && <img src={o.bannerUrl} alt="" className="h-20 w-32 rounded bg-black/20 object-contain" />}
+                        {o.bannerUrl && <PosterThumb url={o.bannerUrl} title={o.title} />}
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-gray-900 dark:text-gray-100">{o.title}</div>
                           <div className="text-sm text-gray-500 dark:text-gray-400">
