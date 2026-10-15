@@ -10,7 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Tabs } from '../../components/ui/Tabs'
 import { api, ApiError } from '../../services/api'
 import { ConditionSelect } from './ConditionSelect'
-import { itemPayload, QrImage } from './qr'
+import { itemPayload, QrImage, QrPopup } from './qr'
 import { StickerSheet } from './StickerSheet'
 import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
 
@@ -170,12 +170,28 @@ function ItemRow({
   onChanged: () => void
 }) {
   const to = `/inventory/${encodeURIComponent(item.assetTag)}`
+  const [showQr, setShowQr] = useState(false)
   return (
     <div className={`${ROW_GRID} ${MIN_W} border-b border-black/5 py-2 last:border-0 dark:border-white/5`}>
       <input type="checkbox" aria-label={`Select ${item.assetTag}`} checked={checked} onChange={(e) => onToggle(e.target.checked)} />
-      <Link to={to} aria-label={`Open ${item.assetTag}`}>
+      <button
+        type="button"
+        onClick={() => setShowQr(true)}
+        aria-label={`Show the QR code for ${item.assetTag}`}
+        className="cursor-zoom-in rounded"
+      >
         <QrImage value={itemPayload(item)} label={item.assetTag} size={44} />
-      </Link>
+      </button>
+      {showQr && (
+        <QrPopup item={item} onClose={() => setShowQr(false)}>
+          <Link
+            to={to}
+            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Open item
+          </Link>
+        </QrPopup>
+      )}
       <Link to={to} className="truncate font-medium text-brand-600 dark:text-brand-400">
         {item.assetTag}
       </Link>
