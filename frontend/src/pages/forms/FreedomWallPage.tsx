@@ -60,8 +60,7 @@ export function FreedomWallPage() {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [noteVisible, setNoteVisible] = useState(true)
-  const noteRef = useRef<HTMLFormElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -139,15 +138,6 @@ export function FreedomWallPage() {
     })
   }
 
-  // Show the "write a note" button only while the note itself is off screen.
-  useEffect(() => {
-    const el = noteRef.current
-    if (!el) return
-    const io = new IntersectionObserver(([entry]) => setNoteVisible(entry.isIntersecting), { threshold: 0.1 })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
-
   // close the picker on Escape or a click anywhere outside it
   useEffect(() => {
     if (!pickerOpen) return
@@ -176,7 +166,7 @@ export function FreedomWallPage() {
       const created = await api.post<Post>('/hr/freedom-wall', { body })
       setPosts((prev) => [created, ...(prev ?? [])])
       setBody('')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
       toast.success('Posted anonymously')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not post')
@@ -186,17 +176,19 @@ export function FreedomWallPage() {
   }
 
   return (
-    <div>
+    // Fills the window below the app header: the title and the note stay put
+    // and only the wall of notes scrolls. (10.5rem = phone header + clock
+    // strip + page padding; 3rem = page padding on larger screens.)
+    <div className="flex h-[calc(100svh-10.5rem)] flex-col md:h-[calc(100svh-3rem)]">
       <PageHeader title="Freedom Wall" description="Post anonymously. Nobody — including HR — can see who wrote a post." />
       <form
-        ref={noteRef}
         onSubmit={submit}
-        className="relative z-30 mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
+        className="relative z-30 mb-4 w-full max-w-xl shrink-0 -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
       >
         <textarea
           ref={areaRef}
           maxLength={1000}
-          rows={3}
+          rows={2}
           value={body}
           onChange={(e) => {
             setBody(e.target.value)
@@ -249,114 +241,101 @@ export function FreedomWallPage() {
         </div>
       </form>
 
-      {/* Back to the note: only while the note is scrolled out of view. */}
-      {!noteVisible && (
-        <button
-          type="button"
-          onClick={() => {
-            window.scrollTo({ top: 0, behavior: 'smooth' })
-            window.setTimeout(() => areaRef.current?.focus(), 350)
-          }}
-          aria-label="Write a note"
-          className="fixed bottom-5 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-300 text-2xl shadow-xl shadow-black/40 active:scale-95"
-        >
-          ✏️
-        </button>
-      )}
-
-      {!posts && !error && null}
-      {posts && posts.length === 0 && <EmptyState label="No posts yet. Be the first." />}
-      {posts && (
-        // CSS columns give the notes a masonry wall: one column on a phone.
-        <ul className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {posts.map((p) => {
-            const h = hashOf(p.id)
-            return (
-              <li key={p.id}>
-                <div
-                  className={`note-pop rounded-md border p-4 text-gray-900 shadow-md shadow-black/30 transition-transform duration-200 [animation:note-pop_0.35s_ease-out] hover:rotate-0 hover:scale-[1.02] ${NOTES[h % NOTES.length]} ${TILTS[(h >> 3) % TILTS.length]} ${p.hidden ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/60 text-2xl" aria-hidden="true">
-                      {p.emoji}
-                    </span>
-                    <span className="min-w-0 text-sm font-bold leading-tight">{p.alias}</span>
-                  </div>
-                  <p className="mt-3 whitespace-pre-wrap break-words text-sm">{p.body}</p>
-
-                  <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="React to this note">
-                    {REACTIONS.map((emoji) => {
-                      const count = p.reactions[emoji] ?? 0
-                      const mine = p.mine === emoji
-                      return (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => react(p, mine ? null : emoji)}
-                          aria-pressed={mine}
-                          aria-label={`${emoji} ${count}`}
-                          className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition active:scale-95 ${
-                            mine ? 'border-black/60 bg-white font-semibold' : 'border-black/15 bg-white/50 hover:bg-white/80'
-                          }`}
-                        >
-                          <span>{emoji}</span>
-                          {count > 0 && <span className="text-xs tabular-nums">{count}</span>}
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-700">
-                    <span>
-                      {fmt.format(new Date(p.createdAt))} {p.hidden && <Badge tone="amber">Hidden</Badge>}
-                    </span>
-                    {isHr && (
-                      <span className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const fresh = await api.put<Post>(`/hr/freedom-wall/${p.id}`, { hidden: !p.hidden })
-                            setPosts((prev) => prev?.map((x) => (x.id === p.id ? { ...x, hidden: fresh.hidden } : x)) ?? prev)
-                          }}
-                          className="rounded-md border border-black/40 bg-white px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-sm hover:bg-gray-100"
-                        >
-                          {p.hidden ? 'Unhide' : 'Hide'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (!window.confirm('Delete this post?')) return
-                            await api.delete(`/hr/freedom-wall/${p.id}`)
-                            setPosts((prev) => prev?.filter((x) => x.id !== p.id) ?? prev)
-                          }}
-                          className="rounded-md border border-red-700 bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 pb-6 pt-2">
+        {!posts && !error && null}
+        {posts && posts.length === 0 && <EmptyState label="No posts yet. Be the first." />}
+        {posts && (
+          // CSS columns give the notes a masonry wall: one column on a phone.
+          <ul className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {posts.map((p) => {
+              const h = hashOf(p.id)
+              return (
+                <li key={p.id}>
+                  <div
+                    className={`note-pop rounded-md border p-4 text-gray-900 shadow-md shadow-black/30 transition-transform duration-200 [animation:note-pop_0.35s_ease-out] hover:rotate-0 hover:scale-[1.02] ${NOTES[h % NOTES.length]} ${TILTS[(h >> 3) % TILTS.length]} ${p.hidden ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/60 text-2xl" aria-hidden="true">
+                        {p.emoji}
                       </span>
-                    )}
+                      <span className="min-w-0 text-sm font-bold leading-tight">{p.alias}</span>
+                    </div>
+                    <p className="mt-3 whitespace-pre-wrap break-words text-sm">{p.body}</p>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="React to this note">
+                      {REACTIONS.map((emoji) => {
+                        const count = p.reactions[emoji] ?? 0
+                        const mine = p.mine === emoji
+                        return (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => react(p, mine ? null : emoji)}
+                            aria-pressed={mine}
+                            aria-label={`${emoji} ${count}`}
+                            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm transition active:scale-95 ${
+                              mine ? 'border-black/60 bg-white font-semibold' : 'border-black/15 bg-white/50 hover:bg-white/80'
+                            }`}
+                          >
+                            <span>{emoji}</span>
+                            {count > 0 && <span className="text-xs tabular-nums">{count}</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-700">
+                      <span>
+                        {fmt.format(new Date(p.createdAt))} {p.hidden && <Badge tone="amber">Hidden</Badge>}
+                      </span>
+                      {isHr && (
+                        <span className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const fresh = await api.put<Post>(`/hr/freedom-wall/${p.id}`, { hidden: !p.hidden })
+                              setPosts((prev) => prev?.map((x) => (x.id === p.id ? { ...x, hidden: fresh.hidden } : x)) ?? prev)
+                            }}
+                            className="rounded-md border border-black/40 bg-white px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-sm hover:bg-gray-100"
+                          >
+                            {p.hidden ? 'Unhide' : 'Hide'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm('Delete this post?')) return
+                              await api.delete(`/hr/freedom-wall/${p.id}`)
+                              setPosts((prev) => prev?.filter((x) => x.id !== p.id) ?? prev)
+                            }}
+                            className="rounded-md border border-red-700 bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
+                          >
+                            Delete
+                          </button>
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {posts && hasMore && (
-        <div className="mt-6 flex justify-center">
-          <button
-            type="button"
-            onClick={showOlder}
-            disabled={loadingMore}
-            className="rounded-lg border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-gray-100 hover:bg-white/20 disabled:opacity-50"
-          >
-            {loadingMore ? 'Loading…' : 'Show older notes'}
-          </button>
-        </div>
-      )}
-      {posts && !hasMore && posts.length > PAGE_SIZE && (
-        <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">That's every note on the wall.</p>
-      )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {posts && hasMore && (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={showOlder}
+              disabled={loadingMore}
+              className="rounded-lg border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-gray-100 hover:bg-white/20 disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : 'Show older notes'}
+            </button>
+          </div>
+        )}
+        {posts && !hasMore && posts.length > PAGE_SIZE && (
+          <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">That's every note on the wall.</p>
+        )}
+      </div>
     </div>
   )
 }
