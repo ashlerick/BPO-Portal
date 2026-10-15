@@ -87,35 +87,37 @@ function ApplyForm({
   }
 
   return (
-    <form onSubmit={submit} className="mt-3 space-y-3 border-t border-black/10 pt-3 dark:border-white/10">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+    <form onSubmit={submit} className="space-y-2.5">
+      <div className="grid gap-2.5 sm:grid-cols-3">
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
           First name
-          <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" className="field" />
+          <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" className="field !py-1.5" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Middle name (optional)
-          <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} autoComplete="additional-name" className="field" />
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+          Middle name
+          <input value={middleName} onChange={(e) => setMiddleName(e.target.value)} autoComplete="additional-name" className="field !py-1.5" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
           Last name
-          <input required value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" className="field" />
+          <input required value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" className="field !py-1.5" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
+      </div>
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
           Email
-          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="field" />
+          <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="field !py-1.5" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Phone (optional)
-          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" className="field" />
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+          Phone
+          <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" className="field !py-1.5" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Birthday (optional)
-          <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} autoComplete="bday" className="field" />
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+          Birthday
+          <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} autoComplete="bday" className="field !py-1.5" />
         </label>
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Gender (optional)
-          <select value={gender} onChange={(e) => setGender(e.target.value)} className="field">
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+          Gender
+          <select value={gender} onChange={(e) => setGender(e.target.value)} className="field !py-1.5">
             <option value="">Not set</option>
             <option value="male">Male</option>
             <option value="female">Female</option>
@@ -124,22 +126,22 @@ function ApplyForm({
           </select>
         </label>
       </div>
-      <div className="rounded-lg border border-dashed border-black/20 p-3 dark:border-white/20">
-        <label className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-400">
-          Attach your resume (optional, PDF or Word, under 3MB)
-        </label>
-        <div className="mt-2">
-          <FilePicker file={resumeFile} onChange={setResumeFile} accept={RESUME_ACCEPT} label="Choose resume" />
-        </div>
-        <label className="mt-3 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Or paste a link to it (optional)
-          <input type="url" value={resumeLink} onChange={(e) => setResumeLink(e.target.value)} placeholder="https://…" className="field" />
-        </label>
+      <div className="space-y-1.5">
+        <p className="text-xs text-gray-600 dark:text-gray-400">Resume (PDF or Word, under 3MB), or paste a link</p>
+        <FilePicker file={resumeFile} onChange={setResumeFile} accept={RESUME_ACCEPT} label="Choose resume" />
+        <input
+          type="url"
+          value={resumeLink}
+          onChange={(e) => setResumeLink(e.target.value)}
+          placeholder="…or paste a link to your resume (https://)"
+          aria-label="Resume link"
+          className="field !py-1.5"
+        />
       </div>
       {referrers.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-          Referred by an employee? (optional)
-          <select value={referredById} onChange={(e) => setReferredById(e.target.value)} className="field">
+        <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+          Referred by an employee?
+          <select value={referredById} onChange={(e) => setReferredById(e.target.value)} className="field !py-1.5">
             <option value="">No, I found this myself</option>
             {referrers.map((r) => (
               <option key={r.id} value={r.id}>
@@ -149,9 +151,9 @@ function ApplyForm({
           </select>
         </label>
       )}
-      <label className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-        Tell us about yourself (optional)
-        <textarea rows={2} maxLength={2000} value={information} onChange={(e) => setInformation(e.target.value)} className="field" />
+      <label className="flex flex-col gap-0.5 text-xs text-gray-600 dark:text-gray-400">
+        About you (optional)
+        <textarea rows={2} maxLength={2000} value={information} onChange={(e) => setInformation(e.target.value)} className="field !py-1.5" />
       </label>
       {/* Honeypot: off-screen, not focusable. */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
@@ -200,8 +202,8 @@ export function CareersPage() {
   const selected = openings?.find((o) => o.id === selectedId) ?? null
 
   return (
-    <div className="mx-auto min-h-svh max-w-6xl px-4 py-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="mx-auto min-h-svh max-w-6xl px-4 py-4">
+      <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src={`${import.meta.env.BASE_URL}favicon.png`} alt="" className="h-10 w-10" />
           <div>
@@ -243,33 +245,37 @@ export function CareersPage() {
           <button
             type="button"
             onClick={() => setSelectedId(null)}
-            className="mb-3 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+            className="mb-2 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
           >
             ← All positions
           </button>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,30rem)]">
-            {selected.bannerUrl && (
-              <button
-                type="button"
-                onClick={() => setZoom({ url: selected.bannerUrl as string, title: selected.title })}
-                className="flex cursor-zoom-in items-start justify-center self-start overflow-hidden rounded-xl border border-black/10 bg-black/20 dark:border-white/10 lg:sticky lg:top-4"
-                aria-label={`View the ${selected.title} poster full size`}
-              >
-                <img
-                  src={selected.bannerUrl}
-                  alt={`${selected.title} poster`}
-                  className="block h-auto max-h-[70svh] w-full object-contain lg:max-h-[calc(100svh-7rem)]"
-                />
-              </button>
-            )}
-            <Card className="self-start !p-4 lg:max-h-[calc(100svh-7rem)] lg:overflow-y-auto">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{selected.title}</h2>
-              {selected.department && <p className="text-sm text-gray-500 dark:text-gray-400">{selected.department}</p>}
-              {selected.description && (
-                <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{selected.description}</p>
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(25rem,28rem)]">
+            <div className="space-y-3">
+              {selected.bannerUrl && (
+                <button
+                  type="button"
+                  onClick={() => setZoom({ url: selected.bannerUrl as string, title: selected.title })}
+                  className="block w-full cursor-zoom-in overflow-hidden rounded-xl border border-black/10 bg-black/20 dark:border-white/10"
+                  aria-label={`View the ${selected.title} poster full size`}
+                >
+                  <img
+                    src={selected.bannerUrl}
+                    alt={`${selected.title} poster`}
+                    className="block h-auto max-h-[calc(100svh-15rem)] w-full object-contain"
+                  />
+                </button>
               )}
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{selected.title}</h2>
+                {selected.department && <p className="text-sm text-gray-500 dark:text-gray-400">{selected.department}</p>}
+                {selected.description && (
+                  <p className="mt-1 whitespace-pre-line text-sm text-gray-700 dark:text-gray-300">{selected.description}</p>
+                )}
+              </div>
+            </div>
+            <Card className="!p-4">
               {sent.includes(selected.id) ? (
-                <div className="mt-4">
+                <div>
                   <p className="rounded-md bg-green-500/10 px-3 py-2 text-sm text-green-700 dark:text-green-400">
                     Thank you! Your application was received. We will be in touch.
                   </p>
@@ -278,12 +284,15 @@ export function CareersPage() {
                   </Button>
                 </div>
               ) : (
-                <ApplyForm
-                  opening={selected}
-                  referrers={referrers}
-                  onCancel={() => setSelectedId(null)}
-                  onDone={() => setSent((prev) => [...prev, selected.id])}
-                />
+                <>
+                  <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Apply for this position</h3>
+                  <ApplyForm
+                    opening={selected}
+                    referrers={referrers}
+                    onCancel={() => setSelectedId(null)}
+                    onDone={() => setSent((prev) => [...prev, selected.id])}
+                  />
+                </>
               )}
             </Card>
           </div>

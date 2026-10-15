@@ -44,7 +44,7 @@ export function Tabs({ id, tabs, defaultId }: { id?: string; tabs: TabItem[]; de
     <div>
       <div
         role="tablist"
-        className="mb-4 flex gap-1 overflow-x-auto border-b border-black/10 dark:border-white/10"
+        className="mb-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-black/10 dark:border-white/10"
       >
         {tabs.map((t) => {
           const selected = t.id === current.id
@@ -55,7 +55,7 @@ export function Tabs({ id, tabs, defaultId }: { id?: string; tabs: TabItem[]; de
               role="tab"
               aria-selected={selected}
               onClick={() => pick(t.id)}
-              className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 selected
                   ? 'border-brand-500 text-gray-900 dark:text-gray-100'
                   : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
