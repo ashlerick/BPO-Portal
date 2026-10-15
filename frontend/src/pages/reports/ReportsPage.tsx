@@ -361,7 +361,7 @@ function CreateReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (r: 
       setSubmitting(true)
       try {
         const created = await api.post<WeeklyReport>('/reports', {
-          teamId,
+          teamId: teamId || teams[0]?.id,
           periodStart: new Date(periodStart).toISOString(),
           periodEnd: new Date(periodEnd).toISOString(),
         })
@@ -432,8 +432,9 @@ function defaultFoaPeriod(): { start: string; end: string } {
   return { start: priorFriday.toISOString().slice(0, 10), end: lastFriday.toISOString().slice(0, 10) }
 }
 
-function CreateFoaReportForm({ teamId, onCreated }: { teamId: string; onCreated: (r: WeeklyReport) => void }) {
+function CreateFoaReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (r: WeeklyReport) => void }) {
   const { guardedAction } = useAuth()
+  const [teamId, setTeamId] = useState(teams[0]?.id ?? '')
   const defaults = defaultFoaPeriod()
   const [periodStart, setPeriodStart] = useState(defaults.start)
   const [periodEnd, setPeriodEnd] = useState(defaults.end)
@@ -462,6 +463,18 @@ function CreateFoaReportForm({ teamId, onCreated }: { teamId: string; onCreated:
 
   return (
     <CardForm onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
+      {teams.length > 1 && (
+        <div className="w-full space-y-1 md:w-auto">
+          <label className="text-sm text-gray-600 dark:text-gray-400">FOA team</label>
+          <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field">
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="grid w-full grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:contents">
         <div className="min-w-0 space-y-1">
           <label className="text-sm text-gray-600 dark:text-gray-400">Week starting (Friday)</label>
@@ -692,7 +705,11 @@ export function ReportsPage() {
     (t) => !isFoaDepartment(t.department) && (!department || t.department === department),
   )
   const visibleReports = reports?.filter((r) => !department || r.department === department) ?? null
-  const myFoaTeam = teams.find((t) => t.id === myTeamId && isFoaDepartment(t.department))
+  // Anyone in an FOA team can write their own report. HR and Admin can create
+  // one for any FOA team (to test, or on someone's behalf).
+  const canCreateAnyFoa = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
+  const foaTeams = teams.filter((t) => isFoaDepartment(t.department))
+  const foaCreateTeams = canCreateAnyFoa ? foaTeams : foaTeams.filter((t) => t.id === myTeamId)
 
   // Approved reports are "history"; everything still moving through the
   // draft -> submitted -> reviewed flow is split by kind (individually
@@ -730,13 +747,18 @@ export function ReportsPage() {
         </div>
       )}
 
-      {myFoaTeam && (
+      {foaCreateTeams.length > 0 && (
         <div className="mb-4">
           <CreateFoaReportForm
-            teamId={myFoaTeam.id}
+            teams={foaCreateTeams}
             onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
           />
         </div>
+      )}
+      {canCreateAnyFoa && foaTeams.length === 0 && (
+        <p className="mb-4 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+          To create an FOA report, first add a team under the department named FOA (Employee Management → Departments & Teams).
+        </p>
       )}
 
       {canCreateGeneric && !(department && isFoaDepartment(department)) && (
