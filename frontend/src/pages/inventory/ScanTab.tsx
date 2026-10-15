@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
 import { api, ApiError } from '../../services/api'
 import {
@@ -92,7 +93,6 @@ export function ScanTab({ autoStart = false }: { autoStart?: boolean }) {
         }
       }
       setResult({ key, at: new Date(), raw, payload, item, lookup })
-      toast.success(`Scanned ${payload.assetTag}${payload.name ? ` (${payload.name})` : ''}`)
     },
     [toast],
   )
@@ -193,131 +193,138 @@ export function ScanTab({ autoStart = false }: { autoStart?: boolean }) {
 
   const latest = result
 
+  function scanAnother() {
+    setResult(null)
+    lastRef.current = { text: '', at: 0 }
+    setActive(true)
+  }
+
+  // The live record wins over what the sticker says, so a corrected item
+  // shows its current details even if the printed sticker is older.
+  const live = latest?.item ?? null
+  const p = latest?.payload ?? null
+  const shown = {
+    assetTag: live?.assetTag ?? p?.assetTag,
+    name: live?.name ?? p?.name,
+    brandModel: live?.brandModel ?? p?.brandModel,
+    serialNumber: live?.serialNumber ?? p?.serialNumber,
+    purchaseDate: live?.purchaseDate ? live.purchaseDate.slice(0, 10) : p?.purchaseDate,
+    category: live?.category ?? p?.category,
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-        <div className="space-y-3">
-          <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-black/10 bg-black/60 dark:border-white/10">
-            <video ref={videoRef} playsInline muted className={`h-full w-full object-cover ${active ? '' : 'hidden'}`} />
-            {!active && (
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-sm text-gray-300">
-                <span>{result ? 'Scanned. Scan another item?' : "Point the camera at an item's QR sticker."}</span>
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    setResult(null)
-                    lastRef.current = { text: '', at: 0 }
-                    setActive(true)
-                  }}
-                >
-                  {result ? 'Scan another' : 'Start camera'}
-                </Button>
-              </div>
-            )}
-            {active && (
-              <span className="pointer-events-none absolute inset-8 rounded-lg border-2 border-emerald-400/80" aria-hidden="true" />
-            )}
-          </div>
-          <canvas ref={canvasRef} className="hidden" />
-          {active && (
-            <Button onClick={() => setActive(false)} className="w-full">
-              Stop camera
+    <div className="mx-auto max-w-md space-y-3">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-black/10 bg-black/60 dark:border-white/10">
+        <video ref={videoRef} playsInline muted className={`h-full w-full object-cover ${active ? '' : 'hidden'}`} />
+        {!active && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-sm text-gray-300">
+            <span>Point the camera at an item's QR sticker. The details open in a pop-up.</span>
+            <Button variant="primary" onClick={scanAnother}>
+              Start camera
             </Button>
-          )}
-          {cameraError && <p className="text-sm text-red-600 dark:text-red-400">{cameraError}</p>}
-
-          <div className="space-y-2 rounded-lg border border-dashed border-black/20 p-3 dark:border-white/20">
-            <p className="text-xs text-gray-600 dark:text-gray-400">No camera? Scan from a photo or paste the code's text.</p>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                void scanFile(e.target.files?.[0])
-                e.target.value = ''
-              }}
-              className="block w-full text-xs text-gray-600 file:mr-2 file:rounded-md file:border file:border-brand-600/40 file:bg-brand-600/10 file:px-2 file:py-1 file:text-xs file:font-medium file:text-brand-700 dark:text-gray-300 dark:file:text-brand-300"
-              aria-label="Scan from a photo"
-            />
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (pasted.trim()) void handleText(pasted.trim())
-                setPasted('')
-              }}
-            >
-              <input
-                value={pasted}
-                onChange={(e) => setPasted(e.target.value)}
-                placeholder='{"assetTag":"AS-0004", …}'
-                className="field !py-1.5 text-xs"
-                aria-label="Paste QR text"
-              />
-              <Button type="submit" size="sm" disabled={!pasted.trim()}>
-                Read
-              </Button>
-            </form>
           </div>
-        </div>
+        )}
+        {active && <span className="pointer-events-none absolute inset-8 rounded-lg border-2 border-emerald-400/80" aria-hidden="true" />}
+      </div>
+      <canvas ref={canvasRef} className="hidden" />
+      {active && (
+        <Button onClick={() => setActive(false)} className="w-full">
+          Stop camera
+        </Button>
+      )}
+      {cameraError && <p className="text-sm text-red-600 dark:text-red-400">{cameraError}</p>}
 
-        <div className="min-w-0">
-          <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-            Scanned item{latest ? <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">{timeFmt.format(latest.at)}</span> : null}
-          </h3>
-          {!latest ? (
-            <p className="rounded-lg border border-dashed border-black/15 p-6 text-center text-sm text-gray-500 dark:border-white/15 dark:text-gray-400">
-              Start the camera and hold an item's sticker in the frame. The camera stops as soon as it reads it, and the item's details appear here.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
-              <table className="w-full text-left text-sm">
-                <tbody className="divide-y divide-black/5 dark:divide-white/10">
-                  {latest.payload ? (
-                    <>
-                      <DetailRow label="Asset tag" value={latest.payload.assetTag} strong />
-                      <DetailRow label="Item description" value={latest.payload.name} />
-                      <DetailRow label="Brand / model" value={latest.payload.brandModel} />
-                      <DetailRow label="Serial number" value={latest.payload.serialNumber} />
-                      <DetailRow label="Date of purchase" value={latest.payload.purchaseDate} />
-                      <DetailRow label="Category" value={latest.payload.category} />
-                      <DetailRow label="Link" value={latest.payload.url} />
-                      <tr>
-                        <th className="w-40 bg-black/[0.03] px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-                          Right now
-                        </th>
-                        <td className="px-3 py-2">
-                          {latest.item ? (
-                            <span className="flex flex-wrap items-center gap-2">
-                              <Badge tone={STATUS_TONE[latest.item.status]}>{STATUS_LABEL[latest.item.status]}</Badge>
-                              <span>{latest.item.assignedToName ? `Held by ${latest.item.assignedToName}` : 'In storage'}</span>
-                              {latest.item.condition && (
-                                <Badge tone={CONDITION_TONE[latest.item.condition]}>{CONDITION_LABEL[latest.item.condition]}</Badge>
-                              )}
-                              <Link
-                                to={`/inventory/${encodeURIComponent(latest.item.assetTag)}`}
-                                className="font-medium text-brand-600 hover:underline dark:text-brand-400"
-                              >
-                                Open item
-                              </Link>
-                            </span>
-                          ) : (
-                            <span className="text-amber-600 dark:text-amber-400">
-                              Not found in the inventory (it may be deleted, or not yours to see).
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    </>
-                  ) : (
-                    <DetailRow label="Text" value={latest.raw} />
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      <div className="space-y-2 rounded-lg border border-dashed border-black/20 p-3 dark:border-white/20">
+        <p className="text-xs text-gray-600 dark:text-gray-400">No camera? Scan from a photo or paste the code's text.</p>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            void scanFile(e.target.files?.[0])
+            e.target.value = ''
+          }}
+          className="block w-full text-xs text-gray-600 file:mr-2 file:rounded-md file:border file:border-brand-600/40 file:bg-brand-600/10 file:px-2 file:py-1 file:text-xs file:font-medium file:text-brand-700 dark:text-gray-300 dark:file:text-brand-300"
+          aria-label="Scan from a photo"
+        />
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (pasted.trim()) void handleText(pasted.trim())
+            setPasted('')
+          }}
+        >
+          <input
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder='{"assetTag":"EQ-0001", …}'
+            className="field !py-1.5 text-xs"
+            aria-label="Paste QR text"
+          />
+          <Button type="submit" size="sm" disabled={!pasted.trim()}>
+            Read
+          </Button>
+        </form>
       </div>
 
+      {latest && (
+        <Modal label="Scanned item" onClose={() => setResult(null)}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Scanned item</h2>
+            <span className="text-xs text-gray-500 dark:text-gray-400">{timeFmt.format(latest.at)}</span>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-black/10 dark:border-white/10">
+            <table className="w-full text-left text-sm">
+              <tbody className="divide-y divide-black/5 dark:divide-white/10">
+                {latest.payload ? (
+                  <>
+                    <DetailRow label="Asset ID" value={shown.assetTag} strong />
+                    <DetailRow label="Item description" value={shown.name} />
+                    <DetailRow label="Brand / model" value={shown.brandModel ?? undefined} />
+                    <DetailRow label="Serial number" value={shown.serialNumber ?? undefined} />
+                    <DetailRow label="Date of purchase" value={shown.purchaseDate ?? undefined} />
+                    <DetailRow label="Category" value={shown.category ?? undefined} />
+                    <tr>
+                      <th className="w-36 bg-black/[0.03] px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+                        Right now
+                      </th>
+                      <td className="px-3 py-2">
+                        {live ? (
+                          <span className="flex flex-wrap items-center gap-2">
+                            <Badge tone={STATUS_TONE[live.status]}>{STATUS_LABEL[live.status]}</Badge>
+                            <span>{live.assignedToName ? `Held by ${live.assignedToName}` : 'In storage'}</span>
+                            {live.condition && <Badge tone={CONDITION_TONE[live.condition]}>{CONDITION_LABEL[live.condition]}</Badge>}
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            Not found in the inventory (it may be deleted, or not yours to see).
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  </>
+                ) : (
+                  <DetailRow label="Not an inventory sticker" value={latest.raw} />
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button onClick={() => setResult(null)}>Close</Button>
+            {live && (
+              <Link
+                to={`/inventory/${encodeURIComponent(live.assetTag)}`}
+                className="inline-flex items-center rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Open item
+              </Link>
+            )}
+            <Button variant="primary" onClick={scanAnother}>
+              Scan another
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
