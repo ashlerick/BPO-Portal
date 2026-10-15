@@ -505,6 +505,121 @@ function CreateFoaReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (
   )
 }
 
+// HR and Admin: create a report for ANY department. The department list comes
+// from the directory, so a department added later shows up here by itself.
+// The report type follows the department (FOA gets its own richer form; every
+// other department gets the general weekly report).
+function CreateAnyReportForm({
+  departments,
+  teams,
+  initialDepartment,
+  onCreated,
+}: {
+  departments: string[]
+  teams: Team[]
+  initialDepartment: string
+  onCreated: (r: WeeklyReport) => void
+}) {
+  const { guardedAction } = useAuth()
+  const [department, setDepartment] = useState(initialDepartment || departments[0] || '')
+  const [teamId, setTeamId] = useState('')
+  const foa = isFoaDepartment(department)
+  const defaults = defaultFoaPeriod()
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // follow the page's department filter when it changes
+  useEffect(() => {
+    if (initialDepartment) setDepartment(initialDepartment)
+  }, [initialDepartment])
+
+  const deptTeams = teams.filter((t) => t.department === department)
+  useEffect(() => {
+    setTeamId(deptTeams.length === 1 ? deptTeams[0].id : '')
+    // FOA reports default to the last Friday-to-Friday week; others start blank
+    setPeriodStart(foa ? defaults.start : '')
+    setPeriodEnd(foa ? defaults.end : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [department])
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    guardedAction(['hr', 'admin'], async () => {
+      setError(null)
+      if (!teamId) {
+        setError('Choose a team first.')
+        return
+      }
+      setSubmitting(true)
+      try {
+        const created = await api.post<WeeklyReport>('/reports', {
+          teamId,
+          periodStart: new Date(periodStart).toISOString(),
+          periodEnd: new Date(periodEnd).toISOString(),
+        })
+        onCreated(created)
+        if (!foa) {
+          setPeriodStart('')
+          setPeriodEnd('')
+        }
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Could not create report')
+      } finally {
+        setSubmitting(false)
+      }
+    })
+  }
+
+  return (
+    <CardForm onSubmit={handleSubmit} className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full space-y-1 md:w-auto">
+          <label className="text-sm text-gray-600 dark:text-gray-400">Department</label>
+          <select required value={department} onChange={(e) => setDepartment(e.target.value)} className="field">
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full space-y-1 md:w-auto">
+          <label className="text-sm text-gray-600 dark:text-gray-400">Team</label>
+          <select required value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field" disabled={deptTeams.length === 0}>
+            <option value="">{deptTeams.length === 0 ? 'No teams yet' : 'Select…'}</option>
+            {deptTeams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid w-full grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:contents">
+          <div className="min-w-0 space-y-1">
+            <label className="text-sm text-gray-600 dark:text-gray-400">{foa ? 'Week starting (Friday)' : 'Period start'}</label>
+            <input type="date" required value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="field px-2.5 md:px-3" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <label className="text-sm text-gray-600 dark:text-gray-400">{foa ? 'Week ending (Friday)' : 'Period end'}</label>
+            <input type="date" required value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="field px-2.5 md:px-3" />
+          </div>
+        </div>
+        <Button type="submit" variant="primary" disabled={submitting || !teamId} className="w-full md:w-auto">
+          {submitting ? 'Creating…' : foa ? 'New FOA weekly report' : 'New report'}
+        </Button>
+      </div>
+      {department && deptTeams.length === 0 && (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          {department} has no teams yet. Add one under Employee Management → Departments & Teams, then come back.
+        </p>
+      )}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+    </CardForm>
+  )
+}
+
 function ReportCard({ report, onUpdated }: { report: WeeklyReport; onUpdated: (r: WeeklyReport) => void }) {
   const { user, effectiveRoles, guardedAction } = useAuth()
   const isFoa = report.schemaKey === 'foa'
@@ -747,27 +862,36 @@ export function ReportsPage() {
         </div>
       )}
 
-      {foaCreateTeams.length > 0 && (
-        <div className="mb-4">
-          <CreateFoaReportForm
-            teams={foaCreateTeams}
-            onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
-          />
-        </div>
-      )}
-      {canCreateAnyFoa && foaTeams.length === 0 && (
-        <p className="mb-4 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-          To create an FOA report, first add a team under the department named FOA (Employee Management → Departments & Teams).
-        </p>
-      )}
-
-      {canCreateGeneric && !(department && isFoaDepartment(department)) && (
-        <div className="mb-4">
-          <CreateReportForm
-            teams={genericTeams}
-            onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
-          />
-        </div>
+      {canCreateAnyFoa ? (
+        departments.length > 0 && (
+          <div className="mb-4">
+            <CreateAnyReportForm
+              departments={departments}
+              teams={teams}
+              initialDepartment={department}
+              onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
+            />
+          </div>
+        )
+      ) : (
+        <>
+          {foaCreateTeams.length > 0 && (
+            <div className="mb-4">
+              <CreateFoaReportForm
+                teams={foaCreateTeams}
+                onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
+              />
+            </div>
+          )}
+          {canCreateGeneric && !(department && isFoaDepartment(department)) && (
+            <div className="mb-4">
+              <CreateReportForm
+                teams={genericTeams}
+                onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {loading && <LoadingState />}
