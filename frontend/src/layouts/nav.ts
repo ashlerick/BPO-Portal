@@ -25,28 +25,45 @@ export interface NavItem {
 
 export interface NavGroup {
   label: string
+  // No heading in the sidebar (the group is just its links, always shown).
+  headless?: boolean
   items: NavItem[]
 }
 
 export const defaultNavGroups: NavGroup[] = [
+  // Always visible, no heading: the one link everybody starts from.
   {
-    label: 'General',
+    label: 'Home',
+    headless: true,
+    items: [{ to: '/', label: 'Dashboard', icon: 'dashboard' }],
+  },
+  {
+    label: 'Work',
     items: [
-      // What's new, then daily work, then me and HR help, then settings.
-      { to: '/', label: 'Dashboard', icon: 'dashboard' },
       { to: '/announcements', label: 'Announcements', icon: 'announcements' },
       { to: '/notifications', label: 'Notifications', icon: 'notifications' },
+      { to: '/calendar', label: 'Calendar', icon: 'calendar' },
       { to: '/attendance', label: 'Attendance', icon: 'attendance' },
       { to: '/leave', label: 'Leave Requests', icon: 'leave' },
-      { to: '/calendar', label: 'Calendar', icon: 'calendar' },
       { to: '/reports', label: 'Weekly Reports', icon: 'reports', roles: ['team_leader', 'manager', 'hr', 'admin'] },
       { to: '/performance', label: 'Performance', icon: 'performance' },
+    ],
+  },
+  {
+    label: 'Me',
+    items: [
       { to: '/profile', label: 'My Profile', icon: 'profile' },
       { to: '/benefits', label: 'Benefits', icon: 'benefits' },
       { to: '/hr-requests', label: 'HR Requests', icon: 'requests' },
       { to: '/documents', label: 'Documents', icon: 'documents' },
-      { to: '/forms', label: 'Forms', icon: 'requests' },
       { to: '/settings', label: 'Settings', icon: 'settings' },
+    ],
+  },
+  {
+    label: 'Forms',
+    items: [
+      { to: '/forms', label: 'Forms', icon: 'requests' },
+      { to: '/freedom-wall', label: 'Freedom Wall', icon: 'wall' },
     ],
   },
   {
@@ -102,6 +119,7 @@ export interface DraftItem {
 
 export interface DraftGroup {
   key: string
+  headless?: boolean
   defaultLabel: string
   label: string
   items: DraftItem[]
@@ -114,6 +132,7 @@ const sameRoles = (a: readonly Role[], b: readonly Role[]) => a.length === b.len
 export function buildDraft(config: MenuConfig | null): DraftGroup[] {
   const groups = defaultNavGroups.map((g, gi) => ({
     key: g.label,
+    headless: g.headless,
     defaultLabel: g.label,
     label: config?.groups[g.label]?.label ?? g.label,
     order: config?.groups[g.label]?.order ?? gi * 10,
@@ -169,6 +188,7 @@ export function draftToConfig(draft: DraftGroup[]): MenuConfig {
 
 export interface VisibleGroup {
   key: string
+  headless?: boolean
   label: string
   items: { to: string; label: string; icon: IconName }[]
 }
@@ -178,6 +198,7 @@ export function resolveNav(config: MenuConfig | null, roles: readonly Role[]): V
   return buildDraft(config)
     .map((g) => ({
       key: g.key,
+      headless: g.headless,
       label: g.label,
       items: g.items
         .filter((item) => {

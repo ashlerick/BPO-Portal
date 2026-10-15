@@ -248,11 +248,11 @@ function NavGroupBlock({
     })
   }
 
-  const showItems = collapsed || open
+  const showItems = collapsed || open || !!group.headless
 
   return (
     <div className={collapsed ? 'border-t border-white/10 pt-2 first:border-0 first:pt-0' : ''}>
-      {!collapsed && (
+      {!collapsed && !group.headless && (
         <button
           type="button"
           onClick={toggle}
