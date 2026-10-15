@@ -61,6 +61,18 @@ export function QrImage({ value, label, size, className }: { value: string; labe
   )
 }
 
+// Saves the item's QR code as a PNG named after its asset ID (EQ-0001.png),
+// drawn large enough to print or place in a document.
+async function downloadQr(item: QrFields) {
+  const url = await QRCode.toDataURL(itemPayload(item), { margin: 2, width: 1024 })
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${item.assetTag.replace(/[\/:*?"<>|]+/g, '-')}.png`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 // A large QR code in a pop-up over the page. Nothing to lose here, so a
 // click outside closes it as well as Escape and the Close button.
 export function QrPopup({
@@ -77,8 +89,15 @@ export function QrPopup({
       <QrImage value={itemPayload(item)} label={item.assetTag} size={280} className="mx-auto !block max-w-full" />
       <p className="mt-3 text-lg font-bold tracking-wide">{item.assetTag}</p>
       {item.name && <p className="text-sm text-gray-600 dark:text-gray-400">{item.name}</p>}
-      <div className="mt-4 flex justify-center gap-2">
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
         {children}
+        <button
+          type="button"
+          onClick={() => void downloadQr(item)}
+          className="rounded-lg border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+        >
+          Download
+        </button>
         <button
           type="button"
           onClick={onClose}
