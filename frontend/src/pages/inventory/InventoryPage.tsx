@@ -452,9 +452,6 @@ export function InventoryPage() {
                 <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} />
                 Group by person
               </label>
-              <Button size="sm" onClick={() => setTab('scan')}>
-                Scan QR
-              </Button>
               <Button variant="primary" size="sm" disabled={selected.length === 0} onClick={() => setPrinting(true)}>
                 Print QR stickers ({selected.length})
               </Button>
