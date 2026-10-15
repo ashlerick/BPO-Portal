@@ -18,7 +18,7 @@ import type { WeeklyReport } from '../reports/types'
 import { AdminWidgets } from './AdminWidgets'
 import { CheckInPrompt } from './CheckInPrompt'
 import { BirthdayCard } from './BirthdayCard'
-import { AssignTodo, MyTodos } from './Todos'
+import { AssignedByMe, AssignTodo, MyTodos } from './Todos'
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
 
@@ -57,6 +57,7 @@ export function DashboardPage() {
   const isElevated = effectiveRoles.some((r) => r === 'team_leader' || r === 'manager' || r === 'hr' || r === 'admin')
   const { data, loading, error } = useApiData<Announcement[]>('/announcements')
   const { leave, reports, events, notifications, profile, employees } = useDashboardData(isReviewer, isElevated)
+  const [todoReload, setTodoReload] = useState(0)
 
   const latest = data?.filter((a) => a.published && !isExpired(a)).slice(0, 3) ?? []
 
@@ -121,8 +122,6 @@ export function DashboardPage() {
 
       <SectionStack>
         <BirthdayCard />
-        <MyTodos />
-        {isElevated && <AssignTodo isHr={isReviewer} />}
         <Section
           id="dashboard.tasks"
           title="Pending tasks"
@@ -147,6 +146,11 @@ export function DashboardPage() {
               ))}
             </ul>
           )}
+          <div className="mt-4 space-y-3">
+            <MyTodos />
+            {isElevated && <AssignTodo isHr={isReviewer} onAssigned={() => setTodoReload((n) => n + 1)} />}
+            {isElevated && <AssignedByMe isHr={isReviewer} reloadKey={todoReload} />}
+          </div>
         </Section>
 
         <Section

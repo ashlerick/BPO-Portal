@@ -633,11 +633,32 @@ model Todo {
   // open | done
   status      String    @default("open")
   completedAt DateTime?
+  // User ids: who finished it, and who assigned it (createdBy).
+  completedBy String?
+  // low | normal | urgent
+  priority    String    @default("normal")
+  // Soft delete: hidden everywhere, kept in the database.
+  deletedAt   DateTime?
   createdBy   String
   createdAt   DateTime  @default(now())
+  comments    TodoComment[]
 
   @@index([employeeId, status])
+  @@index([createdBy])
   @@map("todos")
+}
+
+// Updates on a to-do, written by the assignee, whoever assigned it, or HR.
+model TodoComment {
+  id        String   @id @default(uuid())
+  todo      Todo     @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  todoId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([todoId])
+  @@map("todo_comments")
 }
 
 // KPI scorecard (the old spreadsheet's "KPI Metrics"): HR-managed criteria

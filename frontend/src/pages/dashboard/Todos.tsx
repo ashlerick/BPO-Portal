@@ -1,18 +1,39 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
 import { Section } from '../../components/ui/Section'
+import { useToast } from '../../components/ui/Toast'
+import { useAuth } from '../../auth/AuthContext'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
 
+type Priority = 'low' | 'normal' | 'urgent'
+
+interface Comment {
+  id: string
+  authorId: string
+  authorName: string
+  body: string
+  createdAt: string
+}
+
 interface Todo {
   id: string
+  employeeId: string
+  employeeName: string
   title: string
   description: string | null
   dueDate: string | null
   link: string | null
   status: 'open' | 'done'
+  priority: Priority
+  completedAt: string | null
+  completedByName: string | null
+  assignedById: string
+  assignedByName: string | null
+  createdAt: string
+  comments: Comment[]
 }
 
 interface Person {
@@ -20,11 +41,216 @@ interface Person {
   name: string
 }
 
-// The signed-in employee's own to-dos (the old sheet's "To Do's"): task,
-// due date, optional linked document, and a done toggle.
+const PRIORITY_LABEL: Record<Priority, string> = { low: 'Low', normal: 'Normal', urgent: 'Urgent' }
+const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, normal: 1, low: 2 }
+
+const whenFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
+
+// Open tasks first by priority, then soonest due date (undated last).
+function byUrgency(a: Todo, b: Todo): number {
+  const p = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+  if (p !== 0) return p
+  if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate)
+  if (a.dueDate) return -1
+  if (b.dueDate) return 1
+  return b.createdAt.localeCompare(a.createdAt)
+}
+
+function PriorityBadge({ priority }: { priority: Priority }) {
+  if (priority === 'normal') return null
+  return <Badge tone={priority === 'urgent' ? 'red' : 'gray'}>{PRIORITY_LABEL[priority]}</Badge>
+}
+
+// The comment thread under a to-do: read, and add a line.
+function Comments({ todo, onChanged }: { todo: Todo; onChanged: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+  const count = todo.comments.length
+
+  async function send(e: FormEvent) {
+    e.preventDefault()
+    if (!body.trim()) return
+    setBusy(true)
+    try {
+      await api.post(`/hr/todos/${todo.id}?action=comment`, { body })
+      setBody('')
+      onChanged()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not add the comment')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-1 pl-6">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
+      >
+        {open ? 'Hide comments' : count > 0 ? `Comments (${count})` : 'Add a comment'}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          {todo.comments.map((c) => (
+            <p key={c.id} className="rounded-md bg-black/[0.04] px-3 py-1.5 text-xs text-gray-700 dark:bg-white/[0.06] dark:text-gray-300">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{c.authorName}</span>
+              <span className="text-gray-500 dark:text-gray-400"> · {whenFmt.format(new Date(c.createdAt))}</span>
+              <span className="block whitespace-pre-line">{c.body}</span>
+            </p>
+          ))}
+          <form onSubmit={send} className="flex gap-2">
+            <input
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              maxLength={1000}
+              placeholder="Write an update…"
+              className="field !py-1.5 text-xs"
+            />
+            <Button type="submit" size="sm" disabled={busy || !body.trim()}>
+              Send
+            </Button>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TodoRow({
+  todo,
+  today,
+  canDelete,
+  showAssignee,
+  onChanged,
+}: {
+  todo: Todo
+  today: string
+  canDelete: boolean
+  showAssignee: boolean
+  onChanged: () => void
+}) {
+  const toast = useToast()
+  const done = todo.status === 'done'
+  const overdue = !done && todo.dueDate !== null && todo.dueDate.slice(0, 10) < today
+
+  async function setStatus(status: 'open' | 'done') {
+    try {
+      await api.put(`/hr/todos/${todo.id}`, { status })
+      onChanged()
+      if (status === 'done') {
+        // Undo instead of a confirmation: faster, and forgiving of a misclick.
+        toast.success(`Marked done: ${todo.title}`, {
+          label: 'Undo',
+          onClick: () => {
+            void api
+              .put(`/hr/todos/${todo.id}`, { status: 'open' })
+              .then(onChanged)
+              .catch(() => toast.error('Could not undo. Reopen it from the Completed list.'))
+          },
+        })
+      } else {
+        toast.info(`Reopened: ${todo.title}`)
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not update the to-do')
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Delete "${todo.title}"${showAssignee ? ` (for ${todo.employeeName})` : ''}? It will be hidden for everyone.`)) return
+    try {
+      await api.delete(`/hr/todos/${todo.id}`)
+      onChanged()
+      toast.success('To-do deleted')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not delete the to-do')
+    }
+  }
+
+  return (
+    <li className="py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2">
+          {done ? (
+            <button
+              type="button"
+              onClick={() => setStatus('open')}
+              className="mt-0.5 shrink-0 rounded border border-black/15 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 hover:bg-black/5 dark:border-white/20 dark:text-gray-300 dark:hover:bg-white/10"
+            >
+              Reopen
+            </button>
+          ) : (
+            <input
+              type="checkbox"
+              aria-label={`Mark "${todo.title}" as done`}
+              checked={false}
+              onChange={() => setStatus('done')}
+              className="mt-1"
+            />
+          )}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={done ? 'text-gray-400 line-through' : 'font-medium text-gray-900 dark:text-gray-100'}>{todo.title}</span>
+              <PriorityBadge priority={todo.priority} />
+              {showAssignee && <Badge tone="blue">{todo.employeeName}</Badge>}
+            </div>
+            {todo.description && (
+              <p className={`mt-0.5 whitespace-pre-line text-xs ${done ? 'text-gray-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                {todo.description}
+              </p>
+            )}
+            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              {todo.assignedByName && !showAssignee && <>Assigned by {todo.assignedByName} · </>}
+              {done && todo.completedAt && (
+                <>
+                  Done {whenFmt.format(new Date(todo.completedAt))}
+                  {todo.completedByName ? ` by ${todo.completedByName}` : ''}
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+          {todo.dueDate && (
+            <span className={overdue ? 'font-semibold text-red-600 dark:text-red-400' : undefined}>
+              {overdue ? 'Overdue · ' : 'Due '}
+              {formatDateOnly(todo.dueDate)}
+            </span>
+          )}
+          {todo.link && (
+            <a href={todo.link} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400">
+              Open ↗
+            </a>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={remove}
+              className="font-medium text-red-600 hover:underline dark:text-red-400"
+              aria-label={`Delete ${todo.title}`}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+      <Comments todo={todo} onChanged={onChanged} />
+    </li>
+  )
+}
+
+type Filter = 'open' | 'overdue' | 'done'
+
+// The signed-in employee's own to-dos: open ones by urgency, overdue
+// called out, finished ones tucked under "Completed".
 export function MyTodos() {
+  const { user } = useAuth()
   const [todos, setTodos] = useState<Todo[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<Filter>('open')
 
   const load = useCallback(() => {
     api
@@ -34,80 +260,144 @@ export function MyTodos() {
   }, [])
   useEffect(load, [load])
 
-  async function toggle(t: Todo) {
-    setError(null)
-    try {
-      await api.put(`/hr/todos/${t.id}`, { status: t.status === 'done' ? 'open' : 'done' })
-      load()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update the to-do')
-    }
-  }
-
-  const open = todos.filter((t) => t.status === 'open')
   const today = todayInManilaIso()
+  const open = useMemo(() => todos.filter((t) => t.status === 'open').sort(byUrgency), [todos])
+  const overdue = open.filter((t) => t.dueDate !== null && t.dueDate.slice(0, 10) < today)
+  const completed = useMemo(
+    () => todos.filter((t) => t.status === 'done').sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')),
+    [todos],
+  )
+  const shown = filter === 'open' ? open : filter === 'overdue' ? overdue : completed
+
+  const chip = (key: Filter, label: string, count: number) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => setFilter(key)}
+      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+        filter === key
+          ? 'border-brand-500 bg-brand-500/15 text-gray-900 dark:text-gray-100'
+          : 'border-black/10 text-gray-600 hover:bg-black/5 dark:border-white/15 dark:text-gray-400 dark:hover:bg-white/10'
+      }`}
+    >
+      {label} <span className={key === 'overdue' && count > 0 ? 'text-red-600 dark:text-red-400' : undefined}>({count})</span>
+    </button>
+  )
 
   return (
     <Section
       id="dashboard.todos"
-      title="To-do list"
-      hint={open.length === 0 ? 'Nothing assigned' : `${open.length} open`}
-      aside={open.length > 0 ? <Badge tone="amber">{open.length}</Badge> : undefined}
+      title="My to-dos"
+      hint={open.length === 0 ? 'Nothing open' : `${open.length} open${overdue.length ? `, ${overdue.length} overdue` : ''}`}
+      aside={open.length > 0 ? <Badge tone={overdue.length ? 'red' : 'amber'}>{open.length}</Badge> : undefined}
       defaultOpen
     >
-      {todos.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No to-dos assigned to you.</p>
+      <div className="mb-2 flex flex-wrap gap-2">
+        {chip('open', 'Open', open.length)}
+        {chip('overdue', 'Overdue', overdue.length)}
+        {chip('done', 'Completed', completed.length)}
+      </div>
+      {shown.length === 0 ? (
+        <p className="py-2 text-sm text-gray-500 dark:text-gray-400">
+          {filter === 'open' ? 'No open to-dos. You are all caught up.' : filter === 'overdue' ? 'Nothing overdue.' : 'Nothing completed yet.'}
+        </p>
       ) : (
         <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
-          {todos.map((t) => {
-            const overdue = t.status === 'open' && t.dueDate !== null && t.dueDate.slice(0, 10) < today
-            return (
-              <li key={t.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
-                <div className="min-w-0">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={t.status === 'done'} onChange={() => toggle(t)} />
-                    <span className={t.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'}>{t.title}</span>
-                  </label>
-                  {t.description && (
-                    <p className={`mt-1 whitespace-pre-line pl-6 text-xs ${t.status === 'done' ? 'text-gray-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                      {t.description}
-                    </p>
-                  )}
-                </div>
-                <span className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                  {t.dueDate && (
-                    <span className={overdue ? 'font-medium text-red-600 dark:text-red-400' : undefined}>
-                      Due {formatDateOnly(t.dueDate)}
-                    </span>
-                  )}
-                  {t.link && (
-                    <a href={t.link} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400">
-                      Open ↗
-                    </a>
-                  )}
-                </span>
-              </li>
-            )
-          })}
+          {shown.map((t) => (
+            <TodoRow
+              key={t.id}
+              todo={t}
+              today={today}
+              canDelete={t.assignedById === user?.id}
+              showAssignee={false}
+              onChanged={load}
+            />
+          ))}
         </ul>
       )}
-      {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+    </Section>
+  )
+}
+
+// To-dos I assigned to other people: who has done them and who has not.
+// HR/Admin can switch to everyone's, to clear out entries made in error.
+export function AssignedByMe({ isHr, reloadKey }: { isHr: boolean; reloadKey: number }) {
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const [filter, setFilter] = useState<'open' | 'done'>('open')
+
+  const load = useCallback(() => {
+    api
+      .get<Todo[]>(`/hr/todos?assigned=${scope === 'all' ? 'all' : '1'}`)
+      .then(setTodos)
+      .catch(() => setTodos([]))
+  }, [scope])
+  useEffect(load, [load, reloadKey])
+
+  const today = todayInManilaIso()
+  const open = todos.filter((t) => t.status === 'open').sort(byUrgency)
+  const done = todos.filter((t) => t.status === 'done')
+  const shown = filter === 'open' ? open : done
+
+  return (
+    <Section
+      id="dashboard.assigned-todos"
+      title="Assigned by me"
+      hint={`${open.length} open, ${done.length} done`}
+      aside={open.length > 0 ? <Badge tone="blue">{open.length}</Badge> : undefined}
+    >
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {(['open', 'done'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setFilter(k)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                filter === k
+                  ? 'border-brand-500 bg-brand-500/15 text-gray-900 dark:text-gray-100'
+                  : 'border-black/10 text-gray-600 dark:border-white/15 dark:text-gray-400'
+              }`}
+            >
+              {k === 'open' ? `Open (${open.length})` : `Done (${done.length})`}
+            </button>
+          ))}
+        </div>
+        {isHr && (
+          <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+            <input type="checkbox" checked={scope === 'all'} onChange={(e) => setScope(e.target.checked ? 'all' : 'mine')} />
+            Show everyone's to-dos
+          </label>
+        )}
+      </div>
+      {shown.length === 0 ? (
+        <p className="py-2 text-sm text-gray-500 dark:text-gray-400">
+          {filter === 'open' ? 'Nothing you assigned is waiting.' : 'Nothing you assigned has been completed yet.'}
+        </p>
+      ) : (
+        <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+          {shown.map((t) => (
+            <TodoRow key={t.id} todo={t} today={today} canDelete showAssignee onChanged={load} />
+          ))}
+        </ul>
+      )}
     </Section>
   )
 }
 
 // HR/Admin assign to anyone (or everyone); a supervisor assigns to their
-// direct reports. The API enforces this — the form just offers who it can.
-export function AssignTodo({ isHr }: { isHr: boolean }) {
+// direct reports. The API enforces this, the form just offers who it can.
+export function AssignTodo({ isHr, onAssigned }: { isHr: boolean; onAssigned?: () => void }) {
   const [people, setPeople] = useState<Person[]>([])
   const [selected, setSelected] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [link, setLink] = useState('')
+  const [priority, setPriority] = useState<Priority>('normal')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const toast = useToast()
 
   useEffect(() => {
     const path = isHr ? '/employees' : '/hr/performance?kind=supervisees'
@@ -123,7 +413,6 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    setMessage(null)
     try {
       const { assigned } = await api.post<{ assigned: number }>('/hr/todos', {
         employeeIds: selected,
@@ -131,15 +420,20 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
         description: description.trim() || null,
         dueDate: dueDate || null,
         link: link.trim() || null,
+        priority,
       })
-      setMessage(`Assigned to ${assigned} ${assigned === 1 ? 'person' : 'people'}.`)
+      toast.success(`Assigned "${title}" to ${assigned} ${assigned === 1 ? 'person' : 'people'}`)
       setTitle('')
       setDescription('')
       setDueDate('')
       setLink('')
+      setPriority('normal')
       setSelected([])
+      onAssigned?.()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not assign the to-do')
+      const message = err instanceof ApiError ? err.message : 'Could not assign the to-do'
+      setError(message)
+      toast.error(message)
     } finally {
       setBusy(false)
     }
@@ -163,9 +457,16 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
             placeholder="Add details, steps or context for the task"
           />
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Due date (optional)">
             <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="field" />
+          </Field>
+          <Field label="Priority">
+            <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)} className="field">
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="urgent">Urgent</option>
+            </select>
           </Field>
           <Field label="Link (optional)">
             <input type="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" className="field" />
@@ -195,7 +496,6 @@ export function AssignTodo({ isHr }: { isHr: boolean }) {
           </ul>
         </div>
         <FormError message={error} />
-        {message && <p className="text-sm text-green-700 dark:text-green-400">{message}</p>}
         <Button type="submit" variant="primary" size="sm" disabled={busy || selected.length === 0}>
           {busy ? 'Assigning…' : 'Assign'}
         </Button>
