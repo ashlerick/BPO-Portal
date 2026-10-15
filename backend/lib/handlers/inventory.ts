@@ -198,10 +198,18 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (!hasRole(req, 'admin')) return forbid(res)
     const existing = await prisma.inventoryItem.findFirst({ where: { id: sub, deletedAt: null } })
     if (!existing) return notFound(res, 'Item not found')
+    // Deleting an assigned item closes its open assignment first, so the
+    // history stays consistent and the holder no longer sees it.
     if (existing.assignedToId) {
-      return res.status(409).json({ message: 'Return the item from its holder before deleting it' })
+      await prisma.inventoryAssignment.updateMany({
+        where: { itemId: sub, returnedAt: null },
+        data: { returnedAt: new Date(), returnNote: 'Item deleted by admin' },
+      })
     }
-    await prisma.inventoryItem.update({ where: { id: sub }, data: { deletedAt: new Date() } })
+    await prisma.inventoryItem.update({
+      where: { id: sub },
+      data: { deletedAt: new Date(), assignedToId: null, ...(existing.assignedToId && { status: 'available' }) },
+    })
     await logAudit(req.auth.sub, 'delete', 'inventory_item', sub)
     return res.status(204).end()
   }
