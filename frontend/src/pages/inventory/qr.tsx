@@ -16,6 +16,8 @@ interface QrFields {
   name?: string | null
   category?: string | null
   serialNumber?: string | null
+  brandModel?: string | null
+  purchaseDate?: string | null
 }
 
 // What a sticker's QR code holds: the item's fields as JSON (empty ones left
@@ -27,6 +29,8 @@ export function itemPayload(item: QrFields, base = portalBase()): string {
     ...(item.name && { name: item.name }),
     ...(item.category && { category: item.category }),
     ...(item.serialNumber && { serialNumber: item.serialNumber }),
+    ...(item.brandModel && { brandModel: item.brandModel }),
+    ...(item.purchaseDate && { purchaseDate: item.purchaseDate.slice(0, 10) }),
     url: itemUrl(item.assetTag, base),
   })
 }

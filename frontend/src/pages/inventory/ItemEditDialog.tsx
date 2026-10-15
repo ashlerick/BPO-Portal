@@ -25,6 +25,8 @@ export function ItemEditDialog({
   const [name, setName] = useState(item.name)
   const [category, setCategory] = useState(item.category ?? '')
   const [serial, setSerial] = useState(item.serialNumber ?? '')
+  const [brandModel, setBrandModel] = useState(item.brandModel ?? '')
+  const [purchaseDate, setPurchaseDate] = useState(item.purchaseDate ? item.purchaseDate.slice(0, 10) : '')
   const [notes, setNotes] = useState(item.notes ?? '')
   const [status, setStatus] = useState(item.status)
   const [busy, setBusy] = useState(false)
@@ -40,6 +42,8 @@ export function ItemEditDialog({
         name,
         category: category.trim() || null,
         serialNumber: serial.trim() || null,
+        brandModel: brandModel.trim() || null,
+        purchaseDate: purchaseDate || null,
         notes: notes.trim() || null,
         // Status can't change while someone holds the item (it is "assigned").
         ...(!assigned && status !== item.status && { status }),
@@ -74,14 +78,20 @@ export function ItemEditDialog({
           sticker points to it).
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Item name">
+          <Field label="Item description">
             <input required value={name} onChange={(e) => setName(e.target.value)} className="field" />
           </Field>
-          <Field label="Category">
-            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" />
+          <Field label="Brand / model">
+            <input value={brandModel} onChange={(e) => setBrandModel(e.target.value)} className="field" />
           </Field>
           <Field label="Serial number">
             <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
+          </Field>
+          <Field label="Date of purchase">
+            <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field" />
+          </Field>
+          <Field label="Category (optional)">
+            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" />
           </Field>
           <Field label="Status">
             {assigned ? (

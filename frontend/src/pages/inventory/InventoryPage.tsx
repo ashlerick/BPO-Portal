@@ -28,6 +28,8 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
   const [serial, setSerial] = useState('')
+  const [brandModel, setBrandModel] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState('')
   const [tag, setTag] = useState('')
   const [nextTag, setNextTag] = useState('')
   const [busy, setBusy] = useState(false)
@@ -54,11 +56,15 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
         name,
         category: category || null,
         serialNumber: serial || null,
+        brandModel: brandModel.trim() || null,
+        purchaseDate: purchaseDate || null,
         ...(tag.trim() && { assetTag: tag.trim() }),
       })
       setName('')
       setCategory('')
       setSerial('')
+      setBrandModel('')
+      setPurchaseDate('')
       setTag('')
       loadNext()
       onAdded()
@@ -76,21 +82,27 @@ function AddItemForm({ onAdded }: { onAdded: () => void }) {
     <CardForm onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-start gap-4">
         <div className="grid min-w-[18rem] flex-1 gap-3 sm:grid-cols-2">
-          <Field label="Item name">
-            <input required value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="e.g. Dell Latitude 5420" />
+          <Field label="Item description">
+            <input required value={name} onChange={(e) => setName(e.target.value)} className="field" placeholder="e.g. Monitor" />
           </Field>
-          <Field label="Category">
-            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" placeholder="Laptop, Phone…" />
+          <Field label="Brand / model">
+            <input value={brandModel} onChange={(e) => setBrandModel(e.target.value)} className="field" placeholder="e.g. Acer 24000" />
           </Field>
           <Field label="Serial number">
             <input value={serial} onChange={(e) => setSerial(e.target.value)} className="field" />
           </Field>
-          <Field label="Asset tag (optional)">
+          <Field label="Date of purchase">
+            <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="field" />
+          </Field>
+          <Field label="Category (optional)">
+            <input value={category} onChange={(e) => setCategory(e.target.value)} className="field" placeholder="Laptop, Phone…" />
+          </Field>
+          <Field label="Asset ID (optional)">
             <input value={tag} onChange={(e) => setTag(e.target.value)} className="field" placeholder={nextTag ? `Auto: ${nextTag}` : 'Auto'} />
           </Field>
         </div>
         <div className="flex flex-col items-center gap-1 text-center">
-          <QrImage value={itemPayload({ assetTag: previewTag, name, category, serialNumber: serial })} label={previewTag} size={120} />
+          <QrImage value={itemPayload({ assetTag: previewTag, name, category, serialNumber: serial, brandModel, purchaseDate })} label={previewTag} size={120} />
           <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{previewTag || '…'}</span>
           <span className="text-[11px] text-gray-500 dark:text-gray-400">Sticker preview</span>
         </div>
@@ -352,7 +364,7 @@ export function InventoryPage() {
     return (items ?? []).filter((i) => {
       if (dueOnly && (i.checkedThisMonth || i.status === 'lost' || i.status === 'retired')) return false
       if (!q) return true
-      return [i.assetTag, i.name, i.category, i.serialNumber, i.assignedToName].some((v) => v?.toLowerCase().includes(q))
+      return [i.assetTag, i.name, i.category, i.serialNumber, i.brandModel, i.assignedToName].some((v) => v?.toLowerCase().includes(q))
     })
   }, [items, filter, dueOnly])
 

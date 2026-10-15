@@ -23,6 +23,8 @@ interface Payload {
   name?: string
   category?: string
   serialNumber?: string
+  brandModel?: string
+  purchaseDate?: string
   url?: string
 }
 
@@ -273,9 +275,11 @@ export function ScanTab() {
                   {latest.payload ? (
                     <>
                       <DetailRow label="Asset tag" value={latest.payload.assetTag} strong />
-                      <DetailRow label="Item" value={latest.payload.name} />
-                      <DetailRow label="Category" value={latest.payload.category} />
+                      <DetailRow label="Item description" value={latest.payload.name} />
+                      <DetailRow label="Brand / model" value={latest.payload.brandModel} />
                       <DetailRow label="Serial number" value={latest.payload.serialNumber} />
+                      <DetailRow label="Date of purchase" value={latest.payload.purchaseDate} />
+                      <DetailRow label="Category" value={latest.payload.category} />
                       <DetailRow label="Link" value={latest.payload.url} />
                       <tr>
                         <th className="w-40 bg-black/[0.03] px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">

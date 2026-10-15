@@ -5,7 +5,7 @@ import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { notifyUsers } from '../notify.js'
 import { formatDisplayName } from '../names.js'
-import { forbid, hasRole, isHrOrAdmin, myEmployee, notFound, parseBody, queryString } from './util.js'
+import { dateOnlyPattern, forbid, hasRole, isHrOrAdmin, myEmployee, notFound, parseBody, queryString, toDate } from './util.js'
 
 // Inventory under /hr/inventory. One item has at most ONE current holder;
 // one employee can hold many. HR/Admin manage everything.
@@ -27,12 +27,16 @@ const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   category: z.string().trim().max(60).nullable().optional(),
   serialNumber: z.string().trim().max(80).nullable().optional(),
+  brandModel: z.string().trim().max(120).nullable().optional(),
+  purchaseDate: z.string().regex(dateOnlyPattern, 'Date of purchase must be a date').nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
 })
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   category: z.string().trim().max(60).nullable().optional(),
   serialNumber: z.string().trim().max(80).nullable().optional(),
+  brandModel: z.string().trim().max(120).nullable().optional(),
+  purchaseDate: z.string().regex(dateOnlyPattern, 'Date of purchase must be a date').nullable().optional(),
   notes: z.string().trim().max(1000).nullable().optional(),
   // 'assigned' is only ever set by assigning.
   status: z.enum(['available', 'repair', 'lost', 'retired']).optional(),
@@ -70,6 +74,8 @@ function serialize(i: ItemRow) {
     name: i.name,
     category: i.category,
     serialNumber: i.serialNumber,
+    brandModel: i.brandModel,
+    purchaseDate: i.purchaseDate,
     status: i.status,
     notes: i.notes,
     condition: i.condition,
@@ -86,10 +92,10 @@ function serialize(i: ItemRow) {
 async function nextTag(): Promise<string> {
   const count = await prisma.inventoryItem.count()
   for (let n = count + 1; n < count + 50; n++) {
-    const tag = `AST-${String(n).padStart(5, '0')}`
+    const tag = `EQ-${String(n).padStart(4, '0')}`
     if (!(await prisma.inventoryItem.findUnique({ where: { assetTag: tag } }))) return tag
   }
-  return `AST-${Date.now()}`
+  return `EQ-${Date.now()}`
 }
 
 export async function handler(req: AuthedRequest, res: VercelResponse) {
@@ -187,7 +193,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       return res.status(409).json({ message: `Asset tag ${assetTag} is already used` })
     }
     const created = await prisma.inventoryItem.create({
-      data: { ...data, assetTag, createdBy: req.auth.sub },
+      data: { ...data, purchaseDate: data.purchaseDate ? toDate(data.purchaseDate) : null, assetTag, createdBy: req.auth.sub },
       include,
     })
     await logAudit(req.auth.sub, 'create', 'inventory_item', created.id)
@@ -223,7 +229,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (data.status && existing.assignedToId) {
       return res.status(409).json({ message: 'Return the item from its holder before changing its status' })
     }
-    const updated = await prisma.inventoryItem.update({ where: { id: sub }, data, include })
+    const { purchaseDate, ...rest } = data
+    const updated = await prisma.inventoryItem.update({
+      where: { id: sub },
+      data: { ...rest, ...(purchaseDate !== undefined && { purchaseDate: purchaseDate ? toDate(purchaseDate) : null }) },
+      include,
+    })
     await logAudit(req.auth.sub, 'update', 'inventory_item', sub)
     return res.status(200).json(serialize(updated))
   }

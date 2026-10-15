@@ -715,6 +715,9 @@ model InventoryItem {
   name         String
   category     String?
   serialNumber String?
+  // The sticker's "Brand / model" and "Date of purchase".
+  brandModel   String?
+  purchaseDate DateTime?
   // available | assigned | repair | lost | retired
   status       String   @default("available")
   notes        String?

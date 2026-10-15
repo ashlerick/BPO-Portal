@@ -6,6 +6,8 @@ export interface InventoryItem {
   name: string
   category: string | null
   serialNumber: string | null
+  brandModel: string | null
+  purchaseDate: string | null
   status: 'available' | 'assigned' | 'repair' | 'lost' | 'retired'
   notes: string | null
   condition: Condition | null

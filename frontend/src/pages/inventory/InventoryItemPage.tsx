@@ -41,8 +41,10 @@ export function InventoryItemPage() {
         <p>
           <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
         </p>
-        {item.category && <p>Category: {item.category}</p>}
+        {item.brandModel && <p>Brand / model: {item.brandModel}</p>}
         {item.serialNumber && <p>Serial number: {item.serialNumber}</p>}
+        {item.purchaseDate && <p>Date of purchase: {formatDateOnly(item.purchaseDate)}</p>}
+        {item.category && <p>Category: {item.category}</p>}
         <p>Held by: {item.assignedToName ?? 'Nobody (in storage)'}</p>
         {item.notes && <p className="text-gray-600 dark:text-gray-400">{item.notes}</p>}
         <div className="pt-2">
