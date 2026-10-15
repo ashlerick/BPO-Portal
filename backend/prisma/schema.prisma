@@ -5,6 +5,9 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Migrations take a Postgres advisory lock, which Neon's pooled connection
+  // times out on; they use the direct connection instead.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 enum Role {

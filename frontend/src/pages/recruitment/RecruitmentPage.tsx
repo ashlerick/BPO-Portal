@@ -9,7 +9,8 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { formatDateOnly } from '../../utils/dates'
 import { humanize } from '../../utils/text'
-import { FILE_INPUT_CLASS, readFileAsBase64 } from '../../utils/files'
+import { readFileAsBase64 } from '../../utils/files'
+import { FilePicker } from '../../components/ui/FilePicker'
 
 type OpeningStatus = 'open' | 'on_hold' | 'closed'
 type ApplicantStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected' | 'withdrawn'
@@ -111,7 +112,7 @@ function OpeningForm({ onCreated }: { onCreated: (o: Opening) => void }) {
         <textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className="field" />
       </Field>
       <Field label="Banner image (optional, PNG/JPG/WebP, under 2MB)">
-        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setBanner(e.target.files?.[0])} className={FILE_INPUT_CLASS} />
+        <FilePicker file={banner} onChange={setBanner} accept="image/png,image/jpeg,image/webp" label="Choose image" />
       </Field>
       <FormError message={error} />
       <Button type="submit" variant="primary" size="sm" disabled={busy}>

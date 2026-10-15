@@ -3,7 +3,8 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { api, ApiError } from '../../services/api'
 import { useTheme } from '../../theme/ThemeContext'
-import { FILE_INPUT_CLASS, readFileAsBase64 } from '../../utils/files'
+import { readFileAsBase64 } from '../../utils/files'
+import { FilePicker } from '../../components/ui/FilePicker'
 
 const MAX_RESUME_BYTES = 3 * 1024 * 1024
 const RESUME_ACCEPT = '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -96,9 +97,10 @@ function ApplyForm({
       <div className="rounded-lg border border-dashed border-black/20 p-3 dark:border-white/20">
         <label className="flex flex-col gap-2 text-sm text-gray-600 dark:text-gray-400">
           Attach your resume (optional, PDF or Word, under 3MB)
-          <input type="file" accept={RESUME_ACCEPT} onChange={(e) => setResumeFile(e.target.files?.[0])} className={FILE_INPUT_CLASS} />
         </label>
-        {resumeFile && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {resumeFile.name}</p>}
+        <div className="mt-2">
+          <FilePicker file={resumeFile} onChange={setResumeFile} accept={RESUME_ACCEPT} label="Choose resume" />
+        </div>
         <label className="mt-3 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
           Or paste a link to it (optional)
           <input type="url" value={resumeLink} onChange={(e) => setResumeLink(e.target.value)} placeholder="https://…" className="field" />
