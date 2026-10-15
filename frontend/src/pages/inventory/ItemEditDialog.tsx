@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
 import { Field, FormError } from '../../components/ui/Field'
 import { api, ApiError } from '../../services/api'
 import { STATUS_LABEL, type InventoryItem } from './types'
@@ -29,12 +30,6 @@ export function ItemEditDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const assigned = !!item.assignedToId
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   async function save(e: FormEvent) {
     e.preventDefault()
@@ -71,18 +66,8 @@ export function ItemEditDialog({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Edit ${item.assetTag}`}
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-    >
-      <form
-        onSubmit={save}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg space-y-3 rounded-2xl border border-black/10 bg-white p-5 text-gray-900 shadow-2xl dark:border-white/10 dark:bg-gray-900 dark:text-gray-100"
-      >
+    <Modal label={`Edit ${item.assetTag}`} onClose={onClose}>
+      <form onSubmit={save} className="space-y-3">
         <h2 className="text-lg font-semibold">Edit item</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Asset tag <span className="font-semibold text-gray-800 dark:text-gray-200">{item.assetTag}</span> can't be changed (the printed
@@ -130,6 +115,6 @@ export function ItemEditDialog({
           </div>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }

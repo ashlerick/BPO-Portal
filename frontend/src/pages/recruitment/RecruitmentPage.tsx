@@ -12,6 +12,7 @@ import { humanize } from '../../utils/text'
 import { readFileAsBase64 } from '../../utils/files'
 import { FilePicker } from '../../components/ui/FilePicker'
 import { useAuth } from '../../auth/AuthContext'
+import { Modal } from '../../components/ui/Modal'
 
 type OpeningStatus = 'open' | 'on_hold' | 'closed'
 type ApplicantStatus = 'applied' | 'screening' | 'interview' | 'offer' | 'hired' | 'rejected' | 'withdrawn'
@@ -524,18 +525,8 @@ function OpeningAdminControls({
         Delete
       </Button>
       {open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Edit ${opening.title}`}
-          onClick={() => setOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-        >
-          <form
-            onSubmit={save}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg space-y-3 rounded-2xl border border-black/10 bg-white p-5 text-gray-900 shadow-2xl dark:border-white/10 dark:bg-gray-900 dark:text-gray-100"
-          >
+        <Modal label={`Edit ${opening.title}`} onClose={() => setOpen(false)}>
+          <form onSubmit={save} className="space-y-3">
             <h2 className="text-lg font-semibold">Edit job opening</h2>
             <Field label="Job title">
               <input required value={title} onChange={(e) => setTitle(e.target.value)} className="field" />
@@ -556,7 +547,7 @@ function OpeningAdminControls({
               </Button>
             </div>
           </form>
-        </div>
+        </Modal>
       )}
     </>
   )
