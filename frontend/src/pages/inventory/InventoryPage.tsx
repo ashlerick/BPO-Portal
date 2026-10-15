@@ -13,6 +13,7 @@ import { api, ApiError } from '../../services/api'
 import { useAuth } from '../../auth/AuthContext'
 import { ConditionSelect } from './ConditionSelect'
 import { ItemEditDialog } from './ItemEditDialog'
+import { ScanTab } from './ScanTab'
 import { itemPayload, QrImage, QrPopup } from './qr'
 import { StickerSheet } from './StickerSheet'
 import { STATUS_LABEL, STATUS_TONE, type InventoryItem } from './types'
@@ -454,6 +455,7 @@ export function InventoryPage() {
             ),
           },
           { id: 'add', label: 'Add an item', content: <AddItemForm onAdded={load} /> },
+          { id: 'scan', label: 'Scan QR', content: <ScanTab /> },
         ]}
       />
     </div>
