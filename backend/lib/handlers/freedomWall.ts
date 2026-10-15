@@ -56,10 +56,17 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   const hr = isHrOrAdmin(req)
 
   if (!sub && req.method === 'GET') {
+    // ?limit=24&before=<createdAt of the last note you have> pages through
+    // the wall. One extra row is returned so the page can tell whether there
+    // are older notes. Without ?limit it behaves as before (newest 200).
+    const limitParam = Number(queryString(req, 'limit'))
+    const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 60) : null
+    const beforeParam = queryString(req, 'before')
+    const before = beforeParam && !Number.isNaN(Date.parse(beforeParam)) ? new Date(beforeParam) : null
     const rows = await prisma.freedomPost.findMany({
-      where: hr ? {} : { hidden: false },
+      where: { ...(hr ? {} : { hidden: false }), ...(before && { createdAt: { lt: before } }) },
       orderBy: { createdAt: 'desc' },
-      take: 200,
+      take: limit ? limit + 1 : 200,
     })
     return res.status(200).json(await withReactions(rows, req.auth.sub))
   }

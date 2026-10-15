@@ -50,12 +50,17 @@ const PICKER_EMOJI = [
   '💡', '📣', '🎶', '🏆', '🚀', '💼', '🏠', '🛠️', '📚', '🐶', '🐱', '🐨',
 ] as const
 
+const PAGE_SIZE = 24
+
 const fmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
 
 export function FreedomWallPage() {
   const { effectiveRoles } = useAuth()
   const isHr = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const [posts, setPosts] = useState<Post[] | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [composing, setComposing] = useState(false)
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -64,13 +69,37 @@ export function FreedomWallPage() {
   const toast = useToast()
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(() => {
-    api
-      .get<Post[]>('/hr/freedom-wall')
-      .then(setPosts)
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load the wall'))
+  // One page at a time (newest first). The server returns one extra row,
+  // which only tells us whether older notes exist.
+  const fetchPage = useCallback(async (before?: string) => {
+    const qs = `limit=${PAGE_SIZE}${before ? `&before=${encodeURIComponent(before)}` : ''}`
+    const rows = await api.get<Post[]>(`/hr/freedom-wall?${qs}`)
+    return { page: rows.slice(0, PAGE_SIZE), more: rows.length > PAGE_SIZE }
   }, [])
-  useEffect(load, [load])
+
+  useEffect(() => {
+    fetchPage()
+      .then(({ page, more }) => {
+        setPosts(page)
+        setHasMore(more)
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load the wall'))
+  }, [fetchPage])
+
+  async function showOlder() {
+    const last = posts?.[posts.length - 1]
+    if (!last) return
+    setLoadingMore(true)
+    try {
+      const { page, more } = await fetchPage(last.createdAt)
+      setPosts((prev) => (prev ? [...prev, ...page.filter((p) => !prev.some((x) => x.id === p.id))] : page))
+      setHasMore(more)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not load older notes')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   // Optimistic: the count moves at once, and rolls back if the server says no.
   async function react(post: Post, emoji: string | null) {
@@ -134,9 +163,12 @@ export function FreedomWallPage() {
     setBusy(true)
     setError(null)
     try {
-      await api.post('/hr/freedom-wall', { body })
+      const created = await api.post<Post>('/hr/freedom-wall', { body })
+      setPosts((prev) => [created, ...(prev ?? [])])
       setBody('')
-      load()
+      setComposing(false)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      toast.success('Posted anonymously')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not post')
     } finally {
@@ -147,9 +179,13 @@ export function FreedomWallPage() {
   return (
     <div>
       <PageHeader title="Freedom Wall" description="Post anonymously. Nobody — including HR — can see who wrote a post." />
+      {/* Compose: a slim bar that stays in view on desktop, a corner button on phones. */}
+      <div className="sticky top-[4.25rem] z-30 mb-6 md:top-3">
+        {composing ? (
+          <div className="relative">
       <form
         onSubmit={submit}
-        className="relative mb-6 max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
+        className="relative max-w-xl -rotate-[0.5deg] rounded-md border border-yellow-300 bg-yellow-100 p-4 text-gray-900 shadow-md shadow-black/30 transition focus-within:rotate-0 focus-within:shadow-lg"
       >
         <textarea
           ref={areaRef}
@@ -206,16 +242,55 @@ export function FreedomWallPage() {
           </button>
         </div>
       </form>
+            <button
+              type="button"
+              onClick={() => setComposing(false)}
+              aria-label="Close the note"
+              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-gray-600 hover:bg-black/10"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setComposing(true)
+              requestAnimationFrame(() => areaRef.current?.focus())
+            }}
+            className="hidden w-full max-w-xl items-center justify-between gap-3 rounded-md border border-yellow-300 bg-yellow-100 px-4 py-3 text-left text-sm text-gray-700 shadow-md shadow-black/30 hover:bg-yellow-50 md:flex"
+          >
+            <span>{body ? `Draft: ${body.slice(0, 40)}${body.length > 40 ? '…' : ''}` : 'Share a thought, idea or concern…'}</span>
+            <span className="text-xl" aria-hidden="true">
+              😊
+            </span>
+          </button>
+        )}
+      </div>
+      {!composing && (
+        <button
+          type="button"
+          onClick={() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+            setComposing(true)
+            requestAnimationFrame(() => areaRef.current?.focus())
+          }}
+          aria-label="Write a note"
+          className="fixed bottom-5 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-300 text-2xl shadow-xl shadow-black/40 active:scale-95 md:hidden"
+        >
+          ✏️
+        </button>
+      )}
 
       {!posts && !error && null}
       {posts && posts.length === 0 && <EmptyState label="No posts yet. Be the first." />}
       {posts && (
         // CSS columns give the notes a masonry wall: one column on a phone.
-        <ul className="columns-1 gap-4 sm:columns-2 lg:columns-3">
+        <ul className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {posts.map((p) => {
             const h = hashOf(p.id)
             return (
-              <li key={p.id} className="mb-4 break-inside-avoid">
+              <li key={p.id}>
                 <div
                   className={`note-pop rounded-md border p-4 text-gray-900 shadow-md shadow-black/30 transition-transform duration-200 [animation:note-pop_0.35s_ease-out] hover:rotate-0 hover:scale-[1.02] ${NOTES[h % NOTES.length]} ${TILTS[(h >> 3) % TILTS.length]} ${p.hidden ? 'opacity-60' : ''}`}
                 >
@@ -258,8 +333,8 @@ export function FreedomWallPage() {
                         <button
                           type="button"
                           onClick={async () => {
-                            await api.put(`/hr/freedom-wall/${p.id}`, { hidden: !p.hidden })
-                            load()
+                            const fresh = await api.put<Post>(`/hr/freedom-wall/${p.id}`, { hidden: !p.hidden })
+                            setPosts((prev) => prev?.map((x) => (x.id === p.id ? { ...x, hidden: fresh.hidden } : x)) ?? prev)
                           }}
                           className="rounded-md border border-black/40 bg-white px-2.5 py-1 text-xs font-semibold text-gray-900 shadow-sm hover:bg-gray-100"
                         >
@@ -270,7 +345,7 @@ export function FreedomWallPage() {
                           onClick={async () => {
                             if (!window.confirm('Delete this post?')) return
                             await api.delete(`/hr/freedom-wall/${p.id}`)
-                            load()
+                            setPosts((prev) => prev?.filter((x) => x.id !== p.id) ?? prev)
                           }}
                           className="rounded-md border border-red-700 bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-red-700"
                         >
@@ -284,6 +359,21 @@ export function FreedomWallPage() {
             )
           })}
         </ul>
+      )}
+      {posts && hasMore && (
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={showOlder}
+            disabled={loadingMore}
+            className="rounded-lg border border-white/20 bg-white/10 px-5 py-2 text-sm font-semibold text-gray-100 hover:bg-white/20 disabled:opacity-50"
+          >
+            {loadingMore ? 'Loading…' : 'Show older notes'}
+          </button>
+        </div>
+      )}
+      {posts && !hasMore && posts.length > PAGE_SIZE && (
+        <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">That's every note on the wall.</p>
       )}
     </div>
   )
