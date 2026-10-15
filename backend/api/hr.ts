@@ -53,13 +53,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // The desktop app signs in with a one-time code, then a device token (not the portal login).
   if (req.query.resource === 'device-token') return exchangeCode(req, res)
   if (req.query.resource === 'device-me') return deviceMe(req, res)
+  if (req.query.resource === 'device-today') return deviceToday(req, res)
+  if (req.query.resource === 'device-clock-in') return deviceClockIn(req, res)
+  if (req.query.resource === 'device-clock-out') return deviceClockOut(req, res)
   // An unknown device-* route must say so. Falling through to the login check would
   // answer "Invalid or expired token", which an app reads as "my token was revoked".
   if (typeof req.query.resource === 'string' && req.query.resource.startsWith('device-') && req.query.resource !== 'device-code') {
     return res.status(404).json({ message: `The portal has no endpoint named ${req.query.resource} yet.` })
   }
-  if (req.query.resource === 'device-today') return deviceToday(req, res)
-  if (req.query.resource === 'device-clock-in') return deviceClockIn(req, res)
-  if (req.query.resource === 'device-clock-out') return deviceClockOut(req, res)
   return authed(req, res)
 }
