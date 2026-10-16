@@ -134,8 +134,8 @@ the Windows credential store (never in a file), then calls `device-me` to show t
 - It downloads the installer from the **app repo's** GitHub Releases (`BPO-Time-Setup.exe`).
 - The button reads **Launch App (BETA)** while the app is in beta. Remove the badge in
   `DesktopAppButton.tsx` when it is released properly.
-- It is already built (`frontend/src/components/ui/DesktopAppButton.tsx`) but **hidden** until the first
-  release exists. To switch it on: publish the installer, then set `DESKTOP_APP_URL` to that repo's release asset and `DESKTOP_APP_READY = true` in that file.
+- Live since 2026-10-16 (v0.1.0). The Download link is `https://github.com/ashlerick/BPO-Time/releases/latest/download/BPO-Time-Setup.exe`
+  (`RELEASES_URL` in `DesktopAppButton.tsx`), so it always serves the newest installer. See the app repo's `docs/release.md`.
 
 ### 5.6a Open from the portal (built)
 

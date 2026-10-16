@@ -18,7 +18,8 @@ export const DESKTOP_APP_READY = true
 // Plain launch (used when a sign-in code could not be fetched): bpotime://open
 // Launch with sign-in: bpotime://connect?code=<one-time code>
 const OPEN_LINK = 'bpotime://open'
-const RELEASES_URL = 'https://github.com/ashlerick/BPO-Time/releases/latest'
+// The newest installer on the app repo's GitHub Releases (the same file every time, so this link never changes).
+const RELEASES_URL = 'https://github.com/ashlerick/BPO-Time/releases/latest/download/BPO-Time-Setup.exe'
 const SEEN_KEY = 'bpotime:opened'
 const FLAG_KEY = 'bpotime:enabled'
 // How long to wait for the browser to hand focus to the app before asking.
@@ -177,10 +178,12 @@ export function DesktopAppButton({ compact = false }: { compact?: boolean }) {
           <p className="mt-1 leading-relaxed text-gray-300">
             If BPO Time is installed, allow your browser to open it and try again. If it isn't installed yet, download it.
           </p>
+          <p className="mt-1 leading-relaxed text-gray-400">
+            Windows may say "protected your PC" because the app isn't signed yet: choose More info, then Run anyway.
+          </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <a
               href={RELEASES_URL}
-              target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg bg-brand-600 px-3 py-1.5 font-semibold text-white hover:bg-brand-700"
             >
