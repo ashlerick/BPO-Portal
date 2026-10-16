@@ -107,6 +107,12 @@ export async function exchangeCode(req: VercelRequest, res: VercelResponse) {
   const device = await prisma.device.create({
     data: { userId: row.userId, name: data.deviceName ?? 'Windows PC', tokenHash: sha256(token), lastSeenAt: now },
   })
+  // One PC, one row: reconnecting the same PC replaces its earlier connection instead of
+  // piling up duplicates. A different PC (different name) keeps its own connection.
+  await prisma.device.updateMany({
+    where: { userId: row.userId, name: device.name, id: { not: device.id }, revokedAt: null },
+    data: { revokedAt: now },
+  })
   await logAudit(row.userId, 'connect', 'device', device.id)
 
   return res.status(201).json({
