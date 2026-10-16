@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, ApiError } from '../services/api'
-import { useTheme } from '../theme/ThemeContext'
 import { ROLE_LABELS, type AuthUser, type Role } from './types'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -45,7 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [viewAsRole, setViewAsRole] = useState<Role | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus | null>(null)
-  const { applyTheme } = useTheme()
 
   function refreshAttendance() {
     api
@@ -61,33 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshAttendance()
     } else {
       setAttendanceStatus(null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
-
-  // Light/dark is saved on the account, so the BPO Time app and the portal share it. Pick up the saved choice
-  // on sign-in and whenever this tab comes back into view; if nothing is saved yet, save this browser's choice.
-  useEffect(() => {
-    if (!user) return
-    const sync = () =>
-      api
-        .get<{ theme: 'light' | 'dark' | null }>('/settings')
-        .then((s) => {
-          if (s.theme) applyTheme(s.theme)
-          else api.put('/settings', { theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light' }).catch(() => undefined)
-        })
-        .catch(() => undefined)
-    sync()
-    // Also when this window is clicked back into (the desktop app is a separate window, so switching to it and back is
-    // not a tab change) and every 30 seconds while it is in view, so a change made in the app shows up by itself.
-    const onVisible = () => document.visibilityState === 'visible' && sync()
-    const timer = window.setInterval(onVisible, 30_000)
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onVisible)
-    return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onVisible)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])

@@ -9,7 +9,6 @@ import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
-import { themeOf } from './settings.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
@@ -22,7 +21,6 @@ import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, endBreak, finalizeBreaks, readBre
 //   POST   /hr/device-clock-in, /hr/device-clock-out (Bearer device token) -> same records as the Attendance page
 //   GET    /hr/device-counts   (Bearer device token) -> { notifications: unread, todos: open and due today or overdue }
 //   GET    /hr/device-feed     (Bearer device token) -> { announcements: latest 3 live, birthdays: today }
-//   GET/POST /hr/device-theme (Bearer device token) -> { theme: 'light' | 'dark' | null }; POST {theme} saves it (shared with the portal)
 //   GET    /hr/devices         (portal login)   -> my connected PCs
 //   DELETE /hr/devices/:id     (portal login)   -> disconnect one
 //
@@ -235,24 +233,6 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
     })),
     birthdays,
   })
-}
-
-// Light/dark theme, stored in the same per-user settings the portal uses, so the two stay in step.
-export async function deviceTheme(req: VercelRequest, res: VercelResponse) {
-  withCors(res)
-  if (req.method === 'OPTIONS') return res.status(204).end()
-  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
-  const device = await authDevice(req, res)
-  if (!device) return
-
-  const user = await prisma.user.findUnique({ where: { id: device.userId }, select: { settings: true } })
-  const existing = user?.settings && typeof user.settings === 'object' ? (user.settings as Record<string, unknown>) : {}
-  if (req.method === 'GET') return res.status(200).json({ theme: themeOf(existing) })
-
-  const data = parseBody(z.object({ theme: z.enum(['light', 'dark']) }), req.body, res)
-  if (!data) return
-  await prisma.user.update({ where: { id: device.userId }, data: { settings: { ...existing, theme: data.theme } } })
-  return res.status(200).json({ theme: data.theme })
 }
 
 function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null; breaks?: unknown } | null) {
