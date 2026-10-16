@@ -1,20 +1,9 @@
-import type { VercelResponse } from '@vercel/node'
 import { prisma } from '../prisma.js'
-import type { AuthedRequest } from '../middleware.js'
 import { formatDisplayName } from '../names.js'
-import { myEmployee } from './util.js'
 
-// GET /hr/birthdays: who has a birthday today (Manila time), for the
-// dashboard's birthday card. Open to any signed-in user, but it only ever
-// returns names, never the date, age or anything else about the person.
-export async function handler(req: AuthedRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(404).json({ message: 'Not found' })
-
-  const me = await myEmployee(req)
-  return res.status(200).json(await birthdaysToday(me?.id))
-}
-
-// Shared with the desktop app's feed (device.ts), which has no portal login to build an AuthedRequest from.
+// Who has a birthday today (Manila time). Birthdays are shown only in the BPO Time desktop app (device.ts,
+// /hr/device-feed); the portal dashboard no longer has a birthday card. It only ever returns names, never the
+// date, age or anything else about the person.
 export async function birthdaysToday(myEmployeeId: string | undefined) {
   const today = new Date(Date.now() + 8 * 60 * 60 * 1000) // Manila
   const month = today.getUTCMonth() + 1

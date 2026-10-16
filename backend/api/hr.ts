@@ -11,7 +11,6 @@ import { handler as kpi } from '../lib/handlers/kpi.js'
 import { handler as freedomWall } from '../lib/handlers/freedomWall.js'
 import { handler as inventory } from '../lib/handlers/inventory.js'
 import { handler as shifts } from '../lib/handlers/shifts.js'
-import { handler as birthdays } from '../lib/handlers/birthdays.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
@@ -35,7 +34,6 @@ const authed = requireAuth(async (req, res) => {
   if (resource === 'freedom-wall') return freedomWall(req, res)
   if (resource === 'inventory') return inventory(req, res)
   if (resource === 'shifts') return shifts(req, res)
-  if (resource === 'birthdays') return birthdays(req, res)
   if (resource === 'new-hire') return newHire(req, res)
   if (resource === 'device-code' && req.method === 'POST') return createCode(req, res)
   if (resource === 'devices' && req.method === 'GET') return listDevices(req, res)

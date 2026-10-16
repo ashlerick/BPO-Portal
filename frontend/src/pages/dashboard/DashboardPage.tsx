@@ -16,7 +16,6 @@ import type { LeaveRequest } from '../leave/types'
 import type { NotificationsResponse } from '../notifications/types'
 import type { WeeklyReport } from '../reports/types'
 import { AdminWidgets } from './AdminWidgets'
-import { BirthdayCard } from './BirthdayCard'
 import { AssignedByMe, AssignTodo, MyTodos } from './Todos'
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
@@ -116,7 +115,6 @@ export function DashboardPage() {
       )}
 
       <SectionStack>
-        <BirthdayCard />
         <Section
           id="dashboard.tasks"
           title="Pending tasks"
