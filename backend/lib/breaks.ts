@@ -4,7 +4,7 @@
 //  - Three slots a day, in order: morning break, lunch, afternoon break. Each is used at most once.
 //  - A FIXED 50 minutes (10 + 30 + 10) come off the day's worked time, whether a break was taken, skipped or cut short.
 //  - Every slot is recorded as "taken" or "not_taken". For a taken break, how far it ran over is recorded too.
-//    Going over is a flag only: it takes nothing extra off the worked time.
+//    Going over is a flag only: it takes nothing extra off the worked time. A grace period (below) is allowed first.
 //  - Starting a later slot closes any earlier unused slot as "not_taken". Clocking out ends a running break
 //    (it counts as taken) and records every unused slot as "not_taken".
 //
@@ -15,6 +15,11 @@ export type BreakSlot = (typeof BREAK_SLOTS)[number]
 
 // Seconds allowed per slot. The fixed deduction is the sum of these.
 export const BREAK_ALLOWANCE_SECONDS: Record<BreakSlot, number> = { morning: 10 * 60, lunch: 30 * 60, afternoon: 10 * 60 }
+
+// Grace past the allowance before a break counts as over. Inside it the break is recorded as not over; past it the
+// full time over the allowance is recorded (not just the part past the grace). An early return needs no grace: it is
+// never flagged, and the deduction is fixed.
+export const OVER_GRACE_SECONDS = 60
 
 // A type alias (not an interface) so it can be stored straight into the JSON column.
 export type BreakEntry = {
@@ -51,8 +56,10 @@ export function runningBreak(entries: BreakEntry[]): BreakEntry | undefined {
   return entries.find((e) => e.status === 'taken' && e.startedAt && !e.endedAt)
 }
 
-const overSecondsFor = (slot: BreakSlot, startedAt: string, endedAt: Date) =>
-  Math.max(0, Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 1000) - BREAK_ALLOWANCE_SECONDS[slot])
+const overSecondsFor = (slot: BreakSlot, startedAt: string, endedAt: Date) => {
+  const over = Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 1000) - BREAK_ALLOWANCE_SECONDS[slot]
+  return over > OVER_GRACE_SECONDS ? over : 0
+}
 
 export type BreakResult = { entries: BreakEntry[] } | { error: string }
 

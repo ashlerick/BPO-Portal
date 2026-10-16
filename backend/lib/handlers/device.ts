@@ -9,7 +9,7 @@ import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
-import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
+import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
 //
@@ -245,6 +245,7 @@ function attendanceBody(record: { status: string; checkInAt: Date | null; checkO
     // Breaks and lunch (see lib/breaks.ts), and the seconds allowed per slot so the app never hard-codes them.
     breaks: readBreaks(record?.breaks),
     breakAllowances: BREAK_ALLOWANCE_SECONDS,
+    breakGraceSeconds: OVER_GRACE_SECONDS,
     // The server's clock is the reference; the app must not trust the PC clock for hours.
     serverNow: new Date(),
   }
