@@ -52,13 +52,13 @@ export function WorldClock() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-brand-950/95 px-4 py-1.5 text-gray-100 backdrop-blur md:sticky md:top-0 md:z-30 md:justify-end md:px-8">
+    <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-brand-950 px-4 py-1.5 text-gray-100 md:pointer-events-none md:sticky md:top-0 md:z-30 md:justify-end md:border-0 md:bg-transparent md:px-8 md:py-2">
     <button
       type="button"
       onClick={toggle}
       title={hidden ? 'Show the clocks' : 'Hide the clocks'}
       aria-label={hidden ? 'Show the clocks' : 'Hide the clocks'}
-      className="min-w-0 text-left"
+      className="min-w-0 text-left md:pointer-events-auto md:rounded-xl md:border md:border-white/15 md:bg-brand-950/85 md:px-3 md:py-1.5 md:shadow-lg md:backdrop-blur md:transition md:hover:bg-brand-950"
     >
       {hidden ? (
         <span className="text-xs font-semibold tabular-nums">
@@ -77,7 +77,7 @@ export function WorldClock() {
         </span>
       )}
     </button>
-    <div className="md:order-first">
+    <div className="md:pointer-events-auto md:order-first">
       <DesktopAppButton compact />
     </div>
     </div>
