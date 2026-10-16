@@ -224,18 +224,22 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
     prisma.employee.findUnique({ where: { userId: device.userId }, select: { id: true } }),
   ])
   const done = new Set(acked.map((a) => a.announcementId))
-  const items = rows.map((a) => ({
-    row: a,
-    featured: a.highlighted || a.category === EMERGENCY_CATEGORY,
-    // A notice that asks for a "Got it" and this person has not given one yet.
-    needsAck: ACK_CATEGORIES.includes(a.category) && !done.has(a.id),
-  }))
-  // Order: highlighted and urgent first (all of them, the panel scrolls), then notices still waiting for this person's
-  // "Got it", then the newest three of the rest.
-  const featured = items.filter((i) => i.featured)
-  const waiting = items.filter((i) => !i.featured && i.needsAck)
-  const newest = items.filter((i) => !i.featured && !i.needsAck).slice(0, 3)
-  const shown = [...featured, ...waiting, ...newest]
+  // The panel only carries what HR highlighted (and emergencies, which are always highlighted), and only until this
+  // person has reacted to it: a reaction means they have seen it, so it drops out of their panel. Everything else is on
+  // the portal's Announcements page.
+  const mine = new Set(
+    (await prisma.announcementReaction.findMany({ where: { userId: device.userId, announcementId: { in: rows.map((a) => a.id) } }, select: { announcementId: true } })).map(
+      (r) => r.announcementId,
+    ),
+  )
+  const shown = rows
+    .filter((a) => (a.highlighted || a.category === EMERGENCY_CATEGORY) && !mine.has(a.id))
+    .map((a) => ({
+      row: a,
+      featured: true,
+      // A notice that asks for a "Got it" which this person has not given yet.
+      needsAck: ACK_CATEGORIES.includes(a.category) && !done.has(a.id),
+    }))
   const birthdays = await birthdaysToday(employee?.id)
   return res.status(200).json({
     announcements: shown.map(({ row: a, featured: isFeatured, needsAck }) => ({
