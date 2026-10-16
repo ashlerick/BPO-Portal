@@ -6,18 +6,19 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { sendEmail } from '../lib/email.js'
 import { inclusiveDayCount, todayInManila } from '../lib/dates.js'
-import { finalizeBreaks, readBreaks } from '../lib/breaks.js'
+import { readBreaks } from '../lib/breaks.js'
 import { buildAttendanceXlsx } from '../lib/attendanceReport.js'
 import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { formatDisplayName } from '../lib/names.js'
-import { getClientIp, isOffSiteIp } from '../lib/request.js'
+import { isOffSiteIp } from '../lib/request.js'
 import { isNotFoundError } from '../lib/errors.js'
 import { notifyRole, notifyUsers } from '../lib/notify.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): leave requests + daily attendance
 // check-in/out, routed here via vercel.json rewrites as
-// ?resource=requests|attendance&sub=<id|today|checkin|checkout>.
+// ?resource=requests|attendance&sub=<id|today|export|mark-absent|correct>. Clocking in and out is done in the BPO Time
+// app (hr dispatcher, device-clock-in / device-clock-out), not here.
 
 function isHrOrAdmin(req: AuthedRequest): boolean {
   return req.auth.roles.includes('hr') || req.auth.roles.includes('admin')
@@ -307,55 +308,6 @@ async function handleAttendanceToday(req: AuthedRequest, res: VercelResponse) {
   })
 }
 
-async function handleCheckIn(req: AuthedRequest, res: VercelResponse) {
-  const employee = await myEmployee(req)
-  if (!employee) {
-    res.status(404).json({ message: 'No employee profile on file yet' })
-    return
-  }
-
-  const date = todayInManila()
-  const existing = await prisma.attendanceRecord.findUnique({
-    where: { employeeId_date: { employeeId: employee.id, date } },
-  })
-  if (existing) {
-    res.status(400).json({ message: 'Already checked in today' })
-    return
-  }
-
-  const record = await prisma.attendanceRecord.create({
-    data: { employeeId: employee.id, date, checkInAt: new Date(), checkInIp: getClientIp(req) },
-  })
-  logAudit(req.auth.sub, 'check_in', 'attendance', record.id)
-  res.status(201).json({ checkedIn: true, checkedOut: false, status: record.status, checkInAt: record.checkInAt, checkOutAt: null })
-}
-
-async function handleCheckOut(req: AuthedRequest, res: VercelResponse) {
-  const employee = await myEmployee(req)
-  if (!employee) {
-    res.status(404).json({ message: 'No employee profile on file yet' })
-    return
-  }
-
-  const date = todayInManila()
-  const existing = await prisma.attendanceRecord.findUnique({
-    where: { employeeId_date: { employeeId: employee.id, date } },
-  })
-  if (!existing || !existing.checkInAt) {
-    res.status(400).json({ message: "You haven't checked in today yet" })
-    return
-  }
-
-  const record = await prisma.attendanceRecord.update({
-    where: { id: existing.id },
-    // Clocking out settles the breaks the same way the desktop app does (see lib/breaks.ts).
-    data: { checkOutAt: new Date(), checkOutIp: getClientIp(req), breaks: finalizeBreaks(readBreaks(existing.breaks), new Date()) },
-  })
-
-  logAudit(req.auth.sub, 'check_out', 'attendance', record.id)
-  res.status(200).json({ checkedIn: true, checkedOut: true, status: record.status, checkInAt: record.checkInAt, checkOutAt: record.checkOutAt })
-}
-
 const markAbsentSchema = z.object({
   employeeId: z.string().min(1),
   date: z.string().regex(dateOnlyPattern, 'date must be YYYY-MM-DD'),
@@ -504,8 +456,6 @@ async function handler(req: AuthedRequest, res: VercelResponse) {
   if (resource === 'attendance') {
     if (!sub && req.method === 'GET') return handleListAttendance(req, res)
     if (sub === 'today' && req.method === 'GET') return handleAttendanceToday(req, res)
-    if (sub === 'checkin' && req.method === 'POST') return handleCheckIn(req, res)
-    if (sub === 'checkout' && req.method === 'POST') return handleCheckOut(req, res)
     if (sub === 'export' && req.method === 'GET') return handleExportAttendance(req, res)
     if (sub === 'mark-absent' && req.method === 'POST') return handleMarkAbsent(req, res)
     if (sub === 'correct' && req.method === 'POST') return handleCorrectAttendance(req, res)

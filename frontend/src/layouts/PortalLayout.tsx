@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ROLE_LABELS, type Role } from '../auth/types'
-import { api, ApiError } from '../services/api'
+import { api } from '../services/api'
 import { useTheme } from '../theme/ThemeContext'
 import { NOTIFICATIONS_CHANGED, type NotificationsResponse } from '../pages/notifications/types'
 import { QuickScanButton } from '../components/ui/QuickScanButton'
@@ -93,26 +93,9 @@ function MenuRow({ icon, children, onClick }: { icon: IconName; children: ReactN
 
 // What the user card opens: everything personal that used to be crammed
 // into the sidebar footer, one item per row.
-function UserActions({ onDone }: { onDone: () => void }) {
-  const { logout, user, viewAsRole, setViewAsRole, attendanceStatus, refreshAttendance } = useAuth()
+function UserActions() {
+  const { logout, user, viewAsRole, setViewAsRole } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const [checkingOut, setCheckingOut] = useState(false)
-  const canCheckOut = attendanceStatus?.checkedIn && !attendanceStatus.checkedOut && attendanceStatus.status !== 'absent'
-
-  async function checkOut() {
-    if (!window.confirm("Check out for today? You won't be able to undo this.")) return
-    setCheckingOut(true)
-    try {
-      await api.post('/leave/attendance/checkout')
-      refreshAttendance()
-      onDone()
-    } catch (err) {
-      if (err instanceof ApiError) alert(err.message)
-    } finally {
-      setCheckingOut(false)
-    }
-  }
-
   return (
     <div className="space-y-0.5">
       {user?.roles.includes('admin') && (
@@ -135,11 +118,6 @@ function UserActions({ onDone }: { onDone: () => void }) {
       <MenuRow icon={theme === 'dark' ? 'sun' : 'moon'} onClick={toggleTheme}>
         {theme === 'dark' ? 'Light mode' : 'Dark mode'}
       </MenuRow>
-      {canCheckOut && (
-        <MenuRow icon="clock" onClick={checkOut}>
-          {checkingOut ? 'Checking out…' : 'Check out for today'}
-        </MenuRow>
-      )}
       <MenuRow icon="logout" onClick={logout}>
         Log out
       </MenuRow>
@@ -174,7 +152,7 @@ function UserCard({ collapsed }: { collapsed: boolean }) {
             collapsed ? 'bottom-0 left-full ml-3' : 'bottom-full left-0 mb-2 w-full'
           }`}
         >
-          <UserActions onDone={() => setOpen(false)} />
+          <UserActions />
         </div>
       )}
       <button
@@ -442,7 +420,7 @@ export function PortalLayout() {
                     <span className="block truncate text-xs text-gray-400">{user?.email}</span>
                   </span>
                 </div>
-                <UserActions onDone={() => setMenuOpen(false)} />
+                <UserActions />
               </div>
             </div>
           )}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from './Button'
 
 // A plain month grid with events dropped onto days. Dates are ISO
@@ -21,6 +22,16 @@ const toneClasses: Record<NonNullable<CalendarEvent['tone']>, string> = {
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+// Where the hover card goes: just above (or below, near the top of the screen) the event that was pointed at.
+interface Tip {
+  label: string
+  date: string
+  x: number
+  top: number
+  bottom: number
+}
 const monthFmt = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 function iso(year: number, month: number, day: number): string {
@@ -31,6 +42,7 @@ export function MonthCalendar({ events, todayIso }: { events: CalendarEvent[]; t
   const start = todayIso ? new Date(todayIso) : new Date()
   const [year, setYear] = useState(start.getUTCFullYear())
   const [month, setMonth] = useState(start.getUTCMonth())
+  const [tip, setTip] = useState<Tip | null>(null)
 
   const firstWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay()
   const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
@@ -86,15 +98,27 @@ export function MonthCalendar({ events, todayIso }: { events: CalendarEvent[]; t
                     {Number(date.slice(8))}
                   </div>
                   <div className="space-y-0.5">
-                    {dayEvents.slice(0, 3).map((e) => (
-                      <div
-                        key={e.id}
-                        title={e.label}
-                        className={`truncate rounded px-1 py-0.5 text-[10px] leading-tight sm:text-xs ${toneClasses[e.tone ?? 'brand']}`}
-                      >
-                        {e.label}
-                      </div>
-                    ))}
+                    {dayEvents.slice(0, 3).map((e) => {
+                      const show = (el: HTMLElement) => {
+                        const r = el.getBoundingClientRect()
+                        setTip({ label: e.label, date: e.date, x: r.left + r.width / 2, top: r.top, bottom: r.bottom })
+                      }
+                      return (
+                        // Up to two lines, so a name is readable; the full text and date show in the hover card.
+                        <div
+                          key={e.id}
+                          tabIndex={0}
+                          aria-label={`${e.label}, ${dayFmt.format(new Date(`${e.date}T00:00:00Z`))}`}
+                          onMouseEnter={(ev) => show(ev.currentTarget)}
+                          onFocus={(ev) => show(ev.currentTarget)}
+                          onMouseLeave={() => setTip(null)}
+                          onBlur={() => setTip(null)}
+                          className={`line-clamp-2 break-words rounded px-1 py-0.5 text-[10px] leading-tight outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:text-xs ${toneClasses[e.tone ?? 'brand']}`}
+                        >
+                          {e.label}
+                        </div>
+                      )
+                    })}
                     {dayEvents.length > 3 && (
                       <div className="px-1 text-[10px] text-gray-500 dark:text-gray-400">+{dayEvents.length - 3} more</div>
                     )}
@@ -105,6 +129,24 @@ export function MonthCalendar({ events, todayIso }: { events: CalendarEvent[]; t
           )
         })}
       </div>
+      {tip &&
+        // Rendered at the page root and positioned by the screen, so the calendar's clipped edges cannot cut it off.
+        createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: 'fixed',
+              left: Math.min(Math.max(tip.x, 140), window.innerWidth - 140),
+              top: tip.top < 90 ? tip.bottom + 8 : tip.top - 8,
+              transform: tip.top < 90 ? 'translateX(-50%)' : 'translate(-50%, -100%)',
+            }}
+            className="pointer-events-none z-[60] w-max max-w-[17rem] rounded-lg border border-white/15 bg-gray-950 px-3 py-2 text-xs leading-snug text-gray-100 shadow-xl"
+          >
+            <div className="font-semibold">{tip.label}</div>
+            <div className="mt-0.5 text-gray-400">{dayFmt.format(new Date(`${tip.date}T00:00:00Z`))}</div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

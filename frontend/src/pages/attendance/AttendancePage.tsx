@@ -414,7 +414,7 @@ export function AttendancePage() {
             <p className="text-sm text-gray-500 dark:text-gray-400">You haven't checked in today.</p>
           )}
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            Clock in from the BPO Time app (Launch App, top right); logging in does not clock you in. When you finish for the day, clock out in the app or use Check Out in the header.
+            Clock in and out with the BPO Time app (Launch App, top right). Logging in to the portal does not clock you in.
           </p>
         </Section>
 
