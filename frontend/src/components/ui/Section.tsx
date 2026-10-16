@@ -116,7 +116,18 @@ function flatten(nodes: ReactNode): ReactNode[] {
 // so a page with many cards shows one at a time; anything that is not a
 // Section is shown under the tabs. `tabs={false}` keeps the plain
 // collapsible stack (for stacks already inside a tab).
-export function SectionStack({ children, tabs = true }: { children: ReactNode; tabs?: boolean }) {
+export function SectionStack({
+  children,
+  tabs = true,
+  activeTab,
+  onTabChange,
+}: {
+  children: ReactNode
+  tabs?: boolean
+  // Set both to let the page pick the tab itself (a deep link). Keys look like `s:<section id>`.
+  activeTab?: string
+  onTabChange?: (key: string) => void
+}) {
   const { effectiveRoles } = useAuth()
   const items = flatten(children)
   const isSection = (n: ReactNode): n is ReactElement<SectionProps> => isValidElement(n) && n.type === Section
@@ -143,6 +154,8 @@ export function SectionStack({ children, tabs = true }: { children: ReactNode; t
       <Tabs
         id={stackId ? `stack:${stackId}` : undefined}
         defaultId={open?.[0]}
+        active={activeTab}
+        onChange={onTabChange}
         tabs={entries.map(([key, e]) => {
           const single = e.sections.length === 1 ? e.sections[0] : null
           return {

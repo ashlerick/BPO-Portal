@@ -59,7 +59,8 @@ function applyUrlSwitch() {
   }
 }
 
-export function DesktopAppButton() {
+// `compact` (the narrow strip): icon only below 640px, so it never crowds the clocks.
+export function DesktopAppButton({ compact = false }: { compact?: boolean }) {
   const [enabled] = useState(() => {
     applyUrlSwitch()
     return DESKTOP_APP_READY || readFlag(FLAG_KEY) === '1'
@@ -152,6 +153,7 @@ export function DesktopAppButton() {
         onClick={open}
         disabled={trying}
         title="Launch the BPO Time desktop app (beta). You are signed in to it automatically."
+        aria-label="Launch App (beta)"
         className="flex items-center gap-2 rounded-xl border border-white/15 bg-brand-950/85 px-3 py-2 text-xs font-semibold text-gray-100 shadow-lg backdrop-blur transition hover:bg-brand-950 disabled:opacity-70"
       >
         {/* a wrench: this is a beta, still being built */}
@@ -162,7 +164,7 @@ export function DesktopAppButton() {
             strokeLinejoin="round"
           />
         </svg>
-        {trying ? 'Opening…' : 'Launch App (BETA)'}
+        <span className={compact ? 'hidden sm:inline' : undefined}>{trying ? 'Opening…' : 'Launch App (BETA)'}</span>
       </button>
 
       {asking && (

@@ -29,8 +29,9 @@ const dayFmt = (timeZone: string) =>
 
 const FORMATTERS = ZONES.map((z) => ({ ...z, time: timeFmt(z.timeZone), day: dayFmt(z.timeZone) }))
 
-// `floating` sits over the page's top-right corner (desktop). `strip` is a
-// normal full-width row under the mobile header, so it never covers content.
+// `floating` sits over the page's top-right corner, only on wide windows (xl, 1280px and up) where there is room
+// beside the content. `strip` is a normal full-width row under the header on anything narrower, so it never
+// covers content; it also carries the Launch App button.
 export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 'strip' }) {
   const [now, setNow] = useState(() => new Date())
   const [hidden, setHidden] = useState(readHidden)
@@ -54,7 +55,7 @@ export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 's
   // Desktop: the corner holds the download button (when there is one) and the clocks.
   if (variant === 'floating') {
     return (
-      <div className="fixed right-3 top-3 z-40 hidden items-center gap-2 md:flex">
+      <div className="fixed right-3 top-3 z-40 hidden items-center gap-2 xl:flex">
         <DesktopAppButton />
       <button
         type="button"
@@ -89,12 +90,13 @@ export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 's
   }
 
   return (
+    <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-brand-950 px-4 py-1.5 text-gray-100 xl:hidden">
     <button
       type="button"
       onClick={toggle}
       title={hidden ? 'Show the clocks' : 'Hide the clocks'}
       aria-label={hidden ? 'Show the clocks' : 'Hide the clocks'}
-      className="block w-full border-b border-white/10 bg-brand-950 px-4 py-1.5 text-left text-gray-100 md:hidden"
+      className="min-w-0 text-left"
     >
       {hidden ? (
         <span className="text-xs font-semibold tabular-nums">
@@ -113,5 +115,7 @@ export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 's
         </span>
       )}
     </button>
+    <DesktopAppButton compact />
+    </div>
   )
 }
