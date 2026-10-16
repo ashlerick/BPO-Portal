@@ -4,12 +4,13 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import { withCors, type AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
-import { todayInManila } from '../dates.js'
+import { todayInManila, zonedInstant } from '../dates.js'
 import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
 import { ACK_CATEGORIES, EMERGENCY_CATEGORY } from './announcements.js'
+import { measure } from './shifts.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
@@ -266,6 +267,43 @@ function attendanceBody(record: { status: string; checkInAt: Date | null; checkO
   }
 }
 
+// The employee's shift for today's shift day, for the panel: when it starts and ends (exact moments, so the app formats
+// them in whichever zone it likes), the grace, and how late this person's clock-in was. Lateness is worked out with the
+// same function the late report uses, so the panel and HR's report always agree. Null when no shift is assigned.
+async function shiftFor(employeeId: string, record: { checkInAt: Date | null } | null) {
+  const date = todayInManila()
+  const assigned = await prisma.shiftAssignment.findFirst({
+    where: { employeeId, effectiveFrom: { lte: date } },
+    orderBy: { effectiveFrom: 'desc' },
+    include: { shift: true },
+  })
+  if (!assigned) return null
+  const shift = assigned.shift
+  const isoDate = date.toISOString().slice(0, 10)
+  const zone = shift.timezone || 'Asia/Manila'
+  const start = zonedInstant(isoDate, shift.startTime, zone)
+  let end = zonedInstant(isoDate, shift.endTime, zone)
+  if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000) // crosses midnight
+  const weekday = new Date(`${isoDate}T00:00:00Z`).getUTCDay()
+  const workDay = shift.workDays.includes(weekday)
+  const m = workDay && record?.checkInAt ? measure(isoDate, record.checkInAt, null, shift) : null
+  return {
+    name: shift.name,
+    startAt: start,
+    endAt: end,
+    graceMinutes: shift.graceMinutes,
+    timezone: zone,
+    workDay,
+    // Minutes late once past the grace (0 when on time or early); only meaningful once clocked in on a work day.
+    lateMinutes: m?.lateMinutes ?? 0,
+  }
+}
+
+// Today's attendance plus the shift, the shape every device endpoint answers with.
+async function attendanceView(employeeId: string, record: Parameters<typeof attendanceBody>[0]) {
+  return { ...attendanceBody(record), shift: await shiftFor(employeeId, record) }
+}
+
 async function deviceAttendance(
   req: VercelRequest,
   res: VercelResponse,
@@ -287,7 +325,7 @@ export async function deviceToday(req: VercelRequest, res: VercelResponse) {
     const record = await prisma.attendanceRecord.findUnique({
       where: { employeeId_date: { employeeId, date: todayInManila() } },
     })
-    res.status(200).json(attendanceBody(record))
+    res.status(200).json(await attendanceView(employeeId, record))
   })
 }
 
@@ -296,14 +334,14 @@ export async function deviceClockIn(req: VercelRequest, res: VercelResponse) {
     const date = todayInManila()
     const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
     // Already clocked in today (for instance from the portal's own page) is a normal answer, not an error.
-    if (existing?.checkInAt) return void res.status(200).json(attendanceBody(existing))
+    if (existing?.checkInAt) return void res.status(200).json(await attendanceView(employeeId, existing))
 
     const data = { checkInAt: new Date(), checkInIp: getClientIp(req) }
     const record = existing
       ? await prisma.attendanceRecord.update({ where: { id: existing.id }, data })
       : await prisma.attendanceRecord.create({ data: { employeeId, date, ...data } })
     logAudit(device.userId, 'check_in', 'attendance', record.id)
-    res.status(201).json(attendanceBody(record))
+    res.status(201).json(await attendanceView(employeeId, record))
   })
 }
 
@@ -313,14 +351,14 @@ export async function deviceClockOut(req: VercelRequest, res: VercelResponse) {
       where: { employeeId_date: { employeeId, date: todayInManila() } },
     })
     if (!existing?.checkInAt) return void res.status(400).json({ message: "You haven't clocked in today yet." })
-    if (existing.checkOutAt) return void res.status(200).json(attendanceBody(existing))
+    if (existing.checkOutAt) return void res.status(200).json(await attendanceView(employeeId, existing))
     const record = await prisma.attendanceRecord.update({
       where: { id: existing.id },
       // Clocking out settles the breaks: a running one ends (counts as taken), unused slots become "not_taken".
       data: { checkOutAt: new Date(), checkOutIp: getClientIp(req), breaks: finalizeBreaks(readBreaks(existing.breaks), new Date()) },
     })
     logAudit(device.userId, 'check_out', 'attendance', record.id)
-    res.status(200).json(attendanceBody(record))
+    res.status(200).json(await attendanceView(employeeId, record))
   })
 }
 
@@ -339,7 +377,7 @@ export async function deviceBreakStart(req: VercelRequest, res: VercelResponse) 
     if ('error' in result) return void res.status(400).json({ message: result.error })
     const record = await prisma.attendanceRecord.update({ where: { id: existing.id }, data: { breaks: result.entries } })
     logAudit(device.userId, 'break_start', 'attendance', record.id)
-    res.status(200).json(attendanceBody(record))
+    res.status(200).json(await attendanceView(employeeId, record))
   })
 }
 
@@ -352,6 +390,6 @@ export async function deviceBreakEnd(req: VercelRequest, res: VercelResponse) {
     if ('error' in result) return void res.status(400).json({ message: result.error })
     const record = await prisma.attendanceRecord.update({ where: { id: existing.id }, data: { breaks: result.entries } })
     logAudit(device.userId, 'break_end', 'attendance', record.id)
-    res.status(200).json(attendanceBody(record))
+    res.status(200).json(await attendanceView(employeeId, record))
   })
 }
