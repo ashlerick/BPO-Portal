@@ -20,4 +20,12 @@ export interface Announcement {
   published: boolean
   publishAt: string | null
   expireAt: string | null
+  // Engagement (added by the server; optional so older responses still fit).
+  reactions?: Record<string, number>
+  myReaction?: string | null
+  needsAck?: boolean
+  acknowledged?: boolean
+  // HR/Admin only, for announcements that need a "Got it".
+  ackCount?: number
+  ackTotal?: number
 }

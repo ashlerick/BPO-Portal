@@ -29,10 +29,9 @@ const dayFmt = (timeZone: string) =>
 
 const FORMATTERS = ZONES.map((z) => ({ ...z, time: timeFmt(z.timeZone), day: dayFmt(z.timeZone) }))
 
-// `floating` sits over the page's top-right corner, only on wide windows (xl, 1280px and up) where there is room
-// beside the content. `strip` is a normal full-width row under the header on anything narrower, so it never
-// covers content; it also carries the Launch App button.
-export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 'strip' }) {
+// A slim row at the top of the page: the clocks, and the Launch App button on a PC. It sits in the layout (sticky on
+// desktop, so it stays in view while you scroll) instead of floating over the page, so it can never cover content.
+export function WorldClock() {
   const [now, setNow] = useState(() => new Date())
   const [hidden, setHidden] = useState(readHidden)
 
@@ -52,45 +51,8 @@ export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 's
     })
   }
 
-  // Desktop: the corner holds the download button (when there is one) and the clocks.
-  if (variant === 'floating') {
-    return (
-      <div className="fixed right-3 top-3 z-40 hidden items-center gap-2 xl:flex">
-        <DesktopAppButton />
-      <button
-        type="button"
-        onClick={toggle}
-        title={hidden ? 'Show the clocks' : 'Hide the clocks'}
-        aria-label={hidden ? 'Show the clocks' : 'Hide the clocks'}
-        className={
-          variant === 'floating'
-            ? 'rounded-xl border border-white/15 bg-brand-950/85 px-3 py-1.5 text-left text-gray-100 shadow-lg backdrop-blur transition hover:bg-brand-950'
-            : 'block w-full border-b border-white/10 bg-brand-950 px-4 py-1.5 text-left text-gray-100 md:hidden'
-        }
-      >
-        {hidden ? (
-          <span className="text-xs font-semibold tabular-nums">
-            {FORMATTERS[0].label} {FORMATTERS[0].time.format(now).replace(/:\d\d /, ' ')}
-          </span>
-        ) : (
-          <span className="flex items-center gap-4">
-            {FORMATTERS.map((z) => (
-              <span key={z.label} className="flex flex-col leading-tight">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                  {z.label} · {z.day.format(now)}
-                </span>
-                <span className="text-sm font-semibold tabular-nums">{z.time.format(now)}</span>
-              </span>
-            ))}
-          </span>
-        )}
-      </button>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-brand-950 px-4 py-1.5 text-gray-100 xl:hidden">
+    <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-brand-950/95 px-4 py-1.5 text-gray-100 backdrop-blur md:sticky md:top-0 md:z-30 md:justify-end md:px-8">
     <button
       type="button"
       onClick={toggle}
@@ -115,7 +77,9 @@ export function WorldClock({ variant = 'floating' }: { variant?: 'floating' | 's
         </span>
       )}
     </button>
-    <DesktopAppButton compact />
+    <div className="md:order-first">
+      <DesktopAppButton compact />
+    </div>
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Section, SectionStack } from '../../components/ui/Section'
+import { AnnouncementEngagement } from './AnnouncementEngagement'
 import { ANNOUNCEMENT_CATEGORIES, isExpired, type Announcement, type AnnouncementCategory } from './types'
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'Asia/Manila' })
@@ -199,6 +200,7 @@ function AnnouncementItem({
           )}
         </div>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{announcement.content}</p>
+        <AnnouncementEngagement announcement={announcement} canManage={canManage} onChange={onUpdated} />
         {!announcement.published && (
           <Badge tone="amber" className="mt-2">
             Draft

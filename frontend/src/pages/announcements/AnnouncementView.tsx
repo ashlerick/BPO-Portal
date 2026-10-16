@@ -4,6 +4,8 @@ import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
+import { useAuth } from '../../auth/AuthContext'
+import { AnnouncementEngagement } from './AnnouncementEngagement'
 import { isExpired, type Announcement } from './types'
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'Asia/Manila' })
@@ -19,6 +21,8 @@ const backLink = (
 // reads the same list the Announcements page uses and picks the one by id.
 export function AnnouncementView() {
   const { id } = useParams()
+  const { effectiveRoles } = useAuth()
+  const canManage = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const [announcement, setAnnouncement] = useState<Announcement | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
 
@@ -56,6 +60,7 @@ export function AnnouncementView() {
         </div>
         <h1 className="mt-3 break-words text-2xl font-bold tracking-tight text-gold-600 dark:text-gold-400">{announcement.title}</h1>
         <p className="mt-4 whitespace-pre-wrap break-words text-base leading-relaxed text-gray-700 dark:text-gray-300">{announcement.content}</p>
+        <AnnouncementEngagement announcement={announcement} canManage={canManage} onChange={setAnnouncement} />
       </Card>
     </div>
   )

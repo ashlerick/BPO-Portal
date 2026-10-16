@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   // Migrations take a Postgres advisory lock, which Neon's pooled connection
   // times out on; they use the direct connection instead.
   directUrl = env("DATABASE_URL_UNPOOLED")
@@ -19,26 +19,28 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  passwordSet  Boolean  @default(true)
+  id                    String                 @id @default(uuid())
+  email                 String                 @unique
+  passwordHash          String
+  passwordSet           Boolean                @default(true)
   // false until HR/Admin activates a new hire's account (Onboarding). An
   // inactive account can't log in or use password-reset links.
-  active       Boolean  @default(true)
-  firstName    String
-  middleName   String?
-  lastName     String
-  roles        Role[]   @default([employee])
+  active                Boolean                @default(true)
+  firstName             String
+  middleName            String?
+  lastName              String
+  roles                 Role[]                 @default([employee])
   // Per-user settings (notification preferences). Shape: { disabledNotifications?: string[] }
-  settings     Json     @default("{}")
-  notifications Notification[]
-  devices      Device[]
-  deviceCodes  DeviceCode[]
-  employee     Employee?
-  resetTokens  PasswordResetToken[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  settings              Json                   @default("{}")
+  notifications         Notification[]
+  devices               Device[]
+  deviceCodes           DeviceCode[]
+  announcementReactions AnnouncementReaction[]
+  announcementAcks      AnnouncementAck[]
+  employee              Employee?
+  resetTokens           PasswordResetToken[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@map("users")
 }
@@ -76,21 +78,21 @@ model Team {
 }
 
 model Employee {
-  id         String    @id @default(uuid())
-  user       User      @relation(fields: [userId], references: [id])
-  userId     String    @unique
-  department Department? @relation(fields: [departmentId], references: [id])
+  id           String      @id @default(uuid())
+  user         User        @relation(fields: [userId], references: [id])
+  userId       String      @unique
+  department   Department? @relation(fields: [departmentId], references: [id])
   departmentId String?
-  team       Team?     @relation(fields: [teamId], references: [id])
-  teamId     String?
-  position   String?
-  status     String    @default("active")
-  dateHired  DateTime?
+  team         Team?       @relation(fields: [teamId], references: [id])
+  teamId       String?
+  position     String?
+  status       String      @default("active")
+  dateHired    DateTime?
   // Supervisor: another Employee. Set by HR/Admin.
-  managerId  String?
-  manager    Employee? @relation("Supervisor", fields: [managerId], references: [id], onDelete: SetNull)
-  supervisees Employee[] @relation("Supervisor")
-  silBalance Int       @default(5)
+  managerId    String?
+  manager      Employee?   @relation("Supervisor", fields: [managerId], references: [id], onDelete: SetNull)
+  supervisees  Employee[]  @relation("Supervisor")
+  silBalance   Int         @default(5)
 
   // Self-service contact details: the employee edits their own; HR/Admin
   // can view them. Nothing else in the API returns these.
@@ -116,24 +118,24 @@ model Employee {
   // [{ name, number?, status: "pending" | "submitted" | "verified" }]
   governmentRequirements Json      @default("[]")
 
-  leaveRequests       LeaveRequest[]
-  attendanceRecords   AttendanceRecord[]
-  dependents          Dependent[]
-  employmentHistory   EmploymentHistory[]
-  documents           Document[]
-  hrRequests          HrRequest[]
-  todos               Todo[]
-  kpiScores           KpiScore[]
-  inventoryItems      InventoryItem[]
-  shiftAssignments    ShiftAssignment[]
-  benefitEnrollments  BenefitEnrollment[]
-  checklists          Checklist[]
-  performanceReviews  PerformanceReview[]
-  performanceNotes    PerformanceNote[]
-  disciplinaryCases   DisciplinaryCase[]
-  salaryChanges       SalaryChange[]
-  payItems            PayItem[]
-  payslips            Payslip[]
+  leaveRequests      LeaveRequest[]
+  attendanceRecords  AttendanceRecord[]
+  dependents         Dependent[]
+  employmentHistory  EmploymentHistory[]
+  documents          Document[]
+  hrRequests         HrRequest[]
+  todos              Todo[]
+  kpiScores          KpiScore[]
+  inventoryItems     InventoryItem[]
+  shiftAssignments   ShiftAssignment[]
+  benefitEnrollments BenefitEnrollment[]
+  checklists         Checklist[]
+  performanceReviews PerformanceReview[]
+  performanceNotes   PerformanceNote[]
+  disciplinaryCases  DisciplinaryCase[]
+  salaryChanges      SalaryChange[]
+  payItems           PayItem[]
+  payslips           Payslip[]
 
   @@map("employees")
 }
@@ -168,53 +170,85 @@ enum AttendanceStatus {
 }
 
 model AttendanceRecord {
-  id         String           @id @default(uuid())
-  employee   Employee         @relation(fields: [employeeId], references: [id])
-  employeeId String
-  date       DateTime         // the calendar day this record is for, normalized to midnight Asia/Manila
-  status     AttendanceStatus @default(present)
-  checkInAt  DateTime?        // null for a record HR marked absent
-  checkOutAt DateTime?
-  checkInIp  String?          // client IP at check-in, for HR to spot off-site logins
-  checkOutIp String?
-  markedBy   String?          // userId of the HR/admin who marked this absent, if applicable
+  id             String           @id @default(uuid())
+  employee       Employee         @relation(fields: [employeeId], references: [id])
+  employeeId     String
+  date           DateTime // the calendar day this record is for, normalized to midnight Asia/Manila
+  status         AttendanceStatus @default(present)
+  checkInAt      DateTime? // null for a record HR marked absent
+  checkOutAt     DateTime?
+  checkInIp      String? // client IP at check-in, for HR to spot off-site logins
+  checkOutIp     String?
+  markedBy       String? // userId of the HR/admin who marked this absent, if applicable
   // Entered by HR (no shift schedule to compute them from): the weekly tracker's
   // OverTime and Working Holiday rows.
-  overtimeHours  Decimal?     @db.Decimal(4, 2)
-  workingHoliday Boolean       @default(false)
+  overtimeHours  Decimal?         @db.Decimal(4, 2)
+  workingHoliday Boolean          @default(false)
   // Breaks and lunch taken on the desktop app: [{ slot, status, startedAt, endedAt, overSeconds }]. See lib/breaks.ts.
-  breaks     Json             @default("[]")
-  createdAt  DateTime         @default(now())
+  breaks         Json             @default("[]")
+  createdAt      DateTime         @default(now())
 
   @@unique([employeeId, date])
   @@map("attendance_records")
 }
 
 model Announcement {
-  id        String    @id @default(uuid())
+  id        String                 @id @default(uuid())
   title     String
   content   String
   authorId  String
-  category  String    @default("Company announcements")
-  published Boolean   @default(false)
+  category  String                 @default("Company announcements")
+  published Boolean                @default(false)
   publishAt DateTime?
   expireAt  DateTime?
-  createdAt DateTime  @default(now())
+  createdAt DateTime               @default(now())
+  reactions AnnouncementReaction[]
+  acks      AnnouncementAck[]
 
   @@map("announcements")
 }
 
+// One reaction (a thumbs up, heart or party popper) per person per announcement.
+model AnnouncementReaction {
+  id             String       @id @default(uuid())
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcementId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  emoji          String
+  createdAt      DateTime     @default(now())
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_reactions")
+}
+
+// "Got it": a person confirming they have read an announcement that needs it (policies, important and
+// emergency notices). HR sees who has and who has not.
+model AnnouncementAck {
+  id             String       @id @default(uuid())
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcementId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  ackedAt        DateTime     @default(now())
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_acks")
+}
+
 model Benefit {
-  id          String   @id @default(uuid())
-  title       String
-  category    String
-  description String
-  eligibility String?
+  id              String              @id @default(uuid())
+  title           String
+  category        String
+  description     String
+  eligibility     String?
   provider        String?
   providerContact String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  enrollments BenefitEnrollment[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  enrollments     BenefitEnrollment[]
 
   @@map("benefits")
 }
@@ -228,19 +262,19 @@ model DocumentCategory {
 }
 
 model Document {
-  id          String            @id @default(uuid())
+  id          String           @id @default(uuid())
   title       String
-  category    DocumentCategory  @relation(fields: [categoryId], references: [id])
+  category    DocumentCategory @relation(fields: [categoryId], references: [id])
   categoryId  String
   storageKey  String
-  accessLevel Role              @default(employee)
+  accessLevel Role             @default(employee)
   uploadedBy  String
   // Set for a file that belongs to one employee (Employee Management ->
   // Employee documents); such a file is visible only to that employee's
   // record managers (HR/Admin), never through the company Documents list.
-  employee    Employee?         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee    Employee?        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   employeeId  String?
-  createdAt   DateTime          @default(now())
+  createdAt   DateTime         @default(now())
 
   @@map("documents")
 }
@@ -309,7 +343,7 @@ model Notification {
 }
 
 model CalendarEvent {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   title       String
   // holiday | event | meeting | training | deadline
   kind        String
@@ -318,7 +352,7 @@ model CalendarEvent {
   endDate     DateTime?
   description String?
   createdBy   String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   @@index([startDate])
   @@map("calendar_events")
@@ -451,40 +485,40 @@ model JobOpening {
 }
 
 model Applicant {
-  id            String      @id @default(uuid())
-  jobOpening    JobOpening  @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
-  jobOpeningId  String
+  id           String      @id @default(uuid())
+  jobOpening   JobOpening  @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  jobOpeningId String
   // name is "First Middle Last", kept in step with the parts below.
-  name          String
-  firstName     String?
-  middleName    String?
-  lastName      String?
-  email         String?
-  phone         String?
-  birthDate     DateTime?
+  name         String
+  firstName    String?
+  middleName   String?
+  lastName     String?
+  email        String?
+  phone        String?
+  birthDate    DateTime?
   // male | female | other | prefer_not_to_say
-  gender        String?
+  gender       String?
   // Free-text applicant information (background, source, expected salary…).
-  information   String?
+  information  String?
   // applied | screening | interview | offer | hired | rejected | withdrawn
-  status        String      @default("applied")
-  decisionNote  String?
-  decidedAt     DateTime?
+  status       String      @default("applied")
+  decisionNote String?
+  decidedAt    DateTime?
   // internal (entered by HR) | careers (applied on the public page)
-  source        String      @default("internal")
-  resumeLink    String?
+  source       String      @default("internal")
+  resumeLink   String?
   // An uploaded resume (PDF/Word) stored in the bucket, from the careers page.
-  resumeKey     String?
-  resumeName    String?
+  resumeKey    String?
+  resumeName   String?
   // Who referred this applicant, as the applicant typed it on the careers page.
-  referrerName  String?
+  referrerName String?
   // Older applicants picked an employee from a list; kept so they still display.
-  referredById  String?
+  referredById String?
   // Set when this applicant was turned into an employee through Onboarding.
-  hiredUserId   String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  interviews    Interview[]
+  hiredUserId  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  interviews   Interview[]
 
   @@index([jobOpeningId])
   @@map("applicants")
@@ -507,19 +541,19 @@ model Interview {
 // One evaluation cycle for one employee. status: self_assessment ->
 // supervisor_evaluation -> hr_review -> completed.
 model PerformanceReview {
-  id                    String   @id @default(uuid())
-  employee              Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId            String
-  period                String
-  status                String   @default("self_assessment")
-  selfAssessment        String?
-  supervisorEvaluation  String?
-  supervisorRating      Int?
-  hrReview              String?
-  finalRating           Int?
-  createdBy             String
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  employee             Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId           String
+  period               String
+  status               String   @default("self_assessment")
+  selfAssessment       String?
+  supervisorEvaluation String?
+  supervisorRating     Int?
+  hrReview             String?
+  finalRating          Int?
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@index([employeeId])
   @@map("performance_reviews")
@@ -570,15 +604,15 @@ model DisciplinaryCase {
 }
 
 model SalaryChange {
-  id            String   @id @default(uuid())
-  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId    String
-  effectiveDate DateTime
+  id             String   @id @default(uuid())
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  effectiveDate  DateTime
   previousSalary Decimal? @db.Decimal(12, 2)
-  newSalary     Decimal  @db.Decimal(12, 2)
-  reason        String?
-  createdBy     String
-  createdAt     DateTime @default(now())
+  newSalary      Decimal  @db.Decimal(12, 2)
+  reason         String?
+  createdBy      String
+  createdAt      DateTime @default(now())
 
   @@index([employeeId])
   @@map("salary_changes")
@@ -626,8 +660,8 @@ model Payslip {
 // A to-do assigned to an employee by HR or their supervisor (the old
 // spreadsheet's "To Do's": task, due date, linked document).
 model Todo {
-  id          String    @id @default(uuid())
-  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id          String        @id @default(uuid())
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   employeeId  String
   title       String
   // Longer instructions or context for the task (optional).
@@ -635,16 +669,16 @@ model Todo {
   dueDate     DateTime?
   link        String?
   // open | done
-  status      String    @default("open")
+  status      String        @default("open")
   completedAt DateTime?
   // User ids: who finished it, and who assigned it (createdBy).
   completedBy String?
   // low | normal | urgent
-  priority    String    @default("normal")
+  priority    String        @default("normal")
   // Soft delete: hidden everywhere, kept in the database.
   deletedAt   DateTime?
   createdBy   String
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime      @default(now())
   comments    TodoComment[]
 
   @@index([employeeId, status])
@@ -701,13 +735,13 @@ model KpiScore {
 // Freedom Wall: anonymous posts everyone can read. There is deliberately NO
 // author column — who posted is never stored, here or in the audit log.
 model FreedomPost {
-  id        String   @id @default(uuid())
+  id        String            @id @default(uuid())
   body      String
   // The random display name picked for this post ("Anonymous Sleepy Koala").
   // Never derived from the author.
   alias     String?
-  hidden    Boolean  @default(false)
-  createdAt DateTime @default(now())
+  hidden    Boolean           @default(false)
+  createdAt DateTime          @default(now())
   reactions FreedomReaction[]
 
   @@index([createdAt])
@@ -717,12 +751,12 @@ model FreedomPost {
 // One reaction per person per post. reactorKey is an HMAC of the user and the
 // post, not the user id, so the table cannot be read back to a person.
 model FreedomReaction {
-  id         String       @id @default(uuid())
-  post       FreedomPost  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id         String      @id @default(uuid())
+  post       FreedomPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   postId     String
   reactorKey String
   emoji      String
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime    @default(now())
 
   @@unique([postId, reactorKey])
   @@map("freedom_reactions")
@@ -732,29 +766,29 @@ model FreedomReaction {
 // FK), while one employee can hold many items. InventoryAssignment keeps the
 // full history. assetTag is what the QR sticker encodes.
 model InventoryItem {
-  id           String   @id @default(uuid())
-  assetTag     String   @unique
-  name         String
-  category     String?
-  serialNumber String?
+  id                 String                @id @default(uuid())
+  assetTag           String                @unique
+  name               String
+  category           String?
+  serialNumber       String?
   // The sticker's "Brand / model" and "Date of purchase".
-  brandModel   String?
-  purchaseDate DateTime?
+  brandModel         String?
+  purchaseDate       DateTime?
   // available | assigned | repair | lost | retired
-  status       String   @default("available")
-  notes        String?
-  assignedTo   Employee? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedToId String?
+  status             String                @default("available")
+  notes              String?
+  assignedTo         Employee?             @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId       String?
   // Latest monthly-check result: good | fair | poor | damaged
   condition          String?
   conditionCheckedAt DateTime?
   // Soft delete: hidden everywhere, kept in the database.
-  deletedAt    DateTime?
-  createdBy    String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  assignments  InventoryAssignment[]
-  checks       InventoryCheck[]
+  deletedAt          DateTime?
+  createdBy          String
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  assignments        InventoryAssignment[]
+  checks             InventoryCheck[]
 
   @@index([assignedToId])
   @@map("inventory_items")
@@ -793,17 +827,17 @@ model InventoryAssignment {
 // Shift schedules, managed by HR. Late / undertime / overtime are measured
 // against the shift that applies to an attendance date.
 model Shift {
-  id           String   @id @default(uuid())
+  id           String            @id @default(uuid())
   name         String
   // "HH:MM" in Manila time. endTime <= startTime means the shift crosses midnight.
   startTime    String
   endTime      String
   // 0 = Sunday ... 6 = Saturday
   workDays     Int[]
-  breakMinutes Int      @default(0)
-  graceMinutes Int      @default(0)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  breakMinutes Int               @default(0)
+  graceMinutes Int               @default(0)
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
   assignments  ShiftAssignment[]
 
   @@map("shifts")
