@@ -421,7 +421,6 @@ export function MyProfile({ extraTabs = [] }: { extraTabs?: TabItem[] }) {
         <p className="text-sm text-gray-500 dark:text-gray-400">No employee profile on file for your account yet.</p>
       )}
       <Tabs
-        id="profile"
         tabs={[
           ...(profile
             ? [

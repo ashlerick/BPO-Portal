@@ -378,7 +378,6 @@ export function AttendancePage() {
       {error && <ErrorState message={error} />}
 
       <Tabs
-        id="attendance"
         tabs={[
           {
             id: 'today',

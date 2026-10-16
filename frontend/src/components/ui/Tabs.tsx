@@ -1,10 +1,9 @@
 import { isValidElement, useState, type ReactNode } from 'react'
 
 // A row of tabs over one panel, for pages that would otherwise be a long
-// stack of cards. Only the active tab's content is rendered. `id` makes the
-// chosen tab stick per browser, like Section's open/closed state.
-
-const STORAGE_PREFIX = 'tabs:'
+// stack of cards. Only the active tab's content is rendered. A page always
+// opens on its first (or default) tab: the choice is not remembered between
+// visits, so clicking "Calendar" always lands on the calendar itself.
 
 export interface TabItem {
   id: string
@@ -14,24 +13,12 @@ export interface TabItem {
   content: ReactNode
 }
 
-function readTab(id: string | undefined, valid: string[], fallback: string): string {
-  if (!id) return fallback
-  try {
-    const stored = localStorage.getItem(STORAGE_PREFIX + id)
-    return stored && valid.includes(stored) ? stored : fallback
-  } catch {
-    return fallback
-  }
-}
-
 export function Tabs({
-  id,
   tabs,
   defaultId,
   active: controlled,
   onChange,
 }: {
-  id?: string
   tabs: TabItem[]
   defaultId?: string
   // Set both to let the page switch tabs itself (e.g. a "Scan" button).
@@ -39,19 +26,13 @@ export function Tabs({
   onChange?: (id: string) => void
 }) {
   const ids = tabs.map((t) => t.id)
-  const [active, setActive] = useState(() => readTab(id, ids, defaultId && ids.includes(defaultId) ? defaultId : (ids[0] ?? '')))
+  const [active, setActive] = useState(() => (defaultId && ids.includes(defaultId) ? defaultId : (ids[0] ?? '')))
   const current = tabs.find((t) => t.id === (controlled ?? active)) ?? tabs[0]
   if (!current) return null
 
   function pick(tabId: string) {
     setActive(tabId)
     onChange?.(tabId)
-    if (!id) return
-    try {
-      localStorage.setItem(STORAGE_PREFIX + id, tabId)
-    } catch {
-      // storage blocked, the tab just won't be remembered
-    }
   }
 
   return (

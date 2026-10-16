@@ -334,7 +334,6 @@ export function BenefitsPage() {
     <div>
       <PageHeader title="Benefits" />
       <Tabs
-        id="benefits"
         tabs={[
           { id: 'mine', label: 'My benefits', content: <MyBenefits /> },
           {

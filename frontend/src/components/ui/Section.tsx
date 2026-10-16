@@ -125,7 +125,6 @@ export function SectionStack({ children, tabs = true }: { children: ReactNode; t
   if (!tabs || sections.length < 2) return <div className="space-y-3">{children}</div>
 
   const others = items.filter((n) => !isSection(n))
-  const stackId = sections.find((s) => s.props.id)?.props.id
 
   // One tab per group (or per section when it has no group), in page order.
   const tabsByKey = new Map<string, { label: string; sections: ReactElement<SectionProps>[] }>()
@@ -141,7 +140,6 @@ export function SectionStack({ children, tabs = true }: { children: ReactNode; t
   return (
     <div>
       <Tabs
-        id={stackId ? `stack:${stackId}` : undefined}
         defaultId={open?.[0]}
         tabs={entries.map(([key, e]) => {
           const single = e.sections.length === 1 ? e.sections[0] : null

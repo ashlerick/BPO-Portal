@@ -411,7 +411,6 @@ export function InventoryPage() {
     <div>
       <PageHeader title="Inventory" description="Company items. Each item has one holder; one person can hold many." />
       <Tabs
-        id="inventory"
         active={tab}
         onChange={setTab}
         tabs={[
