@@ -10,6 +10,12 @@ import { myEmployee } from './util.js'
 export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(404).json({ message: 'Not found' })
 
+  const me = await myEmployee(req)
+  return res.status(200).json(await birthdaysToday(me?.id))
+}
+
+// Shared with the desktop app's feed (device.ts), which has no portal login to build an AuthedRequest from.
+export async function birthdaysToday(myEmployeeId: string | undefined) {
   const today = new Date(Date.now() + 8 * 60 * 60 * 1000) // Manila
   const month = today.getUTCMonth() + 1
   const day = today.getUTCDate()
@@ -18,15 +24,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   // A Feb 29 birthday is celebrated on Feb 28 in non-leap years.
   const feb28InCommonYear = month === 2 && day === 28 && !leapYear
 
-  const [rows, me] = await Promise.all([
-    prisma.employee.findMany({
-      where: { status: 'active', birthDate: { not: null } },
-      select: { id: true, birthDate: true, user: { select: { firstName: true, middleName: true, lastName: true } } },
-    }),
-    myEmployee(req),
-  ])
+  const rows = await prisma.employee.findMany({
+    where: { status: 'active', birthDate: { not: null } },
+    select: { id: true, birthDate: true, user: { select: { firstName: true, middleName: true, lastName: true } } },
+  })
 
-  const people = rows
+  return rows
     .filter((r) => {
       const b = r.birthDate as Date
       const bm = b.getUTCMonth() + 1
@@ -36,9 +39,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     .map((r) => ({
       name: formatDisplayName(r.user.firstName, r.user.middleName, r.user.lastName),
       firstName: r.user.firstName,
-      isMe: r.id === me?.id,
+      isMe: r.id === myEmployeeId,
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
-
-  return res.status(200).json(people)
 }

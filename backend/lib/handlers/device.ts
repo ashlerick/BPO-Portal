@@ -8,6 +8,7 @@ import { minutesIntoManilaDay, todayInManila } from '../dates.js'
 import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
+import { birthdaysToday } from './birthdays.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
 //
@@ -17,6 +18,8 @@ import { notFound, parseBody, queryString } from './util.js'
 //   GET    /hr/device-me       (Bearer device token) -> who this PC is signed in as
 //   GET    /hr/device-today    (Bearer device token) -> today's attendance for this person
 //   POST   /hr/device-clock-in, /hr/device-clock-out (Bearer device token) -> same records as the Attendance page
+//   GET    /hr/device-counts   (Bearer device token) -> { notifications: unread, todos: open and due today or overdue }
+//   GET    /hr/device-feed     (Bearer device token) -> { announcements: latest 3 live, birthdays: today }
 //   GET    /hr/devices         (portal login)   -> my connected PCs
 //   DELETE /hr/devices/:id     (portal login)   -> disconnect one
 //
@@ -179,6 +182,58 @@ async function authDevice(req: VercelRequest, res: VercelResponse): Promise<Devi
     await prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } })
   }
   return device
+}
+
+// The two numbers on the app's panel: unread notifications, and open to-dos due today or overdue.
+export async function deviceCounts(req: VercelRequest, res: VercelResponse) {
+  withCors(res)
+  if (req.method === 'OPTIONS') return res.status(204).end()
+  if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' })
+  const device = await authDevice(req, res)
+  if (!device) return
+
+  const employee = await prisma.employee.findUnique({ where: { userId: device.userId }, select: { id: true } })
+  const [notifications, todos] = await Promise.all([
+    prisma.notification.count({ where: { userId: device.userId, readAt: null } }),
+    employee
+      ? prisma.todo.count({
+          where: { employeeId: employee.id, deletedAt: null, status: 'open', dueDate: { not: null, lte: todayInManila() } },
+        })
+      : Promise.resolve(0),
+  ])
+  return res.status(200).json({ notifications, todos })
+}
+
+// What the panel shows besides the clock: the latest live announcements and today's birthdays.
+// Announcements are the same ones every employee sees on the portal (published, already live,
+// not expired), cut to a short preview; the full text stays on the portal.
+export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
+  withCors(res)
+  if (req.method === 'OPTIONS') return res.status(204).end()
+  if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' })
+  const device = await authDevice(req, res)
+  if (!device) return
+
+  const now = new Date()
+  const [rows, employee] = await Promise.all([
+    prisma.announcement.findMany({
+      where: { published: true, publishAt: { lte: now }, OR: [{ expireAt: null }, { expireAt: { gt: now } }] },
+      orderBy: { publishAt: 'desc' },
+      take: 3,
+    }),
+    prisma.employee.findUnique({ where: { userId: device.userId }, select: { id: true } }),
+  ])
+  const birthdays = await birthdaysToday(employee?.id)
+  return res.status(200).json({
+    announcements: rows.map((a) => ({
+      id: a.id,
+      title: a.title,
+      category: a.category,
+      preview: a.content.length > 140 ? `${a.content.slice(0, 140).trimEnd()}…` : a.content,
+      publishAt: a.publishAt,
+    })),
+    birthdays,
+  })
 }
 
 function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null } | null) {
