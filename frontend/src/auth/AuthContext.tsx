@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, ApiError } from '../services/api'
 import { ROLE_LABELS, type AuthUser, type Role } from './types'
 import { Card } from '../components/ui/Card'
@@ -31,10 +31,6 @@ interface AuthContextValue {
   guardedAction: (requiredRoles: Role[], run: () => void) => void
   attendanceStatus: AttendanceStatus | null
   refreshAttendance: () => void
-  justCheckedIn: boolean
-  dismissJustCheckedIn: () => void
-  checkInError: string | null
-  retryCheckIn: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -48,9 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [viewAsRole, setViewAsRole] = useState<Role | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus | null>(null)
-  const [justCheckedIn, setJustCheckedIn] = useState(false)
-  const [checkInError, setCheckInError] = useState<string | null>(null)
-  const autoCheckInTried = useRef(false)
 
   function refreshAttendance() {
     api
@@ -59,56 +52,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => setAttendanceStatus(null))
   }
 
-  function dismissJustCheckedIn() {
-    setJustCheckedIn(false)
-  }
-
-  function attemptCheckIn() {
-    api
-      .post<AttendanceStatus>('/leave/attendance/checkin')
-      .then((status) => {
-        setAttendanceStatus(status)
-        setJustCheckedIn(true)
-        setCheckInError(null)
-      })
-      .catch((err) => {
-        // A 404 means there's no employee profile on file yet — not a
-        // real failure, nothing to surface. Anything else (a dropped
-        // request, a transient server error) is worth telling the
-        // person about, with a way to retry, instead of silently
-        // leaving them un-checked-in for the day.
-        if (err instanceof ApiError && err.status === 404) return
-        setCheckInError(err instanceof ApiError ? err.message : 'Could not check in automatically')
-      })
-  }
-
-  function retryCheckIn() {
-    setCheckInError(null)
-    attemptCheckIn()
-  }
-
+  // Clocking in happens in the BPO Time desktop app, not on login —
+  // the portal only reads today's status.
   useEffect(() => {
     if (user) {
-      autoCheckInTried.current = false
-      setCheckInError(null)
       refreshAttendance()
     } else {
       setAttendanceStatus(null)
-      setJustCheckedIn(false)
-      setCheckInError(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
-
-  // Login itself is the check-in trigger — no separate "Check In"
-  // button to click or forget. Fires once per session, the first time
-  // we learn today has no record yet.
-  useEffect(() => {
-    if (!user || !attendanceStatus || attendanceStatus.checkedIn || autoCheckInTried.current) return
-    autoCheckInTried.current = true
-    attemptCheckIn()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, attendanceStatus])
 
   useEffect(() => {
     const token = localStorage.getItem('bpo_token')
@@ -189,10 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         guardedAction,
         attendanceStatus,
         refreshAttendance,
-        justCheckedIn,
-        dismissJustCheckedIn,
-        checkInError,
-        retryCheckIn,
       }}
     >
       {children}

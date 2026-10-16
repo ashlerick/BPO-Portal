@@ -16,7 +16,6 @@ import type { LeaveRequest } from '../leave/types'
 import type { NotificationsResponse } from '../notifications/types'
 import type { WeeklyReport } from '../reports/types'
 import { AdminWidgets } from './AdminWidgets'
-import { CheckInPrompt } from './CheckInPrompt'
 import { BirthdayCard } from './BirthdayCard'
 import { AssignedByMe, AssignTodo, MyTodos } from './Todos'
 
@@ -88,7 +87,7 @@ export function DashboardPage() {
     })
   }
   if (attendanceStatus && !attendanceStatus.checkedIn && attendanceStatus.status !== 'absent') {
-    tasks.push({ key: 'check-in', label: "You haven't checked in today", to: '/attendance' })
+    tasks.push({ key: 'check-in', label: "You haven't clocked in today — use the BPO Time app", to: '/attendance' })
   }
 
   // Reminders: calendar items in the next 14 days.
@@ -115,10 +114,6 @@ export function DashboardPage() {
           {user.roles.map((role) => ROLE_LABELS[role]).join(', ')}
         </p>
       )}
-
-      <div className="mt-6">
-        <CheckInPrompt />
-      </div>
 
       <SectionStack>
         <BirthdayCard />

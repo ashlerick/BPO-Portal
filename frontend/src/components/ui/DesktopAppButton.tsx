@@ -22,7 +22,7 @@ const RELEASES_URL = 'https://github.com/ashlerick/BPO-Time/releases/latest'
 const SEEN_KEY = 'bpotime:opened'
 const FLAG_KEY = 'bpotime:enabled'
 // How long to wait for the browser to hand focus to the app before asking.
-const WAIT_MS = 2200
+const WAIT_MS = 6000
 
 function readFlag(key: string): string | null {
   try {
@@ -96,11 +96,15 @@ export function DesktopAppButton() {
     // Already signed in here, so hand the app a one-time code: it signs itself in,
     // with no password and no second login. The code lasts 60 seconds and works once.
     let link = OPEN_LINK
+    let known: Set<string> | null = null
     try {
+      // PCs already connected, so a new one appearing proves the app took the code
+      known = new Set((await api.get<{ id: string }[]>('/hr/devices')).map((d) => d.id))
       const { code } = await api.post<{ code: string }>('/hr/device-code', {})
       link = `bpotime://connect?code=${encodeURIComponent(code)}`
     } catch {
       // no code: the app still opens, and can ask the person to sign in itself
+      if (link === OPEN_LINK) known = null
     }
     const away = () => {
       left.current = true
@@ -113,18 +117,32 @@ export function DesktopAppButton() {
 
     window.location.href = link
 
+    // The app is often already running with its window on top, so the browser never loses
+    // focus. Its sign-in is the reliable signal: it swaps the code for a new connected PC,
+    // which shows up in the devices list. Check that every second until the wait runs out.
+    const started = Date.now()
     window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => {
-      window.removeEventListener('blur', away)
-      document.removeEventListener('visibilitychange', onVisibility)
-      setTrying(false)
-      if (left.current) {
-        // the browser handed focus to something else: the app started
-        writeFlag(SEEN_KEY, '1')
-      } else {
-        setAsking(true)
+    const check = async () => {
+      let opened = left.current
+      if (!opened && known) {
+        try {
+          const now = await api.get<{ id: string }[]>('/hr/devices')
+          opened = now.some((d) => !known!.has(d.id))
+        } catch {
+          // keep waiting
+        }
       }
-    }, WAIT_MS)
+      if (opened || Date.now() - started >= WAIT_MS) {
+        window.removeEventListener('blur', away)
+        document.removeEventListener('visibilitychange', onVisibility)
+        setTrying(false)
+        if (opened) writeFlag(SEEN_KEY, '1')
+        else setAsking(true)
+        return
+      }
+      timer.current = window.setTimeout(check, 1000)
+    }
+    timer.current = window.setTimeout(check, 1000)
   }
 
   return (
