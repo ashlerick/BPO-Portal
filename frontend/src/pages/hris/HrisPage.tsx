@@ -8,6 +8,11 @@ import { Card, CardForm } from '../../components/ui/Card'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { Tabs, type TabItem } from '../../components/ui/Tabs'
 import { Button } from '../../components/ui/Button'
+import { Field, FormError } from '../../components/ui/Field'
+import { Modal } from '../../components/ui/Modal'
+import { useToast } from '../../components/ui/Toast'
+import { shiftHours } from '../../utils/shiftTime'
+import { todayInManilaIso } from '../../utils/dates'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { formatDateOnly } from '../../utils/dates'
@@ -486,11 +491,70 @@ export function MyProfile({ extraTabs = [] }: { extraTabs?: TabItem[] }) {
   )
 }
 
-function EmployeeRow({
+// One employee, on one line. Everything else (contact details, editing, the shift) is in the modal that opens when the
+// row is clicked, so the table stays compact and nothing wraps.
+function EmployeeRow({ employee, onOpen }: { employee: EmployeeRecord; onOpen: () => void }) {
+  const cell = 'whitespace-nowrap py-2.5 pr-4 text-gray-700 dark:text-gray-300'
+  const clip = 'md:max-w-[11rem] md:truncate'
+  return (
+    <tr
+      onClick={onOpen}
+      className="cursor-pointer border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.03] dark:border-white/5 dark:hover:bg-white/[0.04]"
+    >
+      <td data-primary className="whitespace-nowrap py-2.5 pl-4 pr-4">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpen()
+          }}
+          title={employee.email}
+          className="font-medium text-gray-900 hover:underline dark:text-gray-100 md:block md:max-w-[14rem] md:truncate"
+        >
+          {employee.name}
+        </button>
+      </td>
+      <td data-label="Position" className={cell}>
+        <div className={clip} title={employee.position ?? undefined}>{employee.position ?? '—'}</div>
+      </td>
+      <td data-label="Department" className={cell}>
+        <div className={clip} title={employee.department ?? undefined}>{employee.department ?? '—'}</div>
+      </td>
+      <td data-label="Team" className={cell}>
+        <div className={clip} title={employee.team ?? undefined}>{employee.team ?? '—'}</div>
+      </td>
+      <td data-label="Shift" className={cell}>
+        <div className="md:max-w-[14rem] md:truncate" title={employee.shift ? shiftHours(employee.shift, todayInManilaIso()) : undefined}>
+          {employee.shift ? employee.shift.name : <span className="text-gray-500 dark:text-gray-400">No shift</span>}
+        </div>
+      </td>
+      <td data-label="Status" className={cell}>{humanize(employee.status)}</td>
+      <td data-label="Date Hired" className={cell}>
+        {employee.dateHired ? dateFormatter.format(new Date(employee.dateHired)) : '—'}
+      </td>
+      <td data-label="SIL Balance" className={cell}>
+        {employee.silBalance} day{employee.silBalance === 1 ? '' : 's'}
+      </td>
+      <td data-actions className="whitespace-nowrap py-2.5 pr-4">
+        <Link
+          to={`/hris/${employee.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white/70 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-white/15 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 sm:px-2.5 sm:py-1.5"
+        >
+          Full record
+        </Link>
+      </td>
+    </tr>
+  )
+}
+
+// The one place an employee is edited: their details, and their shift.
+function EmployeeModal({
   employee,
   departments,
   teams,
   shifts,
+  onClose,
   onSaved,
   onShift,
 }: {
@@ -498,10 +562,12 @@ function EmployeeRow({
   departments: Department[]
   teams: Team[]
   shifts: Shift[]
+  onClose: () => void
   onSaved: (updated: EmployeeRecord) => void
   onShift: (next: EmployeeShift) => void
 }) {
-  const [editing, setEditing] = useState(false)
+  const toast = useToast()
+  const { guardedAction } = useAuth()
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [position, setPosition] = useState(employee.position ?? '')
@@ -510,17 +576,17 @@ function EmployeeRow({
   const [teamId, setTeamId] = useState(employee.teamId ?? '')
   const [dateHired, setDateHired] = useState(employee.dateHired ? employee.dateHired.slice(0, 10) : '')
   const [silBalance, setSilBalance] = useState(String(employee.silBalance))
-  const { guardedAction } = useAuth()
 
   const teamsInDepartment = teams.filter((t) => t.departmentId === departmentId)
+  const contact = contactFields(employee).filter(([, v]) => v)
 
-  function save() {
+  function save(e: FormEvent) {
+    e.preventDefault()
     const parsedSil = Number(silBalance)
     if (!Number.isInteger(parsedSil) || parsedSil < 0) {
       setError('SIL balance must be a whole number, 0 or more')
       return
     }
-
     guardedAction(['hr', 'admin'], async () => {
       setSaving(true)
       setError(null)
@@ -534,7 +600,8 @@ function EmployeeRow({
           silBalance: parsedSil,
         })
         onSaved(updated)
-        setEditing(false)
+        toast.success(`${employee.name} saved.`)
+        onClose()
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not save changes')
       } finally {
@@ -543,136 +610,94 @@ function EmployeeRow({
     })
   }
 
-  if (!editing) {
-    return (
-      <tr className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]">
-        <td data-primary className="py-2.5 pl-4 pr-4">
-          <div className="font-medium text-gray-900 dark:text-gray-100">{employee.name}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">{employee.email}</div>
-          {contactFields(employee).some(([, v]) => v) && (
-            <details className="mt-1 text-xs">
-              <summary className="cursor-pointer select-none text-brand-700 dark:text-brand-400">Contact details</summary>
-              <dl className="mt-1 space-y-0.5 whitespace-pre-line break-words text-gray-600 dark:text-gray-400">
-                {contactFields(employee)
-                  .filter(([, v]) => v)
-                  .map(([label, v]) => (
-                    <div key={label}>
-                      <dt className="inline text-gray-500 dark:text-gray-500">{label}: </dt>
-                      <dd className="inline">{v}</dd>
-                    </div>
-                  ))}
-              </dl>
-            </details>
-          )}
-        </td>
-        <td data-label="Position" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.position ?? '—'}</td>
-        <td data-label="Department" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.department ?? '—'}</td>
-        <td data-label="Team" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.team ?? '—'}</td>
-        <td data-label="Shift" className="py-2.5 pr-4 align-top">
-          <EmployeeShiftCell employeeId={employee.id} shift={employee.shift ?? null} shifts={shifts} onChanged={onShift} />
-        </td>
-        <td data-label="Status" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{humanize(employee.status)}</td>
-        <td data-label="Date Hired" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-          {employee.dateHired ? dateFormatter.format(new Date(employee.dateHired)) : '—'}
-        </td>
-        <td data-label="SIL Balance" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-          {employee.silBalance} day{employee.silBalance === 1 ? '' : 's'}
-        </td>
-        <td data-actions className="py-2.5 pr-4">
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Link
-              to={`/hris/${employee.id}`}
-              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white/70 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-white/15 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10 sm:px-2.5 sm:py-1.5"
-            >
-              Full record
-            </Link>
-          </div>
-        </td>
-      </tr>
-    )
-  }
-
   return (
-    <tr className="border-b border-black/5 dark:border-white/5">
-      <td data-primary className="py-2.5 pl-4 pr-4 align-top">
-        <div className="font-medium text-gray-900 dark:text-gray-100">{employee.name}</div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">{employee.email}</div>
-      </td>
-      <td data-label="Position" className="py-2.5 pr-4 align-top">
-        <input value={position} onChange={(e) => setPosition(e.target.value)} className="field w-32 py-1" />
-      </td>
-      <td data-label="Department" className="py-2.5 pr-4 align-top">
-        <select
-          value={departmentId}
-          onChange={(e) => {
-            setDepartmentId(e.target.value)
-            setTeamId('')
-          }}
-          className="field py-1"
-        >
-          <option value="">—</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td data-label="Team" className="py-2.5 pr-4 align-top">
-        <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field py-1">
-          <option value="">—</option>
-          {teamsInDepartment.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td data-label="Shift" className="py-2.5 pr-4 align-top text-sm text-gray-500 dark:text-gray-400">
-        {employee.shift ? employee.shift.name : 'No shift'}
-      </td>
-      <td data-label="Status" className="py-2.5 pr-4 align-top">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="field py-1">
-          {statusOptions.map((s) => (
-            <option key={s} value={s}>
-              {humanize(s)}
-            </option>
-          ))}
-        </select>
-      </td>
-      <td data-label="Date Hired" className="py-2.5 pr-4 align-top">
-        <input
-          type="date"
-          value={dateHired}
-          onChange={(e) => setDateHired(e.target.value)}
-          className="field py-1"
-        />
-      </td>
-      <td data-label="SIL Balance" className="py-2.5 pr-4 align-top">
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={silBalance}
-          onChange={(e) => setSilBalance(e.target.value)}
-          className="field w-20 py-1"
-        />
-      </td>
-      <td data-actions className="py-2.5 pr-4 align-top">
-        <div className="flex flex-wrap gap-1 md:flex-col">
-          <Button size="sm" variant="primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
+    <Modal label={`Edit ${employee.name}`} onClose={onClose} className="max-w-2xl">
+      <form onSubmit={save} className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{employee.name}</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{employee.email}</p>
+          {contact.length > 0 && (
+            <dl className="mt-2 space-y-0.5 whitespace-pre-line break-words text-xs text-gray-600 dark:text-gray-400">
+              {contact.map(([label, v]) => (
+                <div key={label}>
+                  <dt className="inline text-gray-500">{label}: </dt>
+                  <dd className="inline">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Position">
+            <input value={position} onChange={(e) => setPosition(e.target.value)} className="field" />
+          </Field>
+          <Field label="Status">
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="field">
+              {statusOptions.map((o) => (
+                <option key={o} value={o}>
+                  {humanize(o)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Department">
+            <select
+              value={departmentId}
+              onChange={(e) => {
+                setDepartmentId(e.target.value)
+                setTeamId('')
+              }}
+              className="field"
+            >
+              <option value="">—</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Team">
+            <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field">
+              <option value="">—</option>
+              {teamsInDepartment.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Date hired">
+            <input type="date" value={dateHired} onChange={(e) => setDateHired(e.target.value)} className="field" />
+          </Field>
+          <Field label="SIL balance (days)">
+            <input type="number" min={0} step={1} value={silBalance} onChange={(e) => setSilBalance(e.target.value)} className="field" />
+          </Field>
+        </div>
+
+        <FormError message={error} />
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant="primary" size="sm" disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
           </Button>
-          <Button size="sm" onClick={() => setEditing(false)}>
+          <Button type="button" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          {error && <span className="text-xs text-red-600 dark:text-red-400">{error}</span>}
+          <Link
+            to={`/hris/${employee.id}`}
+            className="ml-auto inline-flex items-center rounded-lg border border-gray-300 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-white/15 dark:bg-white/5 dark:text-gray-200 dark:hover:bg-white/10"
+          >
+            Full record
+          </Link>
         </div>
-      </td>
-    </tr>
+      </form>
+
+      <div className="mt-5 border-t border-black/10 pt-4 dark:border-white/10">
+        <h3 className="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100">Shift</h3>
+        <EmployeeShiftCell employeeId={employee.id} shift={employee.shift ?? null} shifts={shifts} onChanged={onShift} />
+      </div>
+    </Modal>
   )
 }
 
@@ -965,6 +990,7 @@ function EmployeeDirectory() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [shifts, setShifts] = useState<Shift[]>([])
+  const [openId, setOpenId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -986,6 +1012,7 @@ function EmployeeDirectory() {
 
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} />
+  const opened = employees?.find((e) => e.id === openId) ?? null
   if (!employees || employees.length === 0) {
     return <p className="text-sm text-gray-500 dark:text-gray-400">No employee records yet.</p>
   }
@@ -995,34 +1022,36 @@ function EmployeeDirectory() {
       <table className="stack-table w-full text-left text-sm">
         <thead>
           <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
-            <th className="py-3 pl-4 pr-4 font-medium">Employee</th>
-            <th className="py-3 pr-4 font-medium">Position</th>
-            <th className="py-3 pr-4 font-medium">Department</th>
-            <th className="py-3 pr-4 font-medium">Team</th>
-            <th className="py-3 pr-4 font-medium">Shift</th>
-            <th className="py-3 pr-4 font-medium">Status</th>
-            <th className="py-3 pr-4 font-medium">Date Hired</th>
-            <th className="py-3 pr-4 font-medium">SIL Balance</th>
-            <th className="py-3 pr-4 font-medium">Actions</th>
+            <th className="whitespace-nowrap py-3 pl-4 pr-4 font-medium">Employee</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Position</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Department</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Team</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Shift</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Status</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Date Hired</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">SIL Balance</th>
+            <th className="whitespace-nowrap py-3 pr-4 font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
           {employees.map((employee) => (
-            <EmployeeRow
-              key={employee.id}
-              employee={employee}
-              departments={departments}
-              teams={teams}
-              shifts={shifts}
-              // keep the shift (the save response does not carry it) when the rest of the row is updated
-              onSaved={(updated) =>
-                setEmployees((prev) => prev?.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)) ?? null)
-              }
-              onShift={(next) => setEmployees((prev) => prev?.map((e) => (e.id === employee.id ? { ...e, shift: next } : e)) ?? null)}
-            />
+            <EmployeeRow key={employee.id} employee={employee} onOpen={() => setOpenId(employee.id)} />
           ))}
         </tbody>
       </table>
+      {opened && (
+        <EmployeeModal
+          key={opened.id}
+          employee={opened}
+          departments={departments}
+          teams={teams}
+          shifts={shifts}
+          onClose={() => setOpenId(null)}
+          // keep the shift (the save response does not carry it) when the rest of the record is updated
+          onSaved={(updated) => setEmployees((prev) => prev?.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)) ?? null)}
+          onShift={(next) => setEmployees((prev) => prev?.map((e) => (e.id === opened.id ? { ...e, shift: next } : e)) ?? null)}
+        />
+      )}
     </Card>
   )
 }
