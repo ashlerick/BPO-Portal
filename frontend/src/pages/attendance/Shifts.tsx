@@ -5,7 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
-import { SHIFT_ZONES, shiftHours, zoneLabel } from '../../utils/shiftTime'
+import { SHIFT_ZONES, shiftHours, shiftHoursWithChange, zoneLabel } from '../../utils/shiftTime'
 import type { EmployeeRecord } from '../hris/types'
 
 // Shift schedules (HR-managed) and the late / undertime / overtime report
@@ -51,7 +51,7 @@ const mins = (n: number) => (n === 0 ? '' : n >= 60 ? `${Math.floor(n / 60)}h ${
 
 // The hours for a given day, in the shift's own zone and the other one (they differ by an hour after California's clocks change).
 function describeShift(s: Pick<Shift, 'name' | 'startTime' | 'endTime' | 'workDays' | 'timezone'>, isoDate = todayInManilaIso()) {
-  return `${s.name}: ${shiftHours(s, isoDate)}, ${dayList(s.workDays)}`
+  return `${s.name}: ${shiftHoursWithChange(s, isoDate)}, ${dayList(s.workDays)}`
 }
 
 // The signed-in employee's current shift.
@@ -389,7 +389,7 @@ export function EmployeeShiftCell({
         {shift ? (
           <>
             <div className="text-gray-800 dark:text-gray-200">{shift.name}</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">{shiftHours(shift, todayInManilaIso())}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{shiftHoursWithChange(shift, todayInManilaIso())}</div>
           </>
         ) : (
           <span className="text-gray-500 dark:text-gray-400">No shift</span>

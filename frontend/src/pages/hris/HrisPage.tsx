@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
-import { shiftHours } from '../../utils/shiftTime'
+import { shiftHoursWithChange } from '../../utils/shiftTime'
 import { todayInManilaIso } from '../../utils/dates'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components/ui/PasswordInput'
@@ -524,7 +524,7 @@ function EmployeeRow({ employee, onOpen }: { employee: EmployeeRecord; onOpen: (
         <div className={clip} title={employee.team ?? undefined}>{employee.team ?? '—'}</div>
       </td>
       <td data-label="Shift" className={cell}>
-        <div className="md:max-w-[14rem] md:truncate" title={employee.shift ? shiftHours(employee.shift, todayInManilaIso()) : undefined}>
+        <div className="md:max-w-[14rem] md:truncate" title={employee.shift ? shiftHoursWithChange(employee.shift, todayInManilaIso()) : undefined}>
           {employee.shift ? employee.shift.name : <span className="text-gray-500 dark:text-gray-400">No shift</span>}
         </div>
       </td>

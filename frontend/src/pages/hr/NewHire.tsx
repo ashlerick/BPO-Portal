@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { Button } from '../../components/ui/Button'
 import { CardForm } from '../../components/ui/Card'
 import { Field, FormError } from '../../components/ui/Field'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
-import { shiftHours } from '../../utils/shiftTime'
+import { shiftChangeNote, shiftRange } from '../../utils/shiftTime'
 import type { Department, EmployeeRecord, Team } from '../hris/types'
 
 // New hire: one form that creates the (inactive) account, the employee
@@ -82,6 +82,11 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+
+  // The shift's hours depend on the start date: California moves its clocks, so the Philippines hours change by an hour.
+  const startDay = f.dateHired || todayInManilaIso()
+  const selectedShift = shifts.find((x) => x.id === f.shiftId)
+  const shiftChange = useMemo(() => (selectedShift ? shiftChangeNote(selectedShift, startDay) : null), [selectedShift, startDay])
 
   useEffect(() => {
     api.get<{ departments: Department[]; teams: Team[] }>('/directory').then((d) => {
@@ -264,15 +269,22 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
             <option value="prefer_not_to_say">Prefer not to say</option>
           </select>
         </Field>
-        <Field label="Shift (optional)">
+        <Field label="Shift (optional)" className="sm:col-span-2">
           <select value={f.shiftId} onChange={set('shiftId')} className="field">
             <option value="">None yet</option>
             {shifts.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} ({shiftHours(s, f.dateHired || todayInManilaIso())}){s.isDefault ? ' · default' : ''}
+                {s.name} · {shiftRange(s, startDay)}{s.isDefault ? ' · default' : ''}
               </option>
             ))}
           </select>
+          {selectedShift && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Philippines hours {f.dateHired ? `from ${formatDateOnly(f.dateHired)}` : 'today'}: {shiftRange(selectedShift, startDay, 'Asia/Manila')}
+              {shiftChange ? `; ${shiftChange}` : ''}.
+              {!f.dateHired && ' Set Date hired to see the hours for the start date.'}
+            </span>
+          )}
         </Field>
       </div>
       <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
