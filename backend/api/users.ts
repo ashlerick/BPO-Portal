@@ -10,6 +10,8 @@ import { logAudit } from '../lib/audit.js'
 import { isNotFoundError, isUniqueConstraintError } from '../lib/errors.js'
 import { formatDisplayName } from '../lib/names.js'
 import { activateAccount } from '../lib/accounts.js'
+import { assignDefaultShift } from '../lib/shiftDefaults.js'
+import { todayInManila } from '../lib/dates.js'
 import { EmailError } from '../lib/email.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
@@ -139,9 +141,11 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
   // HRIS/Attendance/Leave — created here so nobody ends up with a
   // login but no employee profile (see employees.ts POST for backfilling
   // accounts that predate this).
-  await prisma.employee.create({
+  const employeeRow = await prisma.employee.create({
     data: { userId: user.id, position: position || null, departmentId: departmentId || null, teamId: teamId || null },
   })
+  // New people start on the default shift (see lib/shiftDefaults.ts); HR can change it on the Shifts page.
+  await assignDefaultShift(employeeRow.id, todayInManila(), req.auth.sub)
 
   const token = randomBytes(32).toString('base64url')
   await prisma.passwordResetToken.create({

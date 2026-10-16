@@ -10,6 +10,7 @@ import { EmailError } from '../email.js'
 import { formatDisplayName } from '../names.js'
 import { isUniqueConstraintError } from '../errors.js'
 import { DEFAULT_TASKS } from './checklists.js'
+import { defaultShiftId } from '../shiftDefaults.js'
 import { dateOnlyPattern, forbid, hasRole, isHrOrAdmin, notFound, parseBody, queryString, toDate } from './util.js'
 
 // New hires under /hr/new-hire, used by Onboarding (HR/Admin):
@@ -92,8 +93,10 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
         return res.status(409).json({ message: 'This applicant was already turned into an employee' })
       }
     }
-    if (data.shiftId) {
-      const shift = await prisma.shift.findUnique({ where: { id: data.shiftId } })
+    // A form that leaves the shift out gets the default shift; an explicit null means HR chose no shift.
+    const shiftId = data.shiftId === undefined ? await defaultShiftId() : data.shiftId
+    if (shiftId) {
+      const shift = await prisma.shift.findUnique({ where: { id: shiftId } })
       if (!shift || !shift.active) return notFound(res, 'Shift not found')
     }
 
@@ -134,10 +137,10 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
                   tasks: { create: DEFAULT_TASKS.onboarding.map((label, position) => ({ label, position })) },
                 },
               },
-              ...(data.shiftId && {
+              ...(shiftId && {
                 shiftAssignments: {
                   create: {
-                    shiftId: data.shiftId,
+                    shiftId,
                     effectiveFrom: data.dateHired ? toDate(data.dateHired) : toDate(new Date().toISOString().slice(0, 10)),
                     assignedBy: req.auth.sub,
                   },

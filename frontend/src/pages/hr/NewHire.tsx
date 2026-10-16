@@ -4,7 +4,8 @@ import { Button } from '../../components/ui/Button'
 import { CardForm } from '../../components/ui/Card'
 import { Field, FormError } from '../../components/ui/Field'
 import { api, ApiError } from '../../services/api'
-import { formatDateOnly } from '../../utils/dates'
+import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
+import { shiftHours } from '../../utils/shiftTime'
 import type { Department, EmployeeRecord, Team } from '../hris/types'
 
 // New hire: one form that creates the (inactive) account, the employee
@@ -16,6 +17,8 @@ interface Shift {
   name: string
   startTime: string
   endTime: string
+  timezone?: string
+  isDefault?: boolean
   active: boolean
 }
 
@@ -72,6 +75,8 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
   const [teams, setTeams] = useState<Team[]>([])
   const [people, setPeople] = useState<EmployeeRecord[]>([])
   const [shifts, setShifts] = useState<Shift[]>([])
+  // HR marks one shift as the default on the Shifts page; the form starts on it so nobody has to pick it each time.
+  const [defaultShift, setDefaultShift] = useState('')
   const [applicants, setApplicants] = useState<ApplicantOption[]>([])
   const [applicantId, setApplicantId] = useState('')
   const [busy, setBusy] = useState(false)
@@ -84,7 +89,18 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
       setTeams(d.teams)
     }).catch(() => undefined)
     api.get<EmployeeRecord[]>('/employees').then(setPeople).catch(() => undefined)
-    api.get<Shift[]>('/hr/shifts?kind=templates').then((s) => setShifts(s.filter((x) => x.active))).catch(() => undefined)
+    api
+      .get<Shift[]>('/hr/shifts?kind=templates')
+      .then((s) => {
+        const active = s.filter((x) => x.active)
+        setShifts(active)
+        const def = active.find((x) => x.isDefault)
+        if (def) {
+          setDefaultShift(def.id)
+          setF((p) => (p.shiftId ? p : { ...p, shiftId: def.id }))
+        }
+      })
+      .catch(() => undefined)
     api
       .get<ApplicantOption[]>('/hr/recruitment?kind=applicants')
       .then((rows) => setApplicants(rows.filter((a) => !a.hiredUserId && a.status !== 'rejected' && a.status !== 'withdrawn')))
@@ -146,7 +162,7 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
         applicantId: applicantId || null,
       })
       setMessage(`${f.firstName} ${f.lastName} was added. Their account stays inactive until you activate it.`)
-      setF(blank)
+      setF({ ...blank, shiftId: defaultShift })
       setApplicantId('')
       setApplicants((prev) => prev.filter((a) => a.id !== applicantId))
       onCreated()
@@ -253,7 +269,7 @@ export function NewHireForm({ onCreated }: { onCreated: () => void }) {
             <option value="">None yet</option>
             {shifts.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} ({s.startTime}–{s.endTime})
+                {s.name} ({shiftHours(s, f.dateHired || todayInManilaIso())}){s.isDefault ? ' · default' : ''}
               </option>
             ))}
           </select>

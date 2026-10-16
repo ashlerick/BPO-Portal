@@ -836,6 +836,11 @@ model Shift {
   workDays     Int[]
   breakMinutes Int               @default(0)
   graceMinutes Int               @default(0)
+  // The time zone startTime and endTime are written in. A California shift follows California's daylight saving
+  // by itself; its Philippines hours move by an hour when California changes the clocks. Allowed: Asia/Manila, America/Los_Angeles.
+  timezone     String            @default("Asia/Manila")
+  // The shift new employees start on (only one at a time).
+  isDefault    Boolean           @default(false)
   active       Boolean           @default(true)
   createdAt    DateTime          @default(now())
   assignments  ShiftAssignment[]

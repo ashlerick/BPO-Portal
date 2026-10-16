@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
+import { SHIFT_ZONES, shiftHours, zoneLabel } from '../../utils/shiftTime'
 import type { EmployeeRecord } from '../hris/types'
 
 // Shift schedules (HR-managed) and the late / undertime / overtime report
@@ -18,6 +19,8 @@ interface Shift {
   workDays: number[]
   breakMinutes: number
   graceMinutes: number
+  timezone: string
+  isDefault: boolean
   active: boolean
 }
 
@@ -33,6 +36,7 @@ interface ReportRow {
   shiftName: string
   scheduledStart: string
   scheduledEnd: string
+  timezone?: string
   checkInAt: string | null
   checkOutAt: string | null
   lateMinutes: number
@@ -45,8 +49,9 @@ const dayList = (days: number[]) => [...days].sort((a, b) => a - b).map((d) => D
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeStyle: 'short', timeZone: 'Asia/Manila' })
 const mins = (n: number) => (n === 0 ? '' : n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`)
 
-function describeShift(s: Pick<Shift, 'name' | 'startTime' | 'endTime' | 'workDays'>) {
-  return `${s.name}: ${s.startTime}–${s.endTime}, ${dayList(s.workDays)}`
+// The hours for a given day, in the shift's own zone and the other one (they differ by an hour after California's clocks change).
+function describeShift(s: Pick<Shift, 'name' | 'startTime' | 'endTime' | 'workDays' | 'timezone'>, isoDate = todayInManilaIso()) {
+  return `${s.name}: ${shiftHours(s, isoDate)}, ${dayList(s.workDays)}`
 }
 
 // The signed-in employee's current shift.
@@ -83,6 +88,8 @@ export function ShiftTemplates({ onChanged }: { onChanged?: () => void }) {
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5])
   const [breakMin, setBreakMin] = useState('60')
   const [grace, setGrace] = useState('10')
+  const [zone, setZone] = useState('America/Los_Angeles')
+  const [makeDefault, setMakeDefault] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -104,8 +111,11 @@ export function ShiftTemplates({ onChanged }: { onChanged?: () => void }) {
         workDays: days,
         breakMinutes: Number(breakMin) || 0,
         graceMinutes: Number(grace) || 0,
+        timezone: zone,
+        isDefault: makeDefault,
       })
       setName('')
+      setMakeDefault(false)
       load()
       onChanged?.()
     } catch (err) {
@@ -116,9 +126,18 @@ export function ShiftTemplates({ onChanged }: { onChanged?: () => void }) {
   return (
     <div className="space-y-4">
       <form onSubmit={add} className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-6">
           <Field label="Name">
             <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Day shift" className="field" />
+          </Field>
+          <Field label="Times are in">
+            <select value={zone} onChange={(e) => setZone(e.target.value)} className="field">
+              {SHIFT_ZONES.map((z) => (
+                <option key={z.value} value={z.value}>
+                  {z.label}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Start">
             <input type="time" required value={start} onChange={(e) => setStart(e.target.value)} className="field" />
@@ -146,8 +165,14 @@ export function ShiftTemplates({ onChanged }: { onChanged?: () => void }) {
             </label>
           ))}
         </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input type="checkbox" checked={makeDefault} onChange={(e) => setMakeDefault(e.target.checked)} />
+          Default shift: new employees start on it (only one shift can be the default)
+        </label>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          An end time earlier than the start (e.g. 22:00 to 06:00) is a night shift that ends the next morning. Times are Manila time.
+          An end time earlier than the start (e.g. 22:00 to 06:00) is a night shift that ends the next morning. Enter the times in the zone you pick.
+          A California shift follows California's daylight saving by itself, so its Philippines hours move by an hour when the clocks change.
+          The list shows both zones for today.
         </p>
         <Button type="submit" variant="primary" size="sm">
           Add shift
@@ -167,8 +192,24 @@ export function ShiftTemplates({ onChanged }: { onChanged?: () => void }) {
                   {' '}
                   · break {s.breakMinutes}m · grace {s.graceMinutes}m
                 </span>
+                {s.isDefault && (
+                  <Badge tone="green" className="ml-2">
+                    Default
+                  </Badge>
+                )}
               </span>
               <span className="flex gap-2">
+                {s.active && !s.isDefault && (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await api.put(`/hr/shifts/${s.id}?kind=templates`, { isDefault: true })
+                      load()
+                    }}
+                  >
+                    Make default
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   onClick={async () => {
@@ -241,7 +282,7 @@ export function AssignShift() {
             <option value="">Select…</option>
             {shifts.map((s) => (
               <option key={s.id} value={s.id}>
-                {describeShift(s)}
+                {describeShift(s, from)}
               </option>
             ))}
           </select>
@@ -349,7 +390,7 @@ export function LateReport({ from, to, employeeId }: { from: string; to: string;
                   <td className="py-2 pr-3">{formatDateOnly(r.date)}</td>
                   <td className="py-2 pr-3">{r.employeeName}</td>
                   <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">
-                    {r.shiftName} {r.scheduledStart}–{r.scheduledEnd}
+                    {r.shiftName} {r.scheduledStart}–{r.scheduledEnd} {zoneLabel(r.timezone)}
                   </td>
                   <td className="py-2 pr-3">
                     {r.checkInAt ? timeFmt.format(new Date(r.checkInAt)) : '—'} / {r.checkOutAt ? timeFmt.format(new Date(r.checkOutAt)) : '—'}

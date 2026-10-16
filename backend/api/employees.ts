@@ -6,6 +6,8 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { isNotFoundError } from '../lib/errors.js'
 import { formatDisplayName } from '../lib/names.js'
+import { assignDefaultShift } from '../lib/shiftDefaults.js'
+import { todayInManila } from '../lib/dates.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): GET /employees, GET /employees/me,
@@ -231,6 +233,7 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
   }
 
   const employee = await prisma.employee.create({ data: { userId, ...rest }, ...employeeSelect })
+  await assignDefaultShift(employee.id, todayInManila(), req.auth.sub)
   logAudit(req.auth.sub, 'create', 'employee', employee.id)
   res.status(201).json(serialize(employee))
 }
