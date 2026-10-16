@@ -25,6 +25,8 @@ const ANNOUNCEMENT_CATEGORIES = [
 const REACTIONS = ['👍', '❤️', '🎉'] as const
 const ACK_CATEGORIES: readonly string[] = ['Policy updates', 'Important notices', 'Emergency announcements']
 const reactSchema = z.object({ emoji: z.enum(REACTIONS).nullable() })
+// Names sent per reaction; the count is always exact, the page says "and N more" past this.
+const MAX_REACTOR_NAMES = 30
 
 const upsertSchema = z.object({
   title: z.string().min(1),
@@ -53,9 +55,12 @@ function isManager(req: AuthedRequest): boolean {
 async function decorate(rows: Announcement[], userId: string, manager: boolean) {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
-  const [counts, mine, ackCounts, myAcks, total] = await Promise.all([
-    prisma.announcementReaction.groupBy({ by: ['announcementId', 'emoji'], where: { announcementId: { in: ids } }, _count: { _all: true } }),
-    prisma.announcementReaction.findMany({ where: { announcementId: { in: ids }, userId }, select: { announcementId: true, emoji: true } }),
+  const [reacted, ackCounts, myAcks, total] = await Promise.all([
+    prisma.announcementReaction.findMany({
+      where: { announcementId: { in: ids } },
+      orderBy: { createdAt: 'asc' },
+      select: { announcementId: true, userId: true, emoji: true, user: { select: { firstName: true, middleName: true, lastName: true } } },
+    }),
     manager
       ? prisma.announcementAck.groupBy({ by: ['announcementId'], where: { announcementId: { in: ids } }, _count: { _all: true } })
       : Promise.resolve([]),
@@ -63,13 +68,22 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
     manager ? prisma.user.count({ where: { active: true } }) : Promise.resolve(0),
   ])
   return rows.map((a) => {
+    // Counts, the caller's own, and who reacted. Announcements are not anonymous, so everyone sees the names.
     const reactions: Record<string, number> = {}
-    for (const c of counts) if (c.announcementId === a.id) reactions[c.emoji] = c._count._all
+    const reactors: Record<string, string[]> = {}
+    let myReaction: string | null = null
+    for (const r of reacted) {
+      if (r.announcementId !== a.id) continue
+      reactions[r.emoji] = (reactions[r.emoji] ?? 0) + 1
+      if ((reactors[r.emoji] ??= []).length < MAX_REACTOR_NAMES) reactors[r.emoji].push(formatDisplayName(r.user.firstName, r.user.middleName, r.user.lastName))
+      if (r.userId === userId) myReaction = r.emoji
+    }
     const needsAck = ACK_CATEGORIES.includes(a.category)
     return {
       ...a,
       reactions,
-      myReaction: mine.find((m) => m.announcementId === a.id)?.emoji ?? null,
+      reactors,
+      myReaction,
       needsAck,
       acknowledged: myAcks.some((m) => m.announcementId === a.id),
       ...(manager && needsAck && { ackCount: ackCounts.find((c) => c.announcementId === a.id)?._count._all ?? 0, ackTotal: total }),

@@ -22,6 +22,8 @@ export interface Announcement {
   expireAt: string | null
   // Engagement (added by the server; optional so older responses still fit).
   reactions?: Record<string, number>
+  // Names of who reacted, per emoji, oldest first (capped; the count above is exact).
+  reactors?: Record<string, string[]>
   myReaction?: string | null
   needsAck?: boolean
   acknowledged?: boolean

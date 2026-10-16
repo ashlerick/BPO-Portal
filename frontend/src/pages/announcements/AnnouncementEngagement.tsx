@@ -6,6 +6,8 @@ import { useToast } from '../../components/ui/Toast'
 import type { Announcement } from './types'
 
 const REACTIONS = ['👍', '❤️', '🎉'] as const
+// Names listed before "and N more" (a link shows the rest).
+const NAMES_SHOWN = 6
 
 interface AckList {
   acknowledged: { name: string; at: string }[]
@@ -29,6 +31,8 @@ export function AnnouncementEngagement({
   const [busy, setBusy] = useState(false)
 
   const reactions = announcement.reactions ?? {}
+  const reactors = announcement.reactors ?? {}
+  const [showAllNames, setShowAllNames] = useState(false)
   const mine = announcement.myReaction ?? null
 
   // The count moves at once; it rolls back if the server says no.
@@ -107,6 +111,28 @@ export function AnnouncementEngagement({
             </Button>
           ))}
       </div>
+
+      {REACTIONS.some((e) => (reactions[e] ?? 0) > 0) && (
+        <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-400">
+          {REACTIONS.filter((e) => (reactions[e] ?? 0) > 0).map((e) => {
+            const names = reactors[e] ?? []
+            const total = reactions[e] ?? names.length
+            const shown = showAllNames ? names : names.slice(0, NAMES_SHOWN)
+            const hidden = total - shown.length
+            return (
+              <p key={e} className="break-words">
+                <span>{e}</span> {shown.join(', ')}
+                {hidden > 0 && ` and ${hidden} more`}
+              </p>
+            )
+          })}
+          {REACTIONS.some((e) => (reactions[e] ?? 0) > NAMES_SHOWN) && (
+            <button type="button" onClick={() => setShowAllNames((v) => !v)} className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200">
+              {showAllNames ? 'Show fewer names' : 'Show all names'}
+            </button>
+          )}
+        </div>
+      )}
 
       {canManage && announcement.needsAck && announcement.ackTotal !== undefined && (
         <div className="text-xs text-gray-600 dark:text-gray-400">
