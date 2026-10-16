@@ -193,17 +193,20 @@ model AttendanceRecord {
 }
 
 model Announcement {
-  id        String                 @id @default(uuid())
-  title     String
-  content   String
-  authorId  String
-  category  String                 @default("Company announcements")
-  published Boolean                @default(false)
-  publishAt DateTime?
-  expireAt  DateTime?
-  createdAt DateTime               @default(now())
-  reactions AnnouncementReaction[]
-  acks      AnnouncementAck[]
+  id          String                 @id @default(uuid())
+  title       String
+  content     String
+  authorId    String
+  category    String                 @default("Company announcements")
+  published   Boolean                @default(false)
+  // HR/Admin pinned it: shown first on the portal and on the BPO Time app. Emergency announcements count as
+  // highlighted without this flag (see `featured` in the announcements handler).
+  highlighted Boolean                @default(false)
+  publishAt   DateTime?
+  expireAt    DateTime?
+  createdAt   DateTime               @default(now())
+  reactions   AnnouncementReaction[]
+  acks        AnnouncementAck[]
 
   @@map("announcements")
 }

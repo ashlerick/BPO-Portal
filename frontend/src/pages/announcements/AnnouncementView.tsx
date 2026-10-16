@@ -54,6 +54,7 @@ export function AnnouncementView() {
       <Card>
         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           <Badge tone="blue">{announcement.category}</Badge>
+          {announcement.featured && <Badge tone="amber">★ Highlighted</Badge>}
           {announcement.publishAt && <span>{dateFormatter.format(new Date(announcement.publishAt))}</span>}
           {!announcement.published && <Badge tone="amber">Draft</Badge>}
           {isExpired(announcement) && <Badge tone="gray">Expired</Badge>}

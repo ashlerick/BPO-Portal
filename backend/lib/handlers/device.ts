@@ -9,6 +9,7 @@ import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
+import { ACK_CATEGORIES, EMERGENCY_CATEGORY } from './announcements.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
@@ -214,22 +215,36 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
   if (!device) return
 
   const now = new Date()
-  const [rows, employee] = await Promise.all([
-    prisma.announcement.findMany({
-      where: { published: true, publishAt: { lte: now }, OR: [{ expireAt: null }, { expireAt: { gt: now } }] },
-      orderBy: { publishAt: 'desc' },
-      take: 3,
-    }),
+  const live = { published: true, publishAt: { lte: now }, OR: [{ expireAt: null }, { expireAt: { gt: now } }] }
+  const [rows, acked, employee] = await Promise.all([
+    // Everything that is live, newest first. A company has a handful at a time; capped anyway.
+    prisma.announcement.findMany({ where: live, orderBy: { publishAt: 'desc' }, take: 60 }),
+    prisma.announcementAck.findMany({ where: { userId: device.userId }, select: { announcementId: true } }),
     prisma.employee.findUnique({ where: { userId: device.userId }, select: { id: true } }),
   ])
+  const done = new Set(acked.map((a) => a.announcementId))
+  const items = rows.map((a) => ({
+    row: a,
+    featured: a.highlighted || a.category === EMERGENCY_CATEGORY,
+    // A notice that asks for a "Got it" and this person has not given one yet.
+    needsAck: ACK_CATEGORIES.includes(a.category) && !done.has(a.id),
+  }))
+  // Order: highlighted and urgent first (all of them, the panel scrolls), then notices still waiting for this person's
+  // "Got it", then the newest three of the rest.
+  const featured = items.filter((i) => i.featured)
+  const waiting = items.filter((i) => !i.featured && i.needsAck)
+  const newest = items.filter((i) => !i.featured && !i.needsAck).slice(0, 3)
+  const shown = [...featured, ...waiting, ...newest]
   const birthdays = await birthdaysToday(employee?.id)
   return res.status(200).json({
-    announcements: rows.map((a) => ({
+    announcements: shown.map(({ row: a, featured: isFeatured, needsAck }) => ({
       id: a.id,
       title: a.title,
       category: a.category,
       preview: a.content.length > 140 ? `${a.content.slice(0, 140).trimEnd()}…` : a.content,
       publishAt: a.publishAt,
+      featured: isFeatured,
+      needsAck,
     })),
     birthdays,
   })

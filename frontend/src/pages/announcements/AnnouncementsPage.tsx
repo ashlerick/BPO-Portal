@@ -10,6 +10,7 @@ import { Section, SectionStack } from '../../components/ui/Section'
 import { AnnouncementEngagement } from './AnnouncementEngagement'
 import { ANNOUNCEMENT_CATEGORIES, isExpired, type Announcement, type AnnouncementCategory } from './types'
 
+const EMERGENCY = 'Emergency announcements'
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'Asia/Manila' })
 
 function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
@@ -19,6 +20,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   const [category, setCategory] = useState<AnnouncementCategory>(ANNOUNCEMENT_CATEGORIES[0])
   const [expireOn, setExpireOn] = useState('')
   const [published, setPublished] = useState(true)
+  const [highlighted, setHighlighted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,12 +35,14 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           content,
           category,
           published,
+          highlighted,
           ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
         })
         onCreated(created)
         setTitle('')
         setContent('')
         setExpireOn('')
+        setHighlighted(false)
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not create announcement')
       } finally {
@@ -103,6 +107,10 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
         Publish immediately
       </label>
+      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <input type="checkbox" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
+        Highlight: shown first here and on the BPO Time app
+      </label>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <Button type="submit" variant="primary" disabled={submitting}>
         {submitting ? 'Posting…' : 'Post announcement'}
@@ -139,6 +147,22 @@ function AnnouncementItem({
         setEditing(false)
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not save')
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
+
+  // Pin it (or unpin it): highlighted announcements show first here and on the BPO Time app.
+  function toggleHighlight() {
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setError(null)
+      try {
+        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, { highlighted: !announcement.highlighted })
+        onUpdated({ ...announcement, ...updated })
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Could not change the highlight')
       } finally {
         setSaving(false)
       }
@@ -190,9 +214,16 @@ function AnnouncementItem({
 
   return (
     <li>
-      <Card>
+      <Card className={announcement.featured ? '!border-gold-500/60 ring-1 ring-gold-500/30' : ''}>
         <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-          <h2 className="min-w-0 break-words font-medium text-gray-900 dark:text-gray-100">{announcement.title}</h2>
+          <h2 className="min-w-0 break-words font-medium text-gray-900 dark:text-gray-100">
+            {announcement.featured && (
+              <span className="mr-2 inline-flex items-center gap-1 rounded-full bg-gold-500/15 px-2 py-0.5 align-middle text-xs font-semibold text-gold-600 dark:text-gold-400">
+                ★ {announcement.category === EMERGENCY ? 'Always highlighted' : 'Highlighted'}
+              </span>
+            )}
+            {announcement.title}
+          </h2>
           {announcement.publishAt && (
             <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">
               {dateFormatter.format(new Date(announcement.publishAt))}
@@ -211,6 +242,11 @@ function AnnouncementItem({
             <Button size="sm" onClick={() => setEditing(true)}>
               Edit
             </Button>
+            {announcement.category !== EMERGENCY && (
+              <Button size="sm" onClick={toggleHighlight} disabled={saving}>
+                {announcement.highlighted ? 'Remove highlight' : 'Highlight'}
+              </Button>
+            )}
             <Button size="sm" variant="danger" onClick={remove} disabled={saving}>
               Delete
             </Button>
@@ -267,7 +303,9 @@ export function AnnouncementsPage() {
       {data && data.length > 0 && (
         <SectionStack>
           {ANNOUNCEMENT_CATEGORIES.map((category) => {
-            const items = data.filter((a) => a.category === category && !isExpired(a))
+            const items = data
+              .filter((a) => a.category === category && !isExpired(a))
+              .sort((a, b) => Number(!!b.featured) - Number(!!a.featured))
             return (
               <Section
                 key={category}

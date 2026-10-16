@@ -20,6 +20,9 @@ export interface Announcement {
   published: boolean
   publishAt: string | null
   expireAt: string | null
+  // Pinned by HR (highlighted), and "featured" = pinned or an emergency (those are always highlighted).
+  highlighted?: boolean
+  featured?: boolean
   // Engagement (added by the server; optional so older responses still fit).
   reactions?: Record<string, number>
   // Names of who reacted, per emoji, oldest first (capped; the count above is exact).

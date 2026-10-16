@@ -23,8 +23,9 @@ const ANNOUNCEMENT_CATEGORIES = [
 
 // Reactions people can leave (one each), and the categories that ask for a "Got it" acknowledgement.
 const REACTIONS = ['👍', '❤️', '🎉'] as const
-const ACK_CATEGORIES: readonly string[] = ['Policy updates', 'Important notices', 'Emergency announcements']
+export const ACK_CATEGORIES: readonly string[] = ['Policy updates', 'Important notices', 'Emergency announcements']
 const reactSchema = z.object({ emoji: z.enum(REACTIONS).nullable() })
+export const EMERGENCY_CATEGORY = 'Emergency announcements'
 // Names sent per reaction; the count is always exact, the page says "and N more" past this.
 const MAX_REACTOR_NAMES = 30
 
@@ -35,6 +36,7 @@ const upsertSchema = z.object({
   published: z.boolean().optional(),
   publishAt: z.string().datetime().optional(),
   expireAt: z.string().datetime().nullable().optional(),
+  highlighted: z.boolean().optional(),
 })
 
 // Tells every other account about a newly published announcement.
@@ -81,6 +83,8 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
     const needsAck = ACK_CATEGORIES.includes(a.category)
     return {
       ...a,
+      // Pinned by HR, or an emergency (those are always highlighted). Shown first on the portal and on the app.
+      featured: a.highlighted || a.category === EMERGENCY_CATEGORY,
       reactions,
       reactors,
       myReaction,
@@ -182,10 +186,11 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted } = parsed.data
   const announcement = await prisma.announcement.create({
     data: {
       title,
+      highlighted: highlighted ?? false,
       ...(category !== undefined && { category }),
       content,
       authorId: req.auth.sub,
@@ -211,13 +216,14 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted } = parsed.data
   let announcement
   try {
     announcement = await prisma.announcement.update({
       where: { id },
       data: {
         ...(title !== undefined && { title }),
+        ...(highlighted !== undefined && { highlighted }),
         ...(category !== undefined && { category }),
         ...(content !== undefined && { content }),
         ...(published !== undefined && { published }),
