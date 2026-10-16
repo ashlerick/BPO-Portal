@@ -15,7 +15,7 @@ import { handler as birthdays } from '../lib/handlers/birthdays.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
-import { createCode, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceTheme, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
+import { createCode, deviceBreakEnd, deviceBreakStart, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceTheme, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -57,6 +57,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.resource === 'device-clock-in') return deviceClockIn(req, res)
   if (req.query.resource === 'device-clock-out') return deviceClockOut(req, res)
   if (req.query.resource === 'device-counts') return deviceCounts(req, res)
+  if (req.query.resource === 'device-break-start') return deviceBreakStart(req, res)
+  if (req.query.resource === 'device-break-end') return deviceBreakEnd(req, res)
   if (req.query.resource === 'device-feed') return deviceFeed(req, res)
   if (req.query.resource === 'device-theme') return deviceTheme(req, res)
   // An unknown device-* route must say so. Falling through to the login check would

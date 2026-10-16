@@ -182,6 +182,8 @@ model AttendanceRecord {
   // OverTime and Working Holiday rows.
   overtimeHours  Decimal?     @db.Decimal(4, 2)
   workingHoliday Boolean       @default(false)
+  // Breaks and lunch taken on the desktop app: [{ slot, status, startedAt, endedAt, overSeconds }]. See lib/breaks.ts.
+  breaks     Json             @default("[]")
   createdAt  DateTime         @default(now())
 
   @@unique([employeeId, date])

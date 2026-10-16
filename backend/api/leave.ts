@@ -6,6 +6,7 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { sendEmail } from '../lib/email.js'
 import { inclusiveDayCount, todayInManila } from '../lib/dates.js'
+import { finalizeBreaks, readBreaks } from '../lib/breaks.js'
 import { buildAttendanceXlsx } from '../lib/attendanceReport.js'
 import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { formatDisplayName } from '../lib/names.js'
@@ -235,6 +236,8 @@ async function handleListAttendance(req: AuthedRequest, res: VercelResponse) {
       checkOutAt: r.checkOutAt,
       overtimeHours: r.overtimeHours === null ? null : Number(r.overtimeHours.toString()),
       workingHoliday: r.workingHoliday,
+      // Breaks taken on the desktop app, with how far over each ran (HR reads these as flags).
+      breaks: readBreaks(r.breaks),
       // IP/off-site flag is a monitoring detail — only surfaced to HR/Admin, not to the employee themselves.
       checkInIp: reviewer ? r.checkInIp : undefined,
       checkInOffSite: reviewer ? isOffSiteIp(r.checkInIp) : undefined,
@@ -300,6 +303,7 @@ async function handleAttendanceToday(req: AuthedRequest, res: VercelResponse) {
     status: record?.status ?? null,
     checkInAt: record?.checkInAt ?? null,
     checkOutAt: record?.checkOutAt ?? null,
+    breaks: readBreaks(record?.breaks),
   })
 }
 
@@ -344,7 +348,8 @@ async function handleCheckOut(req: AuthedRequest, res: VercelResponse) {
 
   const record = await prisma.attendanceRecord.update({
     where: { id: existing.id },
-    data: { checkOutAt: new Date(), checkOutIp: getClientIp(req) },
+    // Clocking out settles the breaks the same way the desktop app does (see lib/breaks.ts).
+    data: { checkOutAt: new Date(), checkOutIp: getClientIp(req), breaks: finalizeBreaks(readBreaks(existing.breaks), new Date()) },
   })
 
   logAudit(req.auth.sub, 'check_out', 'attendance', record.id)

@@ -10,6 +10,7 @@ import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
 import { themeOf } from './settings.js'
+import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
 //
@@ -254,13 +255,16 @@ export async function deviceTheme(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ theme: data.theme })
 }
 
-function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null } | null) {
+function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null; breaks?: unknown } | null) {
   return {
     checkedIn: !!record?.checkInAt,
     checkedOut: !!record?.checkOutAt,
     status: record?.status ?? null,
     checkInAt: record?.checkInAt ?? null,
     checkOutAt: record?.checkOutAt ?? null,
+    // Breaks and lunch (see lib/breaks.ts), and the seconds allowed per slot so the app never hard-codes them.
+    breaks: readBreaks(record?.breaks),
+    breakAllowances: BREAK_ALLOWANCE_SECONDS,
     // The server's clock is the reference; the app must not trust the PC clock for hours.
     serverNow: new Date(),
   }
@@ -316,9 +320,42 @@ export async function deviceClockOut(req: VercelRequest, res: VercelResponse) {
     if (existing.checkOutAt) return void res.status(200).json(attendanceBody(existing))
     const record = await prisma.attendanceRecord.update({
       where: { id: existing.id },
-      data: { checkOutAt: new Date(), checkOutIp: getClientIp(req) },
+      // Clocking out settles the breaks: a running one ends (counts as taken), unused slots become "not_taken".
+      data: { checkOutAt: new Date(), checkOutIp: getClientIp(req), breaks: finalizeBreaks(readBreaks(existing.breaks), new Date()) },
     })
     logAudit(device.userId, 'check_out', 'attendance', record.id)
+    res.status(200).json(attendanceBody(record))
+  })
+}
+
+const breakSchema = z.object({ slot: z.enum(BREAK_SLOTS) })
+
+// POST /hr/device-break-start {slot}: start the morning break, lunch or afternoon break. Earlier unused slots are
+// closed as "not_taken" (the app asks the person first). Only while clocked in and not yet clocked out.
+export async function deviceBreakStart(req: VercelRequest, res: VercelResponse) {
+  return deviceAttendance(req, res, 'POST', async (employeeId, device) => {
+    const data = parseBody(breakSchema, req.body, res)
+    if (!data) return
+    const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date: todayInManila() } } })
+    if (!existing?.checkInAt) return void res.status(400).json({ message: "Clock in first, then you can take a break." })
+    if (existing.checkOutAt) return void res.status(400).json({ message: "You've already clocked out today." })
+    const result = startBreak(readBreaks(existing.breaks), data.slot, new Date())
+    if ('error' in result) return void res.status(400).json({ message: result.error })
+    const record = await prisma.attendanceRecord.update({ where: { id: existing.id }, data: { breaks: result.entries } })
+    logAudit(device.userId, 'break_start', 'attendance', record.id)
+    res.status(200).json(attendanceBody(record))
+  })
+}
+
+// POST /hr/device-break-end: end the running break; records how far over its allowance it went.
+export async function deviceBreakEnd(req: VercelRequest, res: VercelResponse) {
+  return deviceAttendance(req, res, 'POST', async (employeeId, device) => {
+    const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date: todayInManila() } } })
+    if (!existing?.checkInAt) return void res.status(400).json({ message: "You haven't clocked in today yet." })
+    const result = endBreak(readBreaks(existing.breaks), new Date())
+    if ('error' in result) return void res.status(400).json({ message: result.error })
+    const record = await prisma.attendanceRecord.update({ where: { id: existing.id }, data: { breaks: result.entries } })
+    logAudit(device.userId, 'break_end', 'attendance', record.id)
     res.status(200).json(attendanceBody(record))
   })
 }
