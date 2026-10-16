@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { AssignShift, EmployeeShiftCell, ShiftTemplates, type EmployeeShift, type Shift } from '../attendance/Shifts'
 import { useAuth } from '../../auth/AuthContext'
 import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
@@ -489,12 +490,16 @@ function EmployeeRow({
   employee,
   departments,
   teams,
+  shifts,
   onSaved,
+  onShift,
 }: {
   employee: EmployeeRecord
   departments: Department[]
   teams: Team[]
+  shifts: Shift[]
   onSaved: (updated: EmployeeRecord) => void
+  onShift: (next: EmployeeShift) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -563,6 +568,9 @@ function EmployeeRow({
         <td data-label="Position" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.position ?? '—'}</td>
         <td data-label="Department" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.department ?? '—'}</td>
         <td data-label="Team" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{employee.team ?? '—'}</td>
+        <td data-label="Shift" className="py-2.5 pr-4 align-top">
+          <EmployeeShiftCell employeeId={employee.id} shift={employee.shift ?? null} shifts={shifts} onChanged={onShift} />
+        </td>
         <td data-label="Status" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">{humanize(employee.status)}</td>
         <td data-label="Date Hired" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
           {employee.dateHired ? dateFormatter.format(new Date(employee.dateHired)) : '—'}
@@ -622,6 +630,9 @@ function EmployeeRow({
             </option>
           ))}
         </select>
+      </td>
+      <td data-label="Shift" className="py-2.5 pr-4 align-top text-sm text-gray-500 dark:text-gray-400">
+        {employee.shift ? employee.shift.name : 'No shift'}
       </td>
       <td data-label="Status" className="py-2.5 pr-4 align-top">
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="field py-1">
@@ -953,6 +964,7 @@ function EmployeeDirectory() {
   const [employees, setEmployees] = useState<EmployeeRecord[] | null>(null)
   const [departments, setDepartments] = useState<Department[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [shifts, setShifts] = useState<Shift[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -960,11 +972,13 @@ function EmployeeDirectory() {
     Promise.all([
       api.get<EmployeeRecord[]>('/employees'),
       api.get<{ departments: Department[]; teams: Team[] }>('/directory'),
+      api.get<Shift[]>('/hr/shifts?kind=templates').catch(() => [] as Shift[]),
     ])
-      .then(([e, dir]) => {
+      .then(([e, dir, sh]) => {
         setEmployees(e)
         setDepartments(dir.departments)
         setTeams(dir.teams)
+        setShifts(sh.filter((x) => x.active))
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Something went wrong'))
       .finally(() => setLoading(false))
@@ -985,6 +999,7 @@ function EmployeeDirectory() {
             <th className="py-3 pr-4 font-medium">Position</th>
             <th className="py-3 pr-4 font-medium">Department</th>
             <th className="py-3 pr-4 font-medium">Team</th>
+            <th className="py-3 pr-4 font-medium">Shift</th>
             <th className="py-3 pr-4 font-medium">Status</th>
             <th className="py-3 pr-4 font-medium">Date Hired</th>
             <th className="py-3 pr-4 font-medium">SIL Balance</th>
@@ -998,9 +1013,12 @@ function EmployeeDirectory() {
               employee={employee}
               departments={departments}
               teams={teams}
+              shifts={shifts}
+              // keep the shift (the save response does not carry it) when the rest of the row is updated
               onSaved={(updated) =>
-                setEmployees((prev) => prev?.map((e) => (e.id === updated.id ? updated : e)) ?? null)
+                setEmployees((prev) => prev?.map((e) => (e.id === updated.id ? { ...e, ...updated } : e)) ?? null)
               }
+              onShift={(next) => setEmployees((prev) => prev?.map((e) => (e.id === employee.id ? { ...e, shift: next } : e)) ?? null)}
             />
           ))}
         </tbody>
@@ -1055,16 +1073,18 @@ function DirectoryManagement() {
   )
 }
 
-type HrisTab = 'employees' | 'directory'
+type HrisTab = 'employees' | 'shifts' | 'directory'
 
 export function HrisPage() {
   const { effectiveRoles } = useAuth()
   const canManage = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const isAdmin = effectiveRoles.includes('admin')
-  const [tab, setTab] = useState<HrisTab>('employees')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<HrisTab>(params.get('tab') === 'shifts' ? 'shifts' : 'employees')
 
   const tabs: { key: HrisTab; label: string }[] = [
     { key: 'employees', label: 'Employees' },
+    { key: 'shifts', label: 'Shifts' },
     ...(isAdmin ? [{ key: 'directory' as const, label: 'Departments & Teams' }] : []),
   ]
 
@@ -1097,6 +1117,16 @@ export function HrisPage() {
       )}
 
       {tab === 'employees' && <EmployeeDirectory />}
+      {tab === 'shifts' && (
+        <SectionStack tabs={false}>
+          <Section id="hris.shifts" title="Shift schedules" hint="Define shifts, set the default, edit hours and grace" defaultOpen>
+            <ShiftTemplates />
+          </Section>
+          <Section id="hris.assign" title="Assign shifts" hint="Put several employees on a shift from a date" defaultOpen>
+            <AssignShift />
+          </Section>
+        </SectionStack>
+      )}
       {tab === 'directory' && isAdmin && <DirectoryManagement />}
     </div>
   )

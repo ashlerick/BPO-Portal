@@ -152,7 +152,19 @@ async function handleList(req: AuthedRequest, res: VercelResponse) {
     ...employeeSelect,
     orderBy: [{ user: { lastName: 'asc' } }, { user: { firstName: 'asc' } }],
   })
-  res.status(200).json(employees.map(serialize))
+  // Each person's current shift (the latest assignment that has started), so HR sees and changes it in the table.
+  const started = await prisma.shiftAssignment.findMany({
+    where: { effectiveFrom: { lte: todayInManila() } },
+    orderBy: { effectiveFrom: 'desc' },
+    include: { shift: true },
+  })
+  const current = new Map<string, { id: string; name: string; startTime: string; endTime: string; timezone: string; effectiveFrom: Date }>()
+  for (const a of started) {
+    if (!current.has(a.employeeId)) {
+      current.set(a.employeeId, { id: a.shift.id, name: a.shift.name, startTime: a.shift.startTime, endTime: a.shift.endTime, timezone: a.shift.timezone, effectiveFrom: a.effectiveFrom })
+    }
+  }
+  res.status(200).json(employees.map((e) => ({ ...serialize(e), shift: current.get(e.id) ?? null })))
 }
 
 async function handleMe(req: AuthedRequest, res: VercelResponse) {

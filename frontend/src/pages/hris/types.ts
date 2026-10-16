@@ -47,6 +47,8 @@ export interface EmployeeRecord {
   emergencyContactPhone: string | null
   birthDate: string | null
   gender: string | null
+  // HR's list only: the shift this person is on now (null = none).
+  shift?: { id: string; name: string; startTime: string; endTime: string; timezone: string } | null
 }
 
 export interface Team {

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { useApiData } from '../../hooks/useApiData'
@@ -12,7 +13,7 @@ import { Section, SectionStack } from '../../components/ui/Section'
 import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
-import { AssignShift, LateReport, MySchedule, ShiftTemplates } from './Shifts'
+import { LateReport, MySchedule } from './Shifts'
 
 const timeFmt = formatManilaTime
 
@@ -573,15 +574,13 @@ export function AttendancePage() {
         <SectionStack tabs={false}>
         <Section id="attendance.schedule" title="My shift schedule" hint="Set by HR">
           <MySchedule />
+          {isReviewer && (
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              HR and Admin set up and assign shifts in <Link to="/hris?tab=shifts" className="text-brand-700 underline dark:text-brand-400">Employee Management, Shifts</Link>.
+            </p>
+          )}
         </Section>
 
-        <Section id="attendance.shifts" title="Shift schedules" hint="HR / Admin: define shifts" roles={['hr', 'admin']}>
-          <ShiftTemplates />
-        </Section>
-
-        <Section id="attendance.assign" title="Assign shifts" hint="HR / Admin: put employees on a shift" roles={['hr', 'admin']}>
-          <AssignShift />
-        </Section>
         </SectionStack>
             ),
           },
