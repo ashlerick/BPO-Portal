@@ -413,7 +413,7 @@ export function AttendancePage() {
             <p className="text-sm text-gray-500 dark:text-gray-400">You haven't checked in today.</p>
           )}
           <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            You're checked in automatically when you log in. Use Check Out in the header when you finish for the day.
+            Clock in from the BPO Time app (Launch App, top right); logging in does not clock you in. When you finish for the day, clock out in the app or use Check Out in the header.
           </p>
         </Section>
 

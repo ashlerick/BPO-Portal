@@ -1259,11 +1259,9 @@ Extends the HRIS module (Phase 4) with two closely-related employee-facing workf
   * On approval, `silBalance` is decremented by the **actual number of days requested**, inside a
     DB transaction with the status update so the two can't drift apart.
 * [x] Attendance management
-  * Check-in is **automatic on login** — no button to click or forget. The first time a session
-    learns today has no attendance record yet, it silently checks the employee in, then shows a
-    dismissible green confirmation banner on the Dashboard ("You were checked in at 9:02 AM"). If
-    the automatic attempt fails (dropped request, transient error), an amber banner with a
-    **Retry Check In** button appears instead of failing silently.
+  * Check-in is a **manual clock-in from the BPO Time desktop app** (changed 2026-10-16). It used to be
+    automatic on login, with a dashboard banner and a retry button; all of that is removed, and logging
+    in no longer records anything. The 7:30 PM to 5:30 AM clock-in window was removed at the same time.
   * A **Check Out** button sits next to the header's Log out button once checked in and not yet
     checked out for the day. Clicking it asks for confirmation ("Check out for today? You won't be
     able to undo this.") before calling the API, specifically to guard against misclicks — resolved

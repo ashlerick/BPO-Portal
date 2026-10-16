@@ -5,6 +5,7 @@ import { ThemeProvider } from './theme/ThemeContext'
 import { ToastProvider } from './components/ui/Toast'
 import { PortalLayout } from './layouts/PortalLayout'
 import { AnnouncementsPage } from './pages/announcements/AnnouncementsPage'
+import { AnnouncementView } from './pages/announcements/AnnouncementView'
 import { AttendancePage } from './pages/attendance/AttendancePage'
 import { AuditLogsPage } from './pages/audit-logs/AuditLogsPage'
 import { BenefitsPage } from './pages/benefits/BenefitsPage'
@@ -55,6 +56,7 @@ export default function App() {
             >
               <Route path="/" element={<DashboardPage />} />
               <Route path="/announcements" element={<AnnouncementsPage />} />
+              <Route path="/announcements/:id" element={<AnnouncementView />} />
               <Route path="/benefits" element={<BenefitsPage />} />
               <Route path="/hris" element={<HrisPage />} />
               <Route path="/hris/:id" element={<EmployeeRecordPage />} />

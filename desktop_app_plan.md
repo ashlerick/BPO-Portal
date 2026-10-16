@@ -13,8 +13,8 @@ It is **not** a lock screen. It never blocks the PC.
 
 ## 2. Why
 
-Today attendance is one record a day: check-in time, check-out time and the IP of each. The employee is
-checked in automatically at login and presses Check Out in the header. The portal cannot tell a working
+Today attendance is one record a day: check-in time, check-out time and the IP of each. The employee was
+checked in automatically at login (removed 2026-10-16: clock-in is now a manual action in the app) and presses Check Out in the header. The portal cannot tell a working
 hour from an hour away from the desk, and has no breaks.
 
 ## 3. What the panel shows

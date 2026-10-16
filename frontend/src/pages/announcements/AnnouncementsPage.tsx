@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
@@ -114,13 +113,11 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
 function AnnouncementItem({
   announcement,
   canManage,
-  highlighted,
   onUpdated,
   onDeleted,
 }: {
   announcement: Announcement
   canManage: boolean
-  highlighted: boolean
   onUpdated: (a: Announcement) => void
   onDeleted: (id: string) => void
 }) {
@@ -191,8 +188,8 @@ function AnnouncementItem({
   }
 
   return (
-    <li id={`announcement-${announcement.id}`}>
-      <Card className={highlighted ? 'ring-2 ring-gold-500/80 transition-shadow' : 'transition-shadow'}>
+    <li>
+      <Card>
         <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <h2 className="min-w-0 break-words font-medium text-gray-900 dark:text-gray-100">{announcement.title}</h2>
           {announcement.publishAt && (
@@ -228,12 +225,6 @@ export function AnnouncementsPage() {
   const [data, setData] = useState<Announcement[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // A link from the desktop app (?open=<id>) lands on that announcement: right tab, scrolled to, briefly highlighted.
-  const [params] = useSearchParams()
-  const openId = params.get('open')
-  const [activeTab, setActiveTab] = useState<string | undefined>(undefined)
-  const [highlightId, setHighlightId] = useState<string | null>(null)
-  const handledLink = useRef(false)
 
   useEffect(() => {
     api
@@ -245,34 +236,12 @@ export function AnnouncementsPage() {
 
   const history = data?.filter((a) => isExpired(a)) ?? []
 
-  useEffect(() => {
-    if (!openId || !data || handledLink.current) return
-    handledLink.current = true
-    const target = data.find((a) => a.id === openId)
-    if (!target) return // unknown or deleted: just show the normal page
-    const sectionId = isExpired(target)
-      ? 'announcements.history'
-      : `announcements.${target.category.toLowerCase().replace(/\s+/g, '-')}`
-    setActiveTab(`s:${sectionId}`)
-    setHighlightId(target.id)
-    // wait for the tab to render, then scroll to the card
-    const scroll = window.setTimeout(() => {
-      document.getElementById(`announcement-${target.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }, 120)
-    const clear = window.setTimeout(() => setHighlightId(null), 3500)
-    return () => {
-      window.clearTimeout(scroll)
-      window.clearTimeout(clear)
-    }
-  }, [openId, data])
-
   function renderItem(announcement: Announcement) {
     return (
       <AnnouncementItem
         key={announcement.id}
         announcement={announcement}
         canManage={canManage}
-        highlighted={announcement.id === highlightId}
         onUpdated={(updated) => setData((prev) => prev?.map((a) => (a.id === updated.id ? updated : a)) ?? null)}
         onDeleted={(id) => setData((prev) => prev?.filter((a) => a.id !== id) ?? null)}
       />
@@ -294,7 +263,7 @@ export function AnnouncementsPage() {
       {data && data.length === 0 && <EmptyState label="No announcements yet." />}
 
       {data && data.length > 0 && (
-        <SectionStack activeTab={activeTab} onTabChange={setActiveTab}>
+        <SectionStack>
           {ANNOUNCEMENT_CATEGORIES.map((category) => {
             const items = data.filter((a) => a.category === category && !isExpired(a))
             return (

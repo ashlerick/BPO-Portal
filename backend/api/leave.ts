@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { sendEmail } from '../lib/email.js'
-import { inclusiveDayCount, minutesIntoManilaDay, todayInManila } from '../lib/dates.js'
+import { inclusiveDayCount, todayInManila } from '../lib/dates.js'
 import { buildAttendanceXlsx } from '../lib/attendanceReport.js'
 import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { formatDisplayName } from '../lib/names.js'
@@ -183,11 +183,6 @@ async function handleReviewLeaveRequest(req: AuthedRequest, res: VercelResponse,
 
 // ---- Attendance ----
 
-// Night-shift window, so it wraps past midnight: valid check-in times
-// are >= START or <= END, not a simple START..END range.
-const CHECK_IN_WINDOW_START_MIN = 19 * 60 + 30 // 7:30 PM
-const CHECK_IN_WINDOW_END_MIN = 5 * 60 + 30 // 5:30 AM
-
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/
 
 // Query params come in as plain YYYY-MM-DD strings (a single date, or
@@ -312,12 +307,6 @@ async function handleCheckIn(req: AuthedRequest, res: VercelResponse) {
   const employee = await myEmployee(req)
   if (!employee) {
     res.status(404).json({ message: 'No employee profile on file yet' })
-    return
-  }
-
-  const minutesNow = minutesIntoManilaDay()
-  if (minutesNow > CHECK_IN_WINDOW_END_MIN && minutesNow < CHECK_IN_WINDOW_START_MIN) {
-    res.status(400).json({ message: 'Check-in is only recorded between 7:30 PM and 5:30 AM' })
     return
   }
 
