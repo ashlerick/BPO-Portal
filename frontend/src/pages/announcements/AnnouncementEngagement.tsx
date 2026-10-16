@@ -6,8 +6,8 @@ import { useToast } from '../../components/ui/Toast'
 import type { Announcement } from './types'
 
 const REACTIONS = ['👍', '❤️', '🎉'] as const
-// Names listed before "and N more" (a link shows the rest).
-const NAMES_SHOWN = 6
+// Names listed in the hover tooltip before "and N more".
+const NAMES_SHOWN = 10
 
 interface AckList {
   acknowledged: { name: string; at: string }[]
@@ -32,7 +32,6 @@ export function AnnouncementEngagement({
 
   const reactions = announcement.reactions ?? {}
   const reactors = announcement.reactors ?? {}
-  const [showAllNames, setShowAllNames] = useState(false)
   const mine = announcement.myReaction ?? null
 
   // The count moves at once; it rolls back if the server says no.
@@ -81,14 +80,16 @@ export function AnnouncementEngagement({
         {REACTIONS.map((emoji) => {
           const count = reactions[emoji] ?? 0
           const selected = mine === emoji
+          const names = reactors[emoji] ?? []
+          const more = count - Math.min(names.length, NAMES_SHOWN)
           return (
             <button
               key={emoji}
               type="button"
               onClick={() => react(selected ? null : emoji)}
               aria-pressed={selected}
-              aria-label={`${emoji} ${count}`}
-              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm transition active:scale-95 ${
+              aria-label={`${emoji} ${count}${names.length ? `: ${names.slice(0, NAMES_SHOWN).join(', ')}${more > 0 ? ` and ${more} more` : ''}` : ''}`}
+              className={`group relative flex items-center gap-1 rounded-full border px-2.5 py-1 text-sm transition active:scale-95 ${
                 selected
                   ? 'border-brand-500 bg-brand-500/15 font-semibold text-gray-900 dark:text-gray-100'
                   : 'border-black/10 bg-black/5 text-gray-700 hover:bg-black/10 dark:border-white/15 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10'
@@ -96,6 +97,20 @@ export function AnnouncementEngagement({
             >
               <span>{emoji}</span>
               {count > 0 && <span className="text-xs tabular-nums">{count}</span>}
+              {/* Who reacted: shown on hover or keyboard focus, so the card stays clean. */}
+              {names.length > 0 && (
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-max max-w-[16rem] -translate-x-1/2 rounded-lg border border-white/15 bg-gray-950 px-3 py-2 text-left text-xs font-medium leading-snug text-gray-100 shadow-xl group-hover:block group-focus-visible:block"
+                >
+                  {names.slice(0, NAMES_SHOWN).map((n) => (
+                    <span key={n} className="block">
+                      {n}
+                    </span>
+                  ))}
+                  {more > 0 && <span className="block text-gray-400">and {more} more</span>}
+                </span>
+              )}
             </button>
           )
         })}
@@ -112,25 +127,19 @@ export function AnnouncementEngagement({
           ))}
       </div>
 
+      {/* Devices without hover (phones) cannot show the tooltip, so they get the names as a small line instead. */}
       {REACTIONS.some((e) => (reactions[e] ?? 0) > 0) && (
-        <div className="space-y-0.5 text-xs text-gray-600 dark:text-gray-400">
+        <div className="hidden space-y-0.5 text-xs text-gray-600 dark:text-gray-400 [@media(hover:none)]:block">
           {REACTIONS.filter((e) => (reactions[e] ?? 0) > 0).map((e) => {
             const names = reactors[e] ?? []
-            const total = reactions[e] ?? names.length
-            const shown = showAllNames ? names : names.slice(0, NAMES_SHOWN)
-            const hidden = total - shown.length
+            const hidden = (reactions[e] ?? names.length) - Math.min(names.length, NAMES_SHOWN)
             return (
               <p key={e} className="break-words">
-                <span>{e}</span> {shown.join(', ')}
+                <span>{e}</span> {names.slice(0, NAMES_SHOWN).join(', ')}
                 {hidden > 0 && ` and ${hidden} more`}
               </p>
             )
           })}
-          {REACTIONS.some((e) => (reactions[e] ?? 0) > NAMES_SHOWN) && (
-            <button type="button" onClick={() => setShowAllNames((v) => !v)} className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200">
-              {showAllNames ? 'Show fewer names' : 'Show all names'}
-            </button>
-          )}
         </div>
       )}
 
