@@ -78,9 +78,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
         .catch(() => undefined)
     sync()
+    // Also when this window is clicked back into (the desktop app is a separate window, so switching to it and back is
+    // not a tab change) and every 30 seconds while it is in view, so a change made in the app shows up by itself.
     const onVisible = () => document.visibilityState === 'visible' && sync()
+    const timer = window.setInterval(onVisible, 30_000)
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
