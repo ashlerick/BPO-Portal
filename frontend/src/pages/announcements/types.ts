@@ -41,6 +41,23 @@ export interface Announcement {
   actionTotal?: number
   // HR/Admin: the action went to chosen teams or people, not everyone.
   actionTargeted?: boolean
+  // The deadline's time of day and zone, and the real moment (for showing it in both zones).
+  actionDueTime?: string | null
+  actionDueZone?: string | null
+  actionDueInstant?: string | null
+  // An event: its day, time, zone and place; mandatory means everyone is expected. eventStartAt is the real moment.
+  isEvent?: boolean
+  eventDate?: string | null
+  eventTime?: string | null
+  eventZone?: string | null
+  eventPlace?: string | null
+  eventMandatory?: boolean
+  eventStartAt?: string | null
+  // The caller's own answer to an event, and (HR/Admin) the counts.
+  myRsvp?: { joining: boolean; note: string | null } | null
+  eventJoining?: number
+  eventNotJoining?: number
+  eventTotal?: number
   acknowledged?: boolean
   // HR/Admin only, for announcements that need a "Got it".
   ackCount?: number

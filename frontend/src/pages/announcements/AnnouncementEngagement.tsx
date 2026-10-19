@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatDateOnly } from '../../utils/dates'
+import { inBothZones } from '../../components/ui/zones'
+import { AnnouncementEvent } from './AnnouncementEvent'
 import { api, ApiError } from '../../services/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -110,8 +112,12 @@ export function AnnouncementEngagement({
     }
   }
 
+  // The deadline as text: with a time it is shown in both zones, otherwise just the day.
+  const deadline = announcement.actionDueInstant ? inBothZones(announcement.actionDueInstant) : announcement.actionDueAt ? formatDateOnly(announcement.actionDueAt) : ''
+
   return (
     <div className="mt-4 space-y-3">
+      <AnnouncementEvent announcement={announcement} canManage={canManage} onChange={onChange} />
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="React to this announcement">
         {REACTIONS.map((emoji) => {
           const count = reactions[emoji] ?? 0
@@ -154,11 +160,11 @@ export function AnnouncementEngagement({
         {announcement.needsAck &&
           (announcement.acknowledged ? (
             <Badge tone="green" className="ml-1">
-              ✓ You acknowledged this
+              {announcement.isEvent && announcement.eventMandatory ? "✓ Got it, you're counted as joining" : '✓ You acknowledged this'}
             </Badge>
           ) : (
             <Button size="sm" variant="primary" onClick={acknowledge} disabled={busy} className="ml-1">
-              {busy ? 'Saving…' : "Got it, I've read this"}
+              {busy ? 'Saving…' : announcement.isEvent && announcement.eventMandatory ? "Got it, I'll be there" : "Got it, I've read this"}
             </Button>
           ))}
       </div>
@@ -183,7 +189,7 @@ export function AnnouncementEngagement({
       {announcement.needsAction && announcement.actionDueAt && announcement.myAction && (
         <p className="flex flex-wrap items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
           <Badge tone={announcement.myAction.status === 'done' ? 'green' : 'amber'}>
-            {announcement.myAction.status === 'done' ? '✓ Action done' : `Action needed by ${formatDateOnly(announcement.actionDueAt)}`}
+            {announcement.myAction.status === 'done' ? '✓ Action done' : `Action needed by ${deadline}`}
           </Badge>
           {announcement.myAction.status !== 'done' && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -197,7 +203,7 @@ export function AnnouncementEngagement({
         <div className="text-xs text-gray-600 dark:text-gray-400">
           <button type="button" onClick={toggleActions} className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200">
             Action: {announcement.actionDone ?? 0} of {announcement.actionTotal} done
-            {announcement.actionDueAt ? `, due ${formatDateOnly(announcement.actionDueAt)}` : ''}
+            {announcement.actionDueAt ? `, due ${deadline}` : ''}
             {showActions ? ' (hide)' : ' (who?)'}
           </button>
           {announcement.actionTargeted && <span> · chosen people only</span>}

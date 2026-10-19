@@ -200,7 +200,7 @@ export function CalendarPage() {
                           <div className="min-w-0">
                             <div className={`font-medium text-gray-900 dark:text-gray-100 ${e.disabled ? 'line-through opacity-60' : ''}`}>
                               {e.title}
-                              {e.source !== 'hr' && (
+                              {e.kind === 'holiday' && e.source !== 'hr' && (
                                 <span className="ml-2 rounded-full border border-gray-300 px-2 py-0.5 text-xs font-normal text-gray-500 no-underline dark:border-gray-600 dark:text-gray-400">
                                   {e.disabled ? 'Not a holiday' : 'Prefilled'}
                                 </span>

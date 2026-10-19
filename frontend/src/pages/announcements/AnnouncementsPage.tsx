@@ -1,4 +1,5 @@
 import { FormattedText } from '../../components/ui/FormattedText'
+import { ZONE_OPTIONS } from '../../components/ui/zones'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
@@ -28,6 +29,16 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   const [needsAction, setNeedsAction] = useState(false)
   const [actionDueOn, setActionDueOn] = useState('')
   const [audience, setAudience] = useState<AudiencePick>({ mode: 'all', teamIds: [], employeeIds: [] })
+  // The deadline's time of day (optional) and the zone it is in.
+  const [actionDueTime, setActionDueTime] = useState('')
+  const [actionDueZone, setActionDueZone] = useState<string>('Asia/Manila')
+  // An event: day, time (optional), zone, place, and whether it is mandatory.
+  const [isEvent, setIsEvent] = useState(false)
+  const [eventDate, setEventDate] = useState('')
+  const [eventTime, setEventTime] = useState('')
+  const [eventZone, setEventZone] = useState<string>('Asia/Manila')
+  const [eventPlace, setEventPlace] = useState('')
+  const [eventMandatory, setEventMandatory] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -51,8 +62,10 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           ...(needsAction && {
             needsAction: true,
             actionDueOn,
+            ...(actionDueTime && { actionDueTime, actionDueZone }),
             ...(audience.mode === 'some' && { actionAudience: { teamIds: audience.teamIds, employeeIds: audience.employeeIds } }),
           }),
+          ...(isEvent && { isEvent: true, eventDate, eventPlace: eventPlace.trim() || null, eventMandatory, ...(eventTime && { eventTime, eventZone }) }),
           ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
         })
         onCreated(created)
@@ -62,6 +75,12 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         setHighlighted(false)
         setNeedsAction(false)
         setActionDueOn('')
+        setActionDueTime('')
+        setIsEvent(false)
+        setEventDate('')
+        setEventTime('')
+        setEventPlace('')
+        setEventMandatory(false)
         setAudience({ mode: 'all', teamIds: [], employeeIds: [] })
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not create announcement')
@@ -161,6 +180,48 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         )}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-center gap-2" title="Goes on the Calendar, and people say whether they are joining">
+          <input type="checkbox" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} />
+          This is an event
+        </label>
+      </div>
+      {isEvent && (
+        <div className="grid gap-3 rounded-md border border-black/10 p-3 text-sm dark:border-white/10 sm:grid-cols-2">
+          <label className="flex flex-col text-gray-600 dark:text-gray-400">
+            Day
+            <input type="date" required value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="field mt-1" />
+          </label>
+          <label className="flex flex-col text-gray-600 dark:text-gray-400">
+            Time (optional)
+            <span className="mt-1 flex gap-2">
+              <input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} className="field min-w-0 flex-1" />
+              <select value={eventZone} onChange={(e) => setEventZone(e.target.value)} className="field !w-auto" aria-label="Zone of the event time">
+                {ZONE_OPTIONS.map((z) => (
+                  <option key={z.value} value={z.value}>
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <label className="flex flex-col text-gray-600 dark:text-gray-400 sm:col-span-2">
+            Where (optional)
+            <input value={eventPlace} onChange={(e) => setEventPlace(e.target.value)} placeholder="For example, JAE Philus Office" className="field mt-1" />
+          </label>
+          <label className="flex items-start gap-2 text-gray-700 dark:text-gray-300 sm:col-span-2">
+            <input type="checkbox" className="mt-1" checked={eventMandatory} onChange={(e) => setEventMandatory(e.target.checked)} />
+            <span>
+              Mandatory
+              <span className="block text-xs text-gray-500 dark:text-gray-400">
+                Everyone is expected. Pressing Got it counts as joining, and they can change it to "can't make it". Leave this off to ask
+                "Are you joining?" instead, with no default.
+              </span>
+            </span>
+          </label>
+          <p className="text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">The event goes on the Calendar when you post, with its time in both Manila and California time.</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
         <label className="flex items-center gap-2" title="Everyone gets a to-do for it">
           <input type="checkbox" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} />
           Needs action
@@ -169,6 +230,17 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           <label className="flex items-center gap-2">
             due on
             <input type="date" required value={actionDueOn} onChange={(e) => setActionDueOn(e.target.value)} className="field !w-auto py-1" />
+            <span>at</span>
+            <input type="time" value={actionDueTime} onChange={(e) => setActionDueTime(e.target.value)} className="field !w-auto py-1" aria-label="Deadline time (optional)" />
+            {actionDueTime && (
+              <select value={actionDueZone} onChange={(e) => setActionDueZone(e.target.value)} className="field !w-auto py-1" aria-label="Zone of the deadline time">
+                {ZONE_OPTIONS.map((z) => (
+                  <option key={z.value} value={z.value}>
+                    {z.label}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
         )}
       </div>
