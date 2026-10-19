@@ -167,6 +167,16 @@ Account setup, activation and password reset links are sent through Gmail (OAuth
 
 A Vercel cron (`vercel.json`) calls `/api/hr/inventory-reminders` on the 1st of each month. It asks item holders to check their items and tells HR what is outstanding. It refuses every request unless `CRON_SECRET` is set.
 
+## Credits and data sources
+
+- **National holidays:** the Philippines list is prefilled from the free public API of [Nager.Date](https://github.com/nager/Nager.Date)
+  (MIT licensed project; the API is at `https://date.nager.at/api/v3/PublicHolidays/{year}/PH`). It is only a starting point: HR
+  confirms every day against the official proclamation and can switch any of them off.
+- **Local holidays** (a city or province) are entered by HR. The proclamations are public: [The Lawphil Project, Proclamations](https://lawphil.net/executive/proc/proc2026/proc2026.html)
+  and the [Official Gazette](https://www.officialgazette.gov.ph/section/proclamations/). Republic Act 7601 (February 11, Governor Evelio B.
+  Javier Day) is on the [Supreme Court E-Library](https://elibrary.judiciary.gov.ph/thebookshelf/showdocs/2/3529).
+- Notes on holidays and the sources considered: [plan/holidays.md](plan/holidays.md).
+
 ## Status
 
 The features in `new_plan.md` are built. What is left:
