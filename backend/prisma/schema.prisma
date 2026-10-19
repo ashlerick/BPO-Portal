@@ -535,6 +535,18 @@ model JobOpening {
   @@map("job_openings")
 }
 
+// A pair of applicants HR said are not the same person (ids stored in order, smaller first).
+model ApplicantNotSame {
+  id           String   @id @default(uuid())
+  applicantAId String
+  applicantBId String
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  @@unique([applicantAId, applicantBId])
+  @@map("applicant_not_same")
+}
+
 model Applicant {
   id           String      @id @default(uuid())
   jobOpening   JobOpening  @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)

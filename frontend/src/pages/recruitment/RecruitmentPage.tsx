@@ -38,6 +38,26 @@ interface Opening {
   applicantCount: number
 }
 
+// Another applicant who looks like the same person (shared email or phone, or a very similar name), and how that application went.
+interface Similar {
+  id: string
+  name: string
+  jobTitle: string
+  status: string
+  decisionNote: string | null
+  decidedAt: string | null
+  createdAt: string
+  why: ('email' | 'phone' | 'name' | 'birthday' | 'resume')[]
+}
+
+const WHY: Record<Similar['why'][number], string> = {
+  email: 'same email',
+  phone: 'same phone number',
+  name: 'similar name',
+  birthday: 'same birth date',
+  resume: 'same resume file name',
+}
+
 interface Applicant {
   id: string
   jobOpeningId: string
@@ -62,6 +82,8 @@ interface Applicant {
   hiredUserId: string | null
   createdAt: string
   interviews: Interview[]
+  // Possible duplicates (HR only); empty when there are none.
+  similar?: Similar[]
 }
 
 const APPLICANT_STATUSES: ApplicantStatus[] = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected', 'withdrawn']
@@ -236,7 +258,18 @@ function ApplicantForm({ openings, onCreated }: { openings: Opening[]; onCreated
   )
 }
 
-function ApplicantCard({ applicant, onUpdated, onDeleted }: { applicant: Applicant; onUpdated: (a: Applicant) => void; onDeleted: (id: string) => void }) {
+function ApplicantCard({
+  applicant,
+  onUpdated,
+  onDeleted,
+  onNotSame,
+}: {
+  applicant: Applicant
+  onUpdated: (a: Applicant) => void
+  onDeleted: (id: string) => void
+  onNotSame: (a: string, b: string) => void
+}) {
+  const [showSimilar, setShowSimilar] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState(applicant.decisionNote ?? '')
@@ -250,6 +283,20 @@ function ApplicantCard({ applicant, onUpdated, onDeleted }: { applicant: Applica
       onUpdated(await api.put<Applicant>(`/hr/recruitment?kind=applicants&sub=${applicant.id}`, body))
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not update the applicant')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // HR says this is a different person: the flag goes away for both applicants.
+  async function notSame(otherId: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post(`/hr/recruitment?kind=applicants&sub=${applicant.id}&action=not-same`, { otherId })
+      onNotSame(applicant.id, otherId)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save that')
     } finally {
       setBusy(false)
     }
@@ -290,6 +337,11 @@ function ApplicantCard({ applicant, onUpdated, onDeleted }: { applicant: Applica
               {applicant.source === 'careers' && <Badge tone="purple">Applied online</Badge>}
               {applicant.hiredUserId && <Badge tone="green">Now an employee</Badge>}
               {applicant.referredByName && <Badge tone="blue">Referred by {applicant.referredByName}</Badge>}
+              {applicant.similar && applicant.similar.length > 0 && (
+                <button type="button" onClick={() => setShowSimilar((v) => !v)} aria-expanded={showSimilar} title="Another applicant looks like the same person">
+                  <Badge tone="amber">Possible duplicate ({applicant.similar.length}) {showSimilar ? '▲' : '▼'}</Badge>
+                </button>
+              )}
               {applicant.resumeUrl && (
                 <a href={applicant.resumeUrl} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400">
                   Resume file{applicant.resumeName ? ` (${applicant.resumeName})` : ''} ↗
@@ -301,6 +353,26 @@ function ApplicantCard({ applicant, onUpdated, onDeleted }: { applicant: Applica
                 </a>
               )}
             </div>
+            {showSimilar && applicant.similar && applicant.similar.length > 0 && (
+              <ul className="mt-2 space-y-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+                {applicant.similar.map((m) => (
+                  <li key={m.id} className="space-y-0.5">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">
+                      {m.name} <span className="font-normal text-gray-500 dark:text-gray-400">· {m.jobTitle}</span>
+                    </div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                      Applied {formatDateOnly(m.createdAt)} · {humanize(m.status)}
+                      {m.decidedAt ? ` (${formatDateOnly(m.decidedAt)})` : ''}
+                      {m.decisionNote ? ` · Note: ${m.decisionNote}` : ''}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Looks the same: {m.why.map((w) => WHY[w]).join(', ')}</div>
+                    <Button size="sm" onClick={() => notSame(m.id)} disabled={busy}>
+                      Not the same person
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <Badge tone={statusTone(applicant.status)}>{humanize(applicant.status)}</Badge>
         </div>
@@ -626,6 +698,12 @@ export function RecruitmentPage() {
   if (error) return <ErrorState message={error} />
   if (!openings || !applicants) return <LoadingState />
 
+  const dismissPair = (a: string, b: string) =>
+    setApplicants((prev) =>
+      prev?.map((x) =>
+        x.id === a ? { ...x, similar: x.similar?.filter((m) => m.id !== b) } : x.id === b ? { ...x, similar: x.similar?.filter((m) => m.id !== a) } : x,
+      ) ?? null,
+    )
   const replaceApplicant = (a: Applicant) => setApplicants((prev) => prev?.map((x) => (x.id === a.id ? a : x)) ?? null)
   const deleteApplicant = (id: string) => setApplicants((prev) => prev?.filter((x) => x.id !== id) ?? null)
   const active = applicants.filter((a) => ACTIVE.includes(a.status))
@@ -699,7 +777,7 @@ export function RecruitmentPage() {
             ) : (
               <ul className="space-y-3">
                 {active.map((a) => (
-                  <ApplicantCard key={a.id} applicant={a} onUpdated={replaceApplicant} onDeleted={deleteApplicant} />
+                  <ApplicantCard key={a.id} applicant={a} onUpdated={replaceApplicant} onDeleted={deleteApplicant} onNotSame={dismissPair} />
                 ))}
               </ul>
             )}
@@ -729,7 +807,7 @@ export function RecruitmentPage() {
           ) : (
             <ul className="space-y-3">
               {decided.map((a) => (
-                <ApplicantCard key={a.id} applicant={a} onUpdated={replaceApplicant} onDeleted={deleteApplicant} />
+                <ApplicantCard key={a.id} applicant={a} onUpdated={replaceApplicant} onDeleted={deleteApplicant} onNotSame={dismissPair} />
               ))}
             </ul>
           )}

@@ -1,3 +1,4 @@
+import { findMatches, pairOf } from '../applicantMatches.js'
 import type { VercelResponse } from '@vercel/node'
 import { z } from 'zod'
 import { prisma } from '../prisma.js'
@@ -61,6 +62,32 @@ async function referrerNames(ids: (string | null)[]) {
   if (wanted.length === 0) return new Map<string, string>()
   const people = await prisma.employee.findMany({ where: { id: { in: wanted } }, include: { user: true } })
   return new Map(people.map((p) => [p.id, formatDisplayName(p.user.firstName, p.user.middleName, p.user.lastName)]))
+}
+
+// Possible duplicates for the given applicants: others that share an email or phone, or have a very similar name, minus the pairs
+// HR said are different. Each carries what happened with that other application, so HR can see how it went before.
+async function similarTo(ids: string[]) {
+  const [all, notSame] = await Promise.all([
+    prisma.applicant.findMany({
+      select: {
+        id: true, name: true, email: true, phone: true, birthDate: true, resumeName: true,
+        status: true, decisionNote: true, decidedAt: true, createdAt: true, jobOpening: { select: { title: true } },
+      },
+    }),
+    prisma.applicantNotSame.findMany({ select: { applicantAId: true, applicantBId: true } }),
+  ])
+  const skip = new Set(notSame.map((p) => `${p.applicantAId}|${p.applicantBId}`))
+  const byId = new Map(all.map((a) => [a.id, a]))
+  const found = findMatches(all, ids, skip)
+  return new Map(
+    ids.map((id) => [
+      id,
+      (found.get(id) ?? []).map((m) => {
+        const o = byId.get(m.id)!
+        return { id: o.id, name: o.name, jobTitle: o.jobOpening.title, status: o.status, decisionNote: o.decisionNote, decidedAt: o.decidedAt, createdAt: o.createdAt, why: m.why }
+      }),
+    ]),
+  )
 }
 
 async function applicantView<T extends { resumeKey: string | null; referredById: string | null; referrerName: string | null }>(
@@ -185,10 +212,12 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       })
       await logAudit(req.auth.sub, 'view', 'applicants', null)
       const names = await referrerNames(rows.map((r) => r.referredById))
+      const similar = await similarTo(rows.map((r) => r.id))
       return res.status(200).json(
         await Promise.all(
           rows.map(async ({ jobOpening, ...a }) => ({
             ...(await applicantView(a, names)),
+            similar: similar.get(a.id) ?? [],
             jobTitle: jobOpening.title,
             jobDepartment: jobOpening.department,
           })),
@@ -209,7 +238,16 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       })
       logAudit(req.auth.sub, 'create', 'applicant', created.id)
       const { jobOpening, ...rest } = created
-      return res.status(201).json({ ...(await applicantView(rest)), jobTitle: jobOpening.title })
+      return res.status(201).json({ ...(await applicantView(rest)), jobTitle: jobOpening.title, similar: (await similarTo([created.id])).get(created.id) ?? [] })
+    }
+    // HR says two applicants are not the same person: the flag stops showing for that pair.
+    if (req.method === 'POST' && sub && queryString(req, 'action') === 'not-same') {
+      const other = typeof (req.body as { otherId?: unknown })?.otherId === 'string' ? (req.body as { otherId: string }).otherId : ''
+      if (!other || other === sub) return notFound(res, 'Applicant not found')
+      const [a, b] = pairOf(sub, other)
+      await prisma.applicantNotSame.createMany({ data: [{ applicantAId: a, applicantBId: b, createdBy: req.auth.sub }], skipDuplicates: true })
+      logAudit(req.auth.sub, 'not_same', 'applicant', sub, 'success', `marked as a different person from ${other}`)
+      return res.status(200).json({ ok: true })
     }
     if (req.method === 'PUT' && sub) {
       const data = parseBody(applicantSchema.omit({ jobOpeningId: true }).partial(), req.body, res)
@@ -235,7 +273,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       })
       logAudit(req.auth.sub, 'update', 'applicant', sub)
       const { jobOpening, ...rest } = updated
-      return res.status(200).json({ ...(await applicantView(rest)), jobTitle: jobOpening.title })
+      return res.status(200).json({ ...(await applicantView(rest)), jobTitle: jobOpening.title, similar: (await similarTo([sub])).get(sub) ?? [] })
     }
     if (req.method === 'DELETE' && sub) {
       await prisma.applicant.deleteMany({ where: { id: sub } })
