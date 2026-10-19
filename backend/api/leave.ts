@@ -247,33 +247,41 @@ async function handleListAttendance(req: AuthedRequest, res: VercelResponse) {
 }
 
 async function handleExportAttendance(req: AuthedRequest, res: VercelResponse) {
+  // Exporting attendance is HR/Admin only. Everyone else reads their own records on the page.
+  if (!isHrOrAdmin(req)) {
+    res.status(403).json({ message: 'Only HR can export attendance.' })
+    return
+  }
   const range = parseDateRange(req)
   if (!range) {
     res.status(400).json({ message: 'from (and optionally to) is required, as YYYY-MM-DD' })
     return
   }
 
-  const scope = isHrOrAdmin(req) ? {} : { employee: { userId: req.auth.sub } }
   const records = await prisma.attendanceRecord.findMany({
-    where: { ...scope, ...parseEmployeeFilter(req), date: range },
+    where: { ...parseEmployeeFilter(req), date: range },
     include: { employee: { include: { user: { select: { firstName: true, middleName: true, lastName: true } } } } },
+    // by person, then by day: the workbook has one sheet per person
     orderBy: [
-      { date: 'asc' },
       { employee: { user: { lastName: 'asc' } } },
       { employee: { user: { firstName: 'asc' } } },
+      { employeeId: 'asc' },
+      { date: 'asc' },
     ],
-    take: 1000,
+    take: 5000,
   })
 
-  const buffer = await buildAttendanceXlsx(
-    records.map((r) => ({
-      date: r.date,
-      employeeName: formatDisplayName(r.employee.user.firstName, r.employee.user.middleName, r.employee.user.lastName),
-      status: r.status,
-      checkInAt: r.checkInAt,
-      checkOutAt: r.checkOutAt,
-    })),
-  )
+  const rows = records.map((r) => ({
+    employeeId: r.employeeId,
+    date: r.date,
+    employeeName: formatDisplayName(r.employee.user.firstName, r.employee.user.middleName, r.employee.user.lastName),
+    status: r.status,
+    checkInAt: r.checkInAt,
+    checkOutAt: r.checkOutAt,
+    overtimeHours: r.overtimeHours === null ? null : Number(r.overtimeHours.toString()),
+    workingHoliday: r.workingHoliday,
+  }))
+  const buffer = await buildAttendanceXlsx(rows, range.gte, range.lte)
 
   const storageKey = `attendance-exports/${req.auth.sub}-${Date.now()}.xlsx`
   await putObject(
@@ -281,7 +289,12 @@ async function handleExportAttendance(req: AuthedRequest, res: VercelResponse) {
     buffer,
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   )
-  const url = await getDownloadUrl(storageKey)
+  // A readable file name: "Attendance - Sep 8 to Oct 15 2026.xlsx", with the person's name when it is for one person.
+  const day = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const year = range.lte.toLocaleDateString('en-US', { year: 'numeric', timeZone: 'UTC' })
+  const oneName = parseEmployeeFilter(req).employeeId && rows[0] ? ` - ${rows[0].employeeName}` : ''
+  const fileName = `Attendance${oneName} - ${day(range.gte)} to ${day(range.lte)} ${year}.xlsx`
+  const url = await getDownloadUrl(storageKey, undefined, fileName)
 
   logAudit(req.auth.sub, 'export', 'attendance', storageKey)
   res.status(200).json({ url })

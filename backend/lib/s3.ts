@@ -29,8 +29,16 @@ export const s3 = new S3Client({
 const BUCKET = () => requireEnv('S3_BUCKET_NAME')
 const DEFAULT_EXPIRES_IN = 5 * 60 // 5 minutes
 
-export function getDownloadUrl(key: string, expiresIn = DEFAULT_EXPIRES_IN): Promise<string> {
-  const command = new GetObjectCommand({ Bucket: BUCKET(), Key: key })
+// downloadName: the file name the browser saves it as (storage keys are not readable names). Optional.
+export function getDownloadUrl(key: string, expiresIn = DEFAULT_EXPIRES_IN, downloadName?: string): Promise<string> {
+  const ascii = downloadName?.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '')
+  const command = new GetObjectCommand({
+    Bucket: BUCKET(),
+    Key: key,
+    ...(downloadName && {
+      ResponseContentDisposition: `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
+    }),
+  })
   return getSignedUrl(s3, command, { expiresIn })
 }
 

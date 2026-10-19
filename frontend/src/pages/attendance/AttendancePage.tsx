@@ -361,14 +361,16 @@ export function AttendancePage() {
           {isReviewer && (
             <EmployeeFilter value={employeeId} onChange={setEmployeeId} className="col-span-full md:col-auto" />
           )}
-          <Button
-            variant="primary"
-            onClick={handleExport}
-            disabled={exporting || rangeInvalid}
-            className="col-span-full w-full md:col-auto md:w-auto"
-          >
-            {exporting ? 'Exporting…' : 'Export to Excel'}
-          </Button>
+          {isReviewer && (
+            <Button
+              variant="primary"
+              onClick={handleExport}
+              disabled={exporting || rangeInvalid}
+              className="col-span-full w-full md:col-auto md:w-auto"
+            >
+              {exporting ? 'Exporting…' : 'Export to Excel'}
+            </Button>
+          )}
         </div>
       </Card>
       {rangeInvalid && <p className="mb-2 text-sm text-red-600 dark:text-red-400">"To" can't be before "From".</p>}
