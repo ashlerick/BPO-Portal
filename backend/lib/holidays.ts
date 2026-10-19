@@ -20,10 +20,11 @@ interface NagerDay {
   types?: string[]
 }
 
-// Local (Panay) holidays that a national list cannot know. Prefilled like the national ones, with the place in the name, and
-// HR can switch any off ("Not a holiday") if the office is elsewhere. Add new proclamations here, or on the Calendar by hand.
-// Sources: Republic Act 7601 (Feb 11, every year); Proclamations 1172, 1181, 1388 (Lawphil, 2026) and 1474 (news coverage,
-// not yet checked against the signed text).
+// Local holidays for the office's place (Iloilo) that a national list cannot know. They are added switched OFF: a local day
+// like Javier Day is observed some years and not others, so HR decides, and presses "Count as holiday" on the Calendar in the
+// years it is observed. Add new proclamations here, or on the Calendar by hand (those count at once).
+// Sources: Republic Act 7601 (Feb 11, every year, Antique, Capiz, Aklan and Iloilo) and Proclamation No. 1388 (Lawphil).
+// Other Panay towns (Passi, Mambusao, Dingle and so on) are left out: they do not apply to an Iloilo City office.
 interface LocalHoliday {
   /** 'MM-DD' for a holiday that repeats every year, or 'YYYY-MM-DD' for one proclamation */
   date: string
@@ -32,11 +33,8 @@ interface LocalHoliday {
   basis: string
 }
 const LOCAL_HOLIDAYS: LocalHoliday[] = [
-  { date: '02-11', title: 'Governor Evelio B. Javier Day', place: 'Antique, Capiz, Aklan and Iloilo', basis: 'Republic Act 7601' },
-  { date: '2026-03-14', title: 'Passi City Founding Anniversary', place: 'Passi City, Iloilo', basis: 'Proclamation No. 1172' },
-  { date: '2026-03-26', title: 'Special non-working day in Mambusao', place: 'Mambusao, Capiz', basis: 'Proclamation No. 1181' },
+  { date: '02-11', title: 'Governor Evelio B. Javier Day', place: 'Iloilo', basis: 'Republic Act 7601' },
   { date: '2026-08-25', title: 'Iloilo City Charter Day', place: 'Iloilo City', basis: 'Proclamation No. 1388' },
-  { date: '2026-10-28', title: 'Cry of Lincud', place: 'Dingle, Iloilo', basis: 'Proclamation No. 1474' },
 ]
 const localDone = new Set<number>()
 
@@ -48,9 +46,10 @@ async function ensureLocalHolidays(year: number): Promise<void> {
       title: `${h.title} (${h.place})`,
       kind: 'holiday',
       startDate: new Date(`${h.full}T00:00:00.000Z`),
-      description: `Local holiday, applies in ${h.place} only (${h.basis}). Switch it off if the office is elsewhere.`,
+      description: `Local holiday in ${h.place} (${h.basis}). Not counted unless HR presses "Count as holiday", because it is observed some years and not others.`,
       createdBy: 'system',
       source: LOCAL,
+      disabled: true,
       externalKey: `${LOCAL}:${h.full}`,
     }))
   try {
