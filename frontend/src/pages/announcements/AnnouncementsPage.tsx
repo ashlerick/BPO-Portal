@@ -174,20 +174,32 @@ function AnnouncementItem({
     })
   }
 
-  // Pin it (or unpin it): highlighted announcements show first here and on the BPO Time app.
-  function toggleHighlight() {
+  // Highlight it for a chosen time (null = until HR removes it), or take the highlight off. Highlighted announcements show
+  // first here and on the BPO Time app, and end by themselves.
+  function setHighlight(days: number | null) {
     guardedAction(['hr', 'admin'], async () => {
       setSaving(true)
       setError(null)
       try {
-        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, {
-          highlighted: !announcement.highlighted,
-          // turning it on starts a 3-day highlight; HR can pick another length when editing the announcement
-          ...(!announcement.highlighted && { highlightDays: 3 }),
-        })
+        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, { highlighted: true, highlightDays: days })
         onUpdated({ ...announcement, ...updated })
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not change the highlight')
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
+
+  function removeHighlight() {
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setError(null)
+      try {
+        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, { highlighted: false })
+        onUpdated({ ...announcement, ...updated })
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Could not remove the highlight')
       } finally {
         setSaving(false)
       }
@@ -271,9 +283,28 @@ function AnnouncementItem({
               Edit
             </Button>
             {announcement.category !== EMERGENCY && (
-              <Button size="sm" onClick={toggleHighlight} disabled={saving}>
-                {announcement.highlighted ? 'Remove highlight' : 'Highlight for 3 days'}
-              </Button>
+              <>
+                <select
+                  aria-label={announcement.highlighted ? 'Change how long it is highlighted' : 'Highlight for how long'}
+                  value=""
+                  disabled={saving}
+                  onChange={(e) => setHighlight(Number(e.target.value) || null)}
+                  className="field !w-auto !py-1 text-sm font-semibold"
+                >
+                  <option value="" disabled>
+                    {announcement.highlighted ? 'Change length…' : 'Highlight for…'}
+                  </option>
+                  <option value={1}>1 day</option>
+                  <option value={3}>3 days</option>
+                  <option value={7}>1 week</option>
+                  <option value={0}>Until I remove it</option>
+                </select>
+                {announcement.highlighted && (
+                  <Button size="sm" onClick={removeHighlight} disabled={saving}>
+                    Remove highlight
+                  </Button>
+                )}
+              </>
             )}
             <Button size="sm" variant="danger" onClick={remove} disabled={saving}>
               Delete
