@@ -7,6 +7,7 @@ import { PortalLayout } from './layouts/PortalLayout'
 import { AnnouncementsPage } from './pages/announcements/AnnouncementsPage'
 import { AnnouncementView } from './pages/announcements/AnnouncementView'
 import { AttendancePage } from './pages/attendance/AttendancePage'
+import { MyTimePage } from './pages/attendance/MyTimePage'
 import { AuditLogsPage } from './pages/audit-logs/AuditLogsPage'
 import { BenefitsPage } from './pages/benefits/BenefitsPage'
 import { CalendarPage } from './pages/calendar/CalendarPage'
@@ -124,7 +125,15 @@ export default function App() {
               <Route path="/forms" element={<Navigate to="/freedom-wall" replace />} />
               <Route path="/freedom-wall" element={<FreedomWallPage />} />
               <Route path="/leave" element={<LeaveRequestsPage />} />
-              <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/my-time" element={<MyTimePage />} />
+              <Route
+                path="/attendance"
+                element={
+                  <RequireAuth roles={['hr', 'admin']}>
+                    <AttendancePage />
+                  </RequireAuth>
+                }
+              />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/profile" element={<ProfilePage />} />

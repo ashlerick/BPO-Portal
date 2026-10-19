@@ -13,7 +13,7 @@ import { Section, SectionStack } from '../../components/ui/Section'
 import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
-import { LateReport, MySchedule } from './Shifts'
+import { LateReport } from './Shifts'
 
 const timeFmt = formatManilaTime
 
@@ -278,7 +278,7 @@ function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reload
 }
 
 export function AttendancePage() {
-  const { effectiveRoles, attendanceStatus } = useAuth()
+  const { effectiveRoles } = useAuth()
   const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
 
   const [from, setFrom] = useState(todayInManilaIso())
@@ -298,6 +298,15 @@ export function AttendancePage() {
   const records = data ?? []
   const absences = records.filter((r) => r.status === 'absent')
   const present = records.filter((r) => r.status === 'present')
+  // One block per person (the same grouping the Excel export uses for its sheets), people A to Z, days in order.
+  const byPerson = [...records]
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName) || a.date.localeCompare(b.date))
+    .reduce<{ name: string; rows: AttendanceRecord[] }[]>((groups, r) => {
+      const last = groups[groups.length - 1]
+      if (last && last.rows[0].employeeName === r.employeeName) last.rows.push(r)
+      else groups.push({ name: r.employeeName, rows: [r] })
+      return groups
+    }, [])
   const totalHours = present.reduce((sum, r) => sum + hoursBetween(r.checkInAt, r.checkOutAt), 0)
   const completedDays = present.filter((r) => r.checkInAt && r.checkOutAt).length
 
@@ -319,10 +328,10 @@ export function AttendancePage() {
 
   return (
     <div>
-      <PageHeader
-        title="Attendance"
-        description={isReviewer ? 'All employees.' : 'Your check-in/check-out history.'}
-      />
+      <PageHeader title="Attendance" description="Everyone's records, by person. Your own time is under My Time." />
+      <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+        Set up and assign shifts in <Link to="/hris?tab=shifts" className="text-brand-700 underline dark:text-brand-400">Employee Management, Shifts</Link>.
+      </p>
 
       <Card className="mb-4 space-y-3">
         {/* Quick ranges — the handful people actually want. Equal-width
@@ -382,55 +391,8 @@ export function AttendancePage() {
       <Tabs
         tabs={[
           {
-            id: 'today',
-            label: 'Today',
-            badge: attendanceStatus?.checkedIn && !attendanceStatus.checkOutAt ? 'In' : undefined,
-            content: (
-        <SectionStack tabs={false}>
-        <Section
-          id="attendance.today"
-          title="Time in / Time out"
-          hint="Today"
-          defaultOpen
-          aside={
-            attendanceStatus?.checkedIn ? (
-              <Badge tone={attendanceStatus.checkOutAt ? 'gray' : 'green'}>
-                {attendanceStatus.checkOutAt ? 'Checked out' : 'Checked in'}
-              </Badge>
-            ) : undefined
-          }
-        >
-          {attendanceStatus?.checkedIn ? (
-            <dl className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-gray-500 dark:text-gray-400">Time in</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{timeFmt(attendanceStatus.checkInAt)}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500 dark:text-gray-400">Time out</dt>
-                <dd className="font-medium text-gray-900 dark:text-gray-100">{timeFmt(attendanceStatus.checkOutAt)}</dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">You haven't checked in today.</p>
-          )}
-          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            Clock in and out with the BPO Time app (Launch App, top right). Logging in to the portal does not clock you in.
-          </p>
-        </Section>
-
-        {(!isReviewer || employeeId) && (
-          <Section id="attendance.weekly" title="Weekly tracker" hint="Regular hours, overtime, working holiday" defaultOpen>
-            <WeeklyTracker employeeId={employeeId} reloadToken={reloadToken} />
-          </Section>
-        )}
-        </SectionStack>
-            ),
-          },
-          {
             id: 'history',
-            label: 'History and reports',
-            badge: absences.length > 0 ? absences.length : undefined,
+            label: 'Records',
             content: (
         <SectionStack tabs={false}>
         <Section id="attendance.history" title="Attendance history" hint={`${from} to ${to}`} defaultOpen>
@@ -440,7 +402,6 @@ export function AttendancePage() {
               <table className="stack-table w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
-                    {isReviewer && <th className="py-3 pl-4 pr-4 font-medium">Employee</th>}
                     <th className="py-3 pr-4 pl-4 font-medium first:pl-4">Date</th>
                     <th className="py-3 pr-4 font-medium">Check In</th>
                     <th className="py-3 pr-4 font-medium">Check Out</th>
@@ -449,20 +410,22 @@ export function AttendancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((r) => (
+                  {byPerson.flatMap(({ name, rows }) => [
+                    <tr key={`h-${rows[0].employeeId ?? name}`} className="bg-black/[0.04] dark:bg-white/[0.05]">
+                      <td colSpan={5} data-primary className="py-2 pl-4 pr-4 font-medium text-gray-900 dark:text-gray-100">
+                        {name}
+                        <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                          {rows.filter((x) => x.status === 'present').length} present
+                          {rows.some((x) => x.status === 'absent') ? `, ${rows.filter((x) => x.status === 'absent').length} absent` : ''}
+                        </span>
+                      </td>
+                    </tr>,
+                    ...rows.map((r) => (
                     <tr
                       key={r.id}
                       className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]"
                     >
-                      {isReviewer && (
-                        <td data-primary className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">
-                          {r.employeeName}
-                        </td>
-                      )}
-                      <td
-                        {...(isReviewer ? { 'data-label': 'Date' } : { 'data-primary': true })}
-                        className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300"
-                      >
+                      <td data-primary className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">
                         {formatDateOnly(r.date)}
                       </td>
                       {r.status === 'absent' ? (
@@ -507,7 +470,8 @@ export function AttendancePage() {
                         </>
                       )}
                     </tr>
-                  ))}
+                    )),
+                  ])}
                 </tbody>
               </table>
             </Card>
@@ -542,6 +506,30 @@ export function AttendancePage() {
           )}
         </Section>
 
+        </SectionStack>
+            ),
+          },
+          {
+            id: 'weekly',
+            label: 'Weekly tracker',
+            content: (
+        <SectionStack tabs={false}>
+        <Section id="attendance.weekly" title="Weekly tracker" hint="Regular hours, overtime, working holiday" defaultOpen>
+          {employeeId ? (
+            <WeeklyTracker employeeId={employeeId} reloadToken={reloadToken} />
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Pick an employee above to see their week.</p>
+          )}
+        </Section>
+        </SectionStack>
+            ),
+          },
+          {
+            id: 'late',
+            label: 'Late and absences',
+            badge: absences.length > 0 ? absences.length : undefined,
+            content: (
+        <SectionStack tabs={false}>
         <Section id="attendance.late" title="Late / undertime records" hint={`${from} to ${to}`}>
           <LateReport from={from} to={to} employeeId={employeeId} />
         </Section>
@@ -565,23 +553,6 @@ export function AttendancePage() {
             </ul>
           )}
         </Section>
-        </SectionStack>
-            ),
-          },
-          {
-            id: 'shifts',
-            label: 'Shifts',
-            content: (
-        <SectionStack tabs={false}>
-        <Section id="attendance.schedule" title="My shift schedule" hint="Set by HR">
-          <MySchedule />
-          {isReviewer && (
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              HR and Admin set up and assign shifts in <Link to="/hris?tab=shifts" className="text-brand-700 underline dark:text-brand-400">Employee Management, Shifts</Link>.
-            </p>
-          )}
-        </Section>
-
         </SectionStack>
             ),
           },

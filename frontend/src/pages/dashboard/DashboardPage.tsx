@@ -89,7 +89,7 @@ export function DashboardPage() {
     })
   }
   if (attendanceStatus && !attendanceStatus.checkedIn && attendanceStatus.status !== 'absent') {
-    tasks.push({ key: 'check-in', label: "You haven't clocked in today — use the BPO Time app", to: '/attendance' })
+    tasks.push({ key: 'check-in', label: "You haven't clocked in today — use the BPO Time app", to: '/my-time' })
   }
 
   // Reminders: calendar items in the next 14 days.
