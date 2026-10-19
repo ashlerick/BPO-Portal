@@ -7,6 +7,8 @@ import { useTheme } from '../theme/ThemeContext'
 import { NOTIFICATIONS_CHANGED, type NotificationsResponse } from '../pages/notifications/types'
 import { QuickScanButton } from '../components/ui/QuickScanButton'
 import { WorldClock } from '../components/ui/WorldClock'
+import { useTodayHoliday } from '../hooks/useTodayHoliday'
+import { holidayTheme } from '../utils/holidayTheme'
 import { Icon, type IconName } from './icons'
 import { MENU_CHANGED, resolveNav, type MenuConfig, type VisibleGroup } from './nav'
 
@@ -284,6 +286,16 @@ export function PortalLayout() {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const unread = useUnreadCount()
   const menuConfig = useMenuConfig()
+  // On a holiday <html> carries its look (a thin coloured strip at the top; colours in index.css).
+  const holiday = useTodayHoliday()
+  useEffect(() => {
+    const root = document.documentElement
+    if (holiday) root.dataset.holiday = holidayTheme(holiday)
+    else delete root.dataset.holiday
+    return () => {
+      delete root.dataset.holiday
+    }
+  }, [holiday])
   // Payroll and Disciplinary also follow the server's restricted-role list.
   const canOpenRestricted = restrictedRoles.some((r) => effectiveRoles.includes(r))
   const visibleGroups = resolveNav(menuConfig, effectiveRoles)

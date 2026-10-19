@@ -5,7 +5,8 @@ import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { isNotFoundError } from '../errors.js'
-import { ensureHolidaysImported, syncWorkingHoliday } from '../holidays.js'
+import { ensureHolidaysImported, holidayOn, syncWorkingHoliday } from '../holidays.js'
+import { todayInManila } from '../dates.js'
 
 // GET /calendar — company calendar events (everyone).
 // POST /calendar, DELETE /calendar/:id — HR/Admin only.
@@ -30,6 +31,13 @@ const toDate = (v: string) => new Date(`${v}T00:00:00.000Z`)
 
 export async function handler(req: AuthedRequest, res: VercelResponse) {
   const sub = typeof req.query.sub === 'string' ? req.query.sub : undefined
+
+  // GET /calendar/today: today's holiday (shift day) for the portal's holiday look, or null. Everyone.
+  if (sub === 'today' && req.method === 'GET') {
+    const h = await holidayOn(todayInManila())
+    res.status(200).json({ holiday: h ? { name: h.name } : null })
+    return
+  }
 
   if (!sub && req.method === 'GET') {
     // Prefill the national holidays for this year (and next year once the year is nearly over). Never fails the page.

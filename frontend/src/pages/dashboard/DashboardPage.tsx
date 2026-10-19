@@ -15,6 +15,8 @@ import type { EmployeeRecord, MyEmployeeProfile } from '../hris/types'
 import type { LeaveRequest } from '../leave/types'
 import type { NotificationsResponse } from '../notifications/types'
 import type { WeeklyReport } from '../reports/types'
+import { HolidayBanner } from '../../components/ui/HolidayBanner'
+import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { AdminWidgets } from './AdminWidgets'
 import { AssignedByMe, AssignTodo, MyTodos } from './Todos'
 
@@ -56,6 +58,7 @@ export function DashboardPage() {
   const { data, loading, error } = useApiData<Announcement[]>('/announcements')
   const { leave, reports, events, notifications, profile, employees } = useDashboardData(isReviewer, isElevated)
   const [todoReload, setTodoReload] = useState(0)
+  const holiday = useTodayHoliday()
 
   const latest = data?.filter((a) => a.published && !isExpired(a)).slice(0, 3) ?? []
 
@@ -94,7 +97,7 @@ export function DashboardPage() {
   const horizon = new Date(`${today}T00:00:00Z`)
   horizon.setUTCDate(horizon.getUTCDate() + 14)
   const horizonIso = horizon.toISOString().slice(0, 10)
-  const reminders = events.filter((e) => {
+  const reminders = events.filter((e) => !e.disabled).filter((e) => {
     const start = e.startDate.slice(0, 10)
     const end = (e.endDate ?? e.startDate).slice(0, 10)
     return end >= today && start <= horizonIso
@@ -112,6 +115,12 @@ export function DashboardPage() {
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           {user.roles.map((role) => ROLE_LABELS[role]).join(', ')}
         </p>
+      )}
+
+      {holiday && (
+        <div className="mt-4">
+          <HolidayBanner name={holiday} />
+        </div>
       )}
 
       <SectionStack>

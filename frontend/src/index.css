@@ -446,3 +446,29 @@ body {
     animation: none !important;
   }
 }
+
+/* Holiday look (see utils/holidayTheme.ts and components/ui/HolidayBanner.tsx). On a holiday <html> gets data-holiday; only
+   the thin strip at the top of the page and the dashboard banner use these colours. No other part of the portal changes. */
+html[data-holiday]::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 4px; z-index: 60; background: var(--holiday-strip); pointer-events: none; }
+.holiday-banner { position: relative; isolation: isolate; overflow: hidden; border-radius: 0.75rem; padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--holiday-a) 20%, transparent), color-mix(in srgb, var(--holiday-b) 16%, transparent));
+  border: 1px solid color-mix(in srgb, var(--holiday-a) 50%, transparent); }
+.holiday-fleck { position: absolute; z-index: 0; top: -10px; opacity: 0.85; pointer-events: none; animation: holiday-fall 3.8s linear infinite; }
+.holiday-fleck-confetti { width: 6px; height: 10px; border-radius: 1px; }
+.holiday-fleck-snow { width: 5px; height: 5px; border-radius: 50%; background: #fff; }
+@keyframes holiday-fall { to { transform: translateY(110px) rotate(360deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .holiday-fleck { display: none; } }
+html[data-holiday="newyear"] { --holiday-strip: linear-gradient(90deg,#e5534b,#fbbf24,#e5534b); --holiday-a: #e5534b; --holiday-b: #fbbf24; --holiday-ink: #8a5a06; }
+html.dark[data-holiday="newyear"] { --holiday-ink: #fbbf24; }
+html[data-holiday="holyweek"] { --holiday-strip: linear-gradient(90deg,#8575d0,#b8aaf0,#8575d0); --holiday-a: #8575d0; --holiday-b: #b8aaf0; --holiday-ink: #5a4aa6; }
+html.dark[data-holiday="holyweek"] { --holiday-ink: #b8aaf0; }
+html[data-holiday="christmas"] { --holiday-strip: repeating-linear-gradient(135deg,#e5534b 0 10px,#1f8a4c 10px 20px); --holiday-a: #e5534b; --holiday-b: #1f8a4c; --holiday-ink: #c4372c; }
+html.dark[data-holiday="christmas"] { --holiday-ink: #ff6b61; }
+html[data-holiday="saints"] { --holiday-strip: linear-gradient(90deg,#3b6fd4,#f3d98a,#3b6fd4); --holiday-a: #3b6fd4; --holiday-b: #f3d98a; --holiday-ink: #8a6a12; }
+html.dark[data-holiday="saints"] { --holiday-ink: #f3d98a; }
+html[data-holiday="national"] { --holiday-strip: linear-gradient(90deg,#0038a8 0 33.3%,#fcd116 33.3% 66.6%,#ce1126 66.6%); --holiday-a: #0038a8; --holiday-b: #ce1126; --holiday-ink: #0038a8; }
+html.dark[data-holiday="national"] { --holiday-ink: #fcd116; }
+html[data-holiday="labour"] { --holiday-strip: linear-gradient(90deg,#3f7391,#d8c3a5,#3f7391); --holiday-a: #3f7391; --holiday-b: #d8c3a5; --holiday-ink: #6b5a3d; }
+html.dark[data-holiday="labour"] { --holiday-ink: #d8c3a5; }
+html[data-holiday="other"] { --holiday-strip: linear-gradient(90deg,#e5534b,#fbbf24); --holiday-a: #e5534b; --holiday-b: #fbbf24; --holiday-ink: #b45309; }
+html.dark[data-holiday="other"] { --holiday-ink: #fbbf24; }
