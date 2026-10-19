@@ -7,6 +7,7 @@ import { formatDisplayName } from '../names.js'
 import { getDownloadUrl, putObject } from '../s3.js'
 import { logAudit } from '../audit.js'
 import { routineWhere } from '../auditPolicy.js'
+import { targetLabels } from '../auditTargets.js'
 
 // GET /audit-logs (admin): the log by date range, newest first, a page at a time.
 //   from, to      YYYY-MM-DD in Philippine time (both ends included); the default is today
@@ -94,12 +95,17 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       select: { id: true, firstName: true, middleName: true, lastName: true },
     })
     const byId = new Map(users.map((u) => [u.id, u]))
+    // Entries with no written detail say who or what they were about, looked up from the record they point at.
+    const about = await targetLabels(logs)
     return logs.map((l) => {
       const actor = byId.get(l.userId)
       return {
         id: l.id,
         user: actor ? formatDisplayName(actor.firstName, actor.middleName, actor.lastName) : 'Unknown',
-        ...split(l.action, l.detail),
+        ...(() => {
+          const s = split(l.action, l.detail)
+          return { action: s.action, detail: s.detail ?? about.get(l.id) ?? null }
+        })(),
         resource: l.resource,
         result: l.result,
         createdAt: l.createdAt,
