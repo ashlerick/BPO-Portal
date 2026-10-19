@@ -42,6 +42,11 @@ const upsertSchema = z.object({
   // Asks everyone to do something: a to-do for each active employee, due on this date (YYYY-MM-DD).
   needsAction: z.boolean().optional(),
   actionDueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the due date as a date').nullable().optional(),
+  // Who it is for: these teams and these people. Left out (or both empty) = everyone.
+  actionAudience: z
+    .object({ teamIds: z.array(z.string()).max(100).optional(), employeeIds: z.array(z.string()).max(500).optional() })
+    .nullable()
+    .optional(),
 })
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -67,12 +72,29 @@ async function notifyAllOfAnnouncement(title: string, category: string, authorId
 // "Needs action": an announcement that asks people to do something (submit a form, finish a training, sign a policy) gives
 // each active employee a to-do for it, due on its date. Completing the to-do counts as their "Got it" (see todos.ts). Run
 // when the announcement is published, and only once: a draft gets its to-dos when it is published.
+type Audience = { teamIds: string[]; employeeIds: string[] }
+/** The stored audience, or null for everyone. */
+function readAudience(json: unknown): Audience | null {
+  if (!json || typeof json !== 'object') return null
+  const j = json as { teamIds?: unknown; employeeIds?: unknown }
+  const teamIds = Array.isArray(j.teamIds) ? j.teamIds.filter((x): x is string => typeof x === 'string') : []
+  const employeeIds = Array.isArray(j.employeeIds) ? j.employeeIds.filter((x): x is string => typeof x === 'string') : []
+  return teamIds.length + employeeIds.length > 0 ? { teamIds, employeeIds } : null
+}
+
 async function createActionTodos(a: Announcement): Promise<void> {
   if (!a.needsAction || !a.published) return
   if ((await prisma.todo.count({ where: { announcementId: a.id } })) > 0) return
   const author = await prisma.employee.findUnique({ where: { userId: a.authorId }, select: { id: true } })
+  const audience = readAudience(a.actionAudience)
   const people = await prisma.employee.findMany({
-    where: { status: 'active', user: { active: true }, ...(author && { id: { not: author.id } }) },
+    where: {
+      status: 'active',
+      user: { active: true },
+      ...(author && { id: { not: author.id } }),
+      // chosen teams and people, or everyone when none were chosen
+      ...(audience && { OR: [{ teamId: { in: audience.teamIds } }, { id: { in: audience.employeeIds } }] }),
+    },
     select: { id: true },
   })
   if (people.length === 0) return
@@ -146,6 +168,7 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
       ...(manager && a.needsAction && {
         actionTotal: actionCounts.filter((c) => c.announcementId === a.id).reduce((n, c) => n + c._count._all, 0),
         actionDone: actionCounts.find((c) => c.announcementId === a.id && c.status === 'done')?._count._all ?? 0,
+        actionTargeted: !!readAudience(a.actionAudience),
       }),
       ...(manager && needsAck && { ackCount: ackCounts.find((c) => c.announcementId === a.id)?._count._all ?? 0, ackTotal: total }),
     }
@@ -266,7 +289,8 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays, needsAction, actionDueOn } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays, needsAction, actionDueOn, actionAudience } = parsed.data
+  const audience = needsAction ? readAudience(actionAudience) : null
   if (needsAction && !actionDueOn) {
     res.status(400).json({ message: 'Pick the date the action is due.' })
     return
@@ -279,6 +303,7 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
       highlightUntil: highlighted && highlightDays ? new Date(Date.now() + highlightDays * DAY_MS) : null,
       needsAction: !!needsAction,
       actionDueAt: needsAction && actionDueOn ? new Date(`${actionDueOn}T00:00:00.000Z`) : null,
+      ...(audience && { actionAudience: audience }),
       ...(category !== undefined && { category }),
       content,
       authorId: req.auth.sub,
@@ -305,14 +330,14 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays, actionDueOn } = parsed.data
   // Turning a highlight on starts its clock (3 days unless HR chose); turning it off clears it.
   const highlightUntil =
     highlighted === false ? null : highlighted === true || highlightDays !== undefined
       ? (highlightDays === null ? null : new Date(Date.now() + (highlightDays ?? 3) * DAY_MS))
       : undefined
   // An emergency that has no end gets one (24 hours after it started).
-  const before = await prisma.announcement.findUnique({ where: { id }, select: { category: true, expireAt: true, publishAt: true, createdAt: true, published: true } })
+  const before = await prisma.announcement.findUnique({ where: { id }, select: { category: true, expireAt: true, publishAt: true, createdAt: true, published: true, needsAction: true } })
   const becomesEmergency = (category ?? before?.category) === EMERGENCY_CATEGORY
   const noEnd = expireAt === undefined ? !before?.expireAt : !expireAt
   const emergencyEnd = becomesEmergency && noEnd ? new Date((before?.publishAt ?? before?.createdAt ?? new Date()).getTime() + EMERGENCY_DEFAULT_MS) : undefined
@@ -332,8 +357,16 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
         ...(publishAt === undefined && published === true && before && !before.published && { publishAt: new Date() }),
         ...(expireAt !== undefined && { expireAt: expireAt ? new Date(expireAt) : null }),
         ...(emergencyEnd && { expireAt: emergencyEnd }),
+        // A new due date for an announcement that needs action (the to-dos follow it, below).
+        ...(before?.needsAction && actionDueOn && { actionDueAt: new Date(`${actionDueOn}T00:00:00.000Z`) }),
       },
     })
+    if (before?.needsAction && actionDueOn) {
+      await prisma.todo.updateMany({
+        where: { announcementId: id, status: 'open', deletedAt: null },
+        data: { dueDate: new Date(`${actionDueOn}T00:00:00.000Z`) },
+      })
+    }
   } catch (err) {
     if (isNotFoundError(err)) {
       res.status(404).json({ message: 'Announcement not found' })
@@ -342,7 +375,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     throw err
   }
 
-  logAudit(req.auth.sub, 'update', 'announcement', id, 'success', announcement.title)
+  logAudit(req.auth.sub, 'update', 'announcement', id, 'success', actionDueOn && before?.needsAction ? `${announcement.title}: action due date -> ${actionDueOn}` : announcement.title)
   // A draft that has just been published tells everyone, the same as posting it straight away.
   if (published === true && before && !before.published) {
     await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)

@@ -39,6 +39,8 @@ export interface Announcement {
   // HR/Admin: how many of the to-dos are done.
   actionDone?: number
   actionTotal?: number
+  // HR/Admin: the action went to chosen teams or people, not everyone.
+  actionTargeted?: boolean
   acknowledged?: boolean
   // HR/Admin only, for announcements that need a "Got it".
   ackCount?: number

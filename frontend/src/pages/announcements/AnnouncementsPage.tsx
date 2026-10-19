@@ -26,11 +26,16 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   // Asks everyone to do something by a date (a to-do for each person).
   const [needsAction, setNeedsAction] = useState(false)
   const [actionDueOn, setActionDueOn] = useState('')
+  const [audience, setAudience] = useState<AudiencePick>({ mode: 'all', teamIds: [], employeeIds: [] })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (needsAction && audience.mode === 'some' && audience.teamIds.length + audience.employeeIds.length === 0) {
+      setError('Choose at least one team or person for the action, or pick Everyone.')
+      return
+    }
     guardedAction(['hr', 'admin'], async () => {
       setError(null)
       setSubmitting(true)
@@ -42,7 +47,11 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           published,
           highlighted,
           ...(highlighted && { highlightDays: highlightDays || null }),
-          ...(needsAction && { needsAction: true, actionDueOn }),
+          ...(needsAction && {
+            needsAction: true,
+            actionDueOn,
+            ...(audience.mode === 'some' && { actionAudience: { teamIds: audience.teamIds, employeeIds: audience.employeeIds } }),
+          }),
           ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
         })
         onCreated(created)
@@ -52,6 +61,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         setHighlighted(false)
         setNeedsAction(false)
         setActionDueOn('')
+        setAudience({ mode: 'all', teamIds: [], employeeIds: [] })
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not create announcement')
       } finally {
@@ -159,9 +169,13 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         )}
       </div>
       {needsAction && (
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Everyone gets a to-do for this, due on that date. Finishing the to-do also counts as their "Got it". You can see who is done on the announcement.
-        </p>
+        <>
+          <ActionAudience value={audience} onChange={setAudience} />
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Each person gets a to-do for this, due on that date. Finishing the to-do also counts as their "Got it". You can see who is done on
+            the announcement, and change the due date there.
+          </p>
+        </>
       )}
       {category === 'Emergency announcements' && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -173,6 +187,81 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         {submitting ? (published ? 'Posting…' : 'Saving…') : published ? 'Post announcement' : 'Save draft'}
       </Button>
     </CardForm>
+  )
+}
+
+interface AudiencePick {
+  mode: 'all' | 'some'
+  teamIds: string[]
+  employeeIds: string[]
+}
+
+// Who a "needs action" announcement is for: everyone, or chosen teams and people. The number of people it reaches is shown,
+// so a mistake is visible before posting.
+function ActionAudience({ value, onChange }: { value: AudiencePick; onChange: (v: AudiencePick) => void }) {
+  const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
+  const [people, setPeople] = useState<{ id: string; name: string; teamId: string | null; team: string | null }[]>([])
+  const [filter, setFilter] = useState('')
+
+  useEffect(() => {
+    if (value.mode !== 'some' || teams.length + people.length > 0) return
+    api.get<{ teams: { id: string; name: string }[] }>('/directory').then((d) => setTeams(d.teams)).catch(() => undefined)
+    api.get<{ id: string; name: string; teamId: string | null; team: string | null }[]>('/employees').then(setPeople).catch(() => undefined)
+  }, [value.mode, teams.length, people.length])
+
+  const reach = new Set(people.filter((p) => value.teamIds.includes(p.teamId ?? '') || value.employeeIds.includes(p.id)).map((p) => p.id)).size
+  const shown = people.filter((p) => p.name.toLowerCase().includes(filter.trim().toLowerCase()))
+  const flip = (list: string[], id: string) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id])
+
+  return (
+    <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="text-gray-500 dark:text-gray-400">Who is it for?</span>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="ann-audience" checked={value.mode === 'all'} onChange={() => onChange({ ...value, mode: 'all' })} />
+          Everyone
+        </label>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" name="ann-audience" checked={value.mode === 'some'} onChange={() => onChange({ ...value, mode: 'some' })} />
+          Chosen teams or people
+        </label>
+      </div>
+      {value.mode === 'some' && (
+        <div className="space-y-2 rounded-md border border-black/10 p-3 dark:border-white/10">
+          {teams.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">Teams</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {teams.map((t) => (
+                  <label key={t.id} className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={value.teamIds.includes(t.id)} onChange={() => onChange({ ...value, teamIds: flip(value.teamIds, t.id) })} />
+                    {t.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">People</p>
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search people…" className="field mb-1 max-w-xs" />
+            <ul className="max-h-40 space-y-1 overflow-y-auto">
+              {shown.map((p) => (
+                <li key={p.id}>
+                  <label className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={value.employeeIds.includes(p.id)} onChange={() => onChange({ ...value, employeeIds: flip(value.employeeIds, p.id) })} />
+                    {p.name}
+                    {p.team && <span className="text-gray-500 dark:text-gray-400"> · {p.team}</span>}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className={`text-xs ${reach === 0 ? 'text-amber-700 dark:text-amber-500' : 'text-brand-700 dark:text-brand-400'}`}>
+            {reach === 0 ? 'Choose at least one team or person.' : `This goes to ${reach} ${reach === 1 ? 'person' : 'people'}.`}
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -37,6 +37,8 @@ export function AnnouncementEngagement({
   const [showAcks, setShowAcks] = useState(false)
   const [actions, setActions] = useState<ActionList | null>(null)
   const [showActions, setShowActions] = useState(false)
+  const [changingDue, setChangingDue] = useState(false)
+  const [newDue, setNewDue] = useState('')
   const [busy, setBusy] = useState(false)
 
   const reactions = announcement.reactions ?? {}
@@ -91,6 +93,20 @@ export function AnnouncementEngagement({
     } catch (err) {
       setShowActions(false)
       toast.error(err instanceof ApiError ? err.message : 'Could not load the list')
+    }
+  }
+
+  async function saveDue() {
+    setBusy(true)
+    try {
+      const fresh = await api.put<Announcement>(`/announcements/${announcement.id}`, { actionDueOn: newDue })
+      onChange({ ...announcement, ...fresh })
+      setChangingDue(false)
+      toast.success('Due date changed. Open to-dos follow it.')
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not change the due date')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -184,6 +200,30 @@ export function AnnouncementEngagement({
             {announcement.actionDueAt ? `, due ${formatDateOnly(announcement.actionDueAt)}` : ''}
             {showActions ? ' (hide)' : ' (who?)'}
           </button>
+          {announcement.actionTargeted && <span> · chosen people only</span>}
+          {' · '}
+          {changingDue ? (
+            <span className="inline-flex flex-wrap items-center gap-1.5">
+              <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} className="field !w-auto px-2 py-0.5 text-xs" />
+              <Button size="sm" variant="primary" disabled={!newDue || busy} onClick={saveDue}>
+                Save
+              </Button>
+              <Button size="sm" onClick={() => setChangingDue(false)} disabled={busy}>
+                Cancel
+              </Button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setNewDue(announcement.actionDueAt ? announcement.actionDueAt.slice(0, 10) : '')
+                setChangingDue(true)
+              }}
+              className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200"
+            >
+              change due date
+            </button>
+          )}
           {showActions && actions && (
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <div>

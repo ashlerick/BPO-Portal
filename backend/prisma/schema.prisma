@@ -207,6 +207,8 @@ model Announcement {
   // Asks people to do something by actionDueAt: each active employee gets a to-do tied to this announcement.
   needsAction Boolean @default(false)
   actionDueAt DateTime?
+  // { teamIds, employeeIds } the action is for; null = everyone.
+  actionAudience Json?
   publishAt   DateTime?
   expireAt    DateTime?
   createdAt   DateTime               @default(now())
