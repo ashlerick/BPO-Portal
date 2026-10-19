@@ -13,6 +13,16 @@ export const BREAK_DEDUCTION_HOURS = 50 / 60
 const LABEL = { morning: 'Break 1', lunch: 'Lunch', afternoon: 'Break 2' } as const
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
+/** One slot as text for its own column: how long it ran and how far over, "not taken", or null when nothing is recorded. */
+export function breakSlotText(breaks: BreakEntry[] | undefined, slot: BreakEntry['slot']): { text: string; over: boolean } | null {
+  const b = breaks?.find((x) => x.slot === slot)
+  if (!b) return null
+  if (b.status === 'not_taken') return { text: 'not taken', over: false }
+  if (!b.endedAt || !b.startedAt) return { text: 'no end recorded', over: false }
+  const secs = Math.max(0, Math.round((new Date(b.endedAt).getTime() - new Date(b.startedAt).getTime()) / 1000))
+  return { text: mmss(secs) + (b.overSeconds > 0 ? ` (${mmss(b.overSeconds)} over)` : ''), over: b.overSeconds > 0 }
+}
+
 export interface BreakLine {
   label: string
   text: string

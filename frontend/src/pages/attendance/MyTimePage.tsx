@@ -10,7 +10,7 @@ import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { addDaysIso, formatDateOnly, formatManilaTime, todayInManilaIso } from '../../utils/dates'
 import type { AttendanceRecord } from './types'
 import { MySchedule } from './Shifts'
-import { BreaksCell } from '../../components/ui/BreaksCell'
+import { BreakSlotCell } from '../../components/ui/BreaksCell'
 import { BREAK_DEDUCTION_HOURS } from '../../utils/breaks'
 
 // The employee's own page: today, then one table of their days (a week at a time, or a month), then their shift. It
@@ -171,7 +171,9 @@ export function MyTimePage() {
                   <th className="py-2 pr-4 font-medium">Date</th>
                   <th className="py-2 pr-4 font-medium">Time in</th>
                   <th className="py-2 pr-4 font-medium">Time out</th>
-                  <th className="py-2 pr-4 font-medium">Breaks</th>
+                  <th className="py-2 pr-4 font-medium">Break 1</th>
+                  <th className="py-2 pr-4 font-medium">Lunch</th>
+                  <th className="py-2 pr-4 font-medium">Break 2</th>
                   <th className="py-2 pr-4 font-medium">Hours</th>
                   <th className="py-2 pr-4 font-medium" title="Hours less the fixed 50 minutes for breaks and lunch">Worked</th>
                   <th className="py-2 font-medium">Notes</th>
@@ -197,7 +199,7 @@ export function MyTimePage() {
                         {isToday && <span className="ml-2 text-xs text-brand-700 dark:text-brand-400">Today</span>}
                       </td>
                       {r?.status === 'absent' ? (
-                        <td data-label="Status" colSpan={6} className="py-2 text-amber-700 dark:text-amber-500">
+                        <td data-label="Status" colSpan={8} className="py-2 text-amber-700 dark:text-amber-500">
                           Absent
                         </td>
                       ) : (
@@ -208,8 +210,14 @@ export function MyTimePage() {
                           <td data-label="Time out" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
                             {r ? formatManilaTime(r.checkOutAt) : '—'}
                           </td>
-                          <td data-label="Breaks" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
-                            <BreaksCell breaks={r?.breaks} />
+                          <td data-label="Break 1" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
+                            <BreakSlotCell breaks={r?.breaks} slot="morning" />
+                          </td>
+                          <td data-label="Lunch" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
+                            <BreakSlotCell breaks={r?.breaks} slot="lunch" />
+                          </td>
+                          <td data-label="Break 2" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
+                            <BreakSlotCell breaks={r?.breaks} slot="afternoon" />
                           </td>
                           <td data-label="Hours" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
                             {hours === null ? '—' : hours.toFixed(2)}

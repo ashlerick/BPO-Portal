@@ -1,16 +1,9 @@
-import { breakLines, type BreakEntry } from '../../utils/breaks'
+import { breakSlotText, type BreakEntry } from '../../utils/breaks'
 
-// A day's breaks and lunch, one small line each; one that ran over its limit is amber. A dash when none were recorded.
-export function BreaksCell({ breaks }: { breaks?: BreakEntry[] }) {
-  const lines = breakLines(breaks)
-  if (lines.length === 0) return <span>—</span>
-  return (
-    <ul className="space-y-0.5 text-xs">
-      {lines.map((l) => (
-        <li key={l.label} className={l.over ? 'text-amber-700 dark:text-amber-500' : ''}>
-          <span className="text-gray-500 dark:text-gray-400">{l.label}</span> {l.text}
-        </li>
-      ))}
-    </ul>
-  )
+// One break slot (Break 1, Lunch or Break 2) in its own table column: how long it ran, amber when it went over its limit,
+// "not taken", or a dash when nothing was recorded.
+export function BreakSlotCell({ breaks, slot }: { breaks?: BreakEntry[]; slot: BreakEntry['slot'] }) {
+  const b = breakSlotText(breaks, slot)
+  if (!b) return <span>—</span>
+  return <span className={b.over ? 'text-amber-700 dark:text-amber-500' : b.text === 'not taken' ? 'text-gray-500 dark:text-gray-400' : ''}>{b.text}</span>
 }
