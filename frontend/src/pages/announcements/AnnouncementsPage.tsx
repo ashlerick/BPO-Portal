@@ -156,6 +156,8 @@ function AnnouncementItem({
   const [content, setContent] = useState(announcement.content)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // The row of lengths (1 day, 3 days, ...) that opens under the Highlight button.
+  const [choosing, setChoosing] = useState(false)
   const { guardedAction } = useAuth()
 
   function save() {
@@ -183,6 +185,7 @@ function AnnouncementItem({
       try {
         const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, { highlighted: true, highlightDays: days })
         onUpdated({ ...announcement, ...updated })
+        setChoosing(false)
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not change the highlight')
       } finally {
@@ -284,21 +287,9 @@ function AnnouncementItem({
             </Button>
             {announcement.category !== EMERGENCY && (
               <>
-                <select
-                  aria-label={announcement.highlighted ? 'Change how long it is highlighted' : 'Highlight for how long'}
-                  value=""
-                  disabled={saving}
-                  onChange={(e) => setHighlight(Number(e.target.value) || null)}
-                  className="field !w-auto !py-1 text-sm font-semibold"
-                >
-                  <option value="" disabled>
-                    {announcement.highlighted ? 'Change length…' : 'Highlight for…'}
-                  </option>
-                  <option value={1}>1 day</option>
-                  <option value={3}>3 days</option>
-                  <option value={7}>1 week</option>
-                  <option value={0}>Until I remove it</option>
-                </select>
+                <Button size="sm" onClick={() => setChoosing((v) => !v)} disabled={saving} aria-expanded={choosing}>
+                  {announcement.highlighted ? 'Change highlight' : 'Highlight'}
+                </Button>
                 {announcement.highlighted && (
                   <Button size="sm" onClick={removeHighlight} disabled={saving}>
                     Remove highlight
@@ -308,6 +299,24 @@ function AnnouncementItem({
             )}
             <Button size="sm" variant="danger" onClick={remove} disabled={saving}>
               Delete
+            </Button>
+          </div>
+        )}
+        {canManage && choosing && announcement.category !== EMERGENCY && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <span>Highlight for</span>
+            {[
+              { label: '1 day', days: 1 },
+              { label: '3 days', days: 3 },
+              { label: '1 week', days: 7 },
+              { label: 'Until I remove it', days: null },
+            ].map((o) => (
+              <Button key={o.label} size="sm" onClick={() => setHighlight(o.days)} disabled={saving}>
+                {o.label}
+              </Button>
+            ))}
+            <Button size="sm" onClick={() => setChoosing(false)} disabled={saving}>
+              Cancel
             </Button>
           </div>
         )}
