@@ -9,6 +9,8 @@ import { ensureHolidaysImported, holidayOn, syncWorkingHoliday } from '../holida
 import { todayInManila } from '../dates.js'
 
 // GET /calendar — company calendar events (everyone).
+// Birthdays are deliberately NOT on the calendar: only HR/Admin can look a birthday up (employee records); everyone else sees
+// at most the names of people whose birthday is today, in the BPO Time pop-up (see birthdays.ts). Do not add them here.
 // POST /calendar, DELETE /calendar/:id — HR/Admin only.
 // PUT /calendar/:id {disabled} — HR/Admin: mark a prefilled holiday as "not a holiday" (or back). See lib/holidays.ts.
 
