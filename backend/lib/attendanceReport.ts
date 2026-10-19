@@ -37,7 +37,44 @@ function sheetNameFor(name: string, used: Set<string>): string {
   return candidate
 }
 
+// Monday (UTC midnight) of the week a date-only value falls in. Weeks run Monday to Sunday, as everywhere in the portal.
+function mondayOf(d: Date): Date {
+  const back = (d.getUTCDay() + 6) % 7
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back))
+}
+
+const shortDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+
 const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } } as const
+
+// A full-width band across the six columns (the week heading).
+function bandRow(sheet: ExcelJS.Worksheet, text: string, argb: string, bold: boolean) {
+  const row = sheet.addRow([text])
+  sheet.mergeCells(row.number, 1, row.number, 6)
+  row.font = { bold }
+  row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
+}
+
+// A footer: the label across the first three columns (so it is never cut off), then the hours and a note of the rest.
+function footerRow(
+  sheet: ExcelJS.Worksheet,
+  label: string,
+  t: { present: number; absent: number; hours: number; overtime: number; holidays: number },
+  argb: string,
+) {
+  const days = `${t.present} day${t.present === 1 ? '' : 's'} present${t.absent ? `, ${t.absent} absent` : ''}`
+  const extra = [t.overtime ? `Overtime ${t.overtime} h` : '', t.holidays ? `${t.holidays} holiday${t.holidays === 1 ? '' : 's'} worked` : '']
+    .filter(Boolean)
+    .join(' \u00b7 ')
+  const row = sheet.addRow([`${label}: ${days}`, '', '', t.hours, '', extra])
+  sheet.mergeCells(row.number, 1, row.number, 3)
+  row.font = { bold: true }
+  for (let c = 1; c <= 6; c++) {
+    const cell = row.getCell(c)
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
+    cell.border = { top: { style: 'thin' } }
+  }
+}
 
 // One worksheet per person (so each person's days read as one simple table), after a Summary sheet with one row per
 // person. Rows arrive already grouped or sorted; they are grouped by employee here, in the order people first appear.
@@ -83,43 +120,57 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
     ]
     sheet.addRow([name]).font = { bold: true, size: 14 }
     sheet.addRow([rangeText])
-    sheet.addRow([])
-    const head = sheet.addRow(['Date', 'Time in', 'Time out', 'Hours', 'Status', 'Notes'])
-    head.font = { bold: true }
-    head.eachCell((c) => (c.fill = HEADER_FILL))
-    sheet.views = [{ state: 'frozen', ySplit: head.number }]
 
-    let present = 0
-    let absent = 0
-    let hours = 0
-    let overtime = 0
-    let holidays = 0
+    // Split into Monday to Sunday weeks. Each week has its own heading, column titles and a footer with that week's totals.
+    const weeks = new Map<string, AttendanceReportRow[]>()
     for (const r of list) {
-      const h = r.status === 'absent' ? null : hoursBetween(r.checkInAt, r.checkOutAt)
-      const notes: string[] = []
-      if (r.workingHoliday) notes.push('Worked on a holiday')
-      if (r.overtimeHours) notes.push(`Overtime ${r.overtimeHours} h`)
-      if (r.status === 'present' && r.checkInAt && !r.checkOutAt) notes.push('No time out recorded')
-      sheet.addRow([
-        dateFmt(r.date),
-        r.status === 'absent' ? '' : timeFmt(r.checkInAt),
-        r.status === 'absent' ? '' : timeFmt(r.checkOutAt),
-        h,
-        r.status === 'absent' ? 'Absent' : 'Present',
-        notes.join(' · '),
-      ])
-      if (r.status === 'absent') absent++
-      else present++
-      if (h) hours += h
-      if (r.overtimeHours) overtime += r.overtimeHours
-      if (r.workingHoliday) holidays++
+      const key = mondayOf(r.date).toISOString().slice(0, 10)
+      weeks.set(key, [...(weeks.get(key) ?? []), r])
     }
-    hours = Math.round(hours * 100) / 100
+
+    const totals = { present: 0, absent: 0, hours: 0, overtime: 0, holidays: 0 }
+    for (const [key, weekRows] of [...weeks].sort(([a], [b]) => a.localeCompare(b))) {
+      const monday = new Date(`${key}T00:00:00.000Z`)
+      const sunday = new Date(monday.getTime() + 6 * 24 * 3_600_000)
+      sheet.addRow([])
+      bandRow(sheet, `Week of ${shortDate(monday)} to ${rangeDateFmt(sunday)}`, 'FFD1D5DB', true)
+      const head = sheet.addRow(['Date', 'Time in', 'Time out', 'Hours', 'Status', 'Notes'])
+      head.font = { bold: true, size: 10 }
+      head.eachCell((c) => (c.fill = HEADER_FILL))
+
+      const w = { present: 0, absent: 0, hours: 0, overtime: 0, holidays: 0 }
+      for (const r of weekRows) {
+        const h = r.status === 'absent' ? null : hoursBetween(r.checkInAt, r.checkOutAt)
+        const notes: string[] = []
+        if (r.workingHoliday) notes.push('Worked on a holiday')
+        if (r.overtimeHours) notes.push(`Overtime ${r.overtimeHours} h`)
+        if (r.status === 'present' && r.checkInAt && !r.checkOutAt) notes.push('No time out recorded')
+        sheet.addRow([
+          dateFmt(r.date),
+          r.status === 'absent' ? '' : timeFmt(r.checkInAt),
+          r.status === 'absent' ? '' : timeFmt(r.checkOutAt),
+          h,
+          r.status === 'absent' ? 'Absent' : 'Present',
+          notes.join(' \u00b7 '),
+        ])
+        if (r.status === 'absent') w.absent++
+        else w.present++
+        if (h) w.hours += h
+        if (r.overtimeHours) w.overtime += r.overtimeHours
+        if (r.workingHoliday) w.holidays++
+      }
+      w.hours = Math.round(w.hours * 100) / 100
+      footerRow(sheet, 'Week total', w, 'FFF3F4F6')
+      for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += w[k]
+    }
+
     sheet.addRow([])
-    const total = sheet.addRow([`Total (${present} day${present === 1 ? '' : 's'} present${absent ? `, ${absent} absent` : ''})`, '', '', hours, '', ''])
-    total.font = { bold: true }
+    totals.hours = Math.round(totals.hours * 100) / 100
+    totals.overtime = Math.round(totals.overtime * 100) / 100
+    footerRow(sheet, 'Total for the period', totals, 'FFD1D5DB')
     sheet.getColumn('hours').numFmt = '0.00'
 
+    const { present, absent, hours, overtime, holidays } = totals
     summary.addRow([name, present, absent, hours, Math.round(overtime * 100) / 100, holidays])
   }
   summary.getColumn('hours').numFmt = '0.00'
