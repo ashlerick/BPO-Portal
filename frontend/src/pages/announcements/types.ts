@@ -22,6 +22,8 @@ export interface Announcement {
   expireAt: string | null
   // Pinned by HR (highlighted), and "featured" = pinned or an emergency (those are always highlighted).
   highlighted?: boolean
+  // When the highlight ends by itself; null with highlighted = until HR removes it.
+  highlightUntil?: string | null
   featured?: boolean
   // Engagement (added by the server; optional so older responses still fit).
   reactions?: Record<string, number>

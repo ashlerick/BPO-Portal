@@ -37,7 +37,15 @@ const upsertSchema = z.object({
   publishAt: z.string().datetime().optional(),
   expireAt: z.string().datetime().nullable().optional(),
   highlighted: z.boolean().optional(),
+  // How long a new highlight lasts, in days. Null (or left out) with highlighted = until HR removes it.
+  highlightDays: z.number().int().min(1).max(30).nullable().optional(),
 })
+
+const DAY_MS = 24 * 60 * 60 * 1000
+// An emergency ends 24 hours after it is posted unless HR sets an end date, so one cannot linger for weeks.
+const EMERGENCY_DEFAULT_MS = DAY_MS
+const highlightActive = (a: { highlighted: boolean; highlightUntil: Date | null }, now = new Date()) =>
+  a.highlighted && (!a.highlightUntil || a.highlightUntil > now)
 
 // Tells every other account about a newly published announcement.
 async function notifyAllOfAnnouncement(title: string, category: string, authorId: string) {
@@ -84,7 +92,7 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
     return {
       ...a,
       // Pinned by HR, or an emergency (those are always highlighted). Shown first on the portal and on the app.
-      featured: a.highlighted || a.category === EMERGENCY_CATEGORY,
+      featured: highlightActive(a) || a.category === EMERGENCY_CATEGORY,
       reactions,
       reactors,
       myReaction,
@@ -191,17 +199,19 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt, highlighted } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays } = parsed.data
+  const startsAt = publishAt ? new Date(publishAt) : new Date()
   const announcement = await prisma.announcement.create({
     data: {
       title,
       highlighted: highlighted ?? false,
+      highlightUntil: highlighted && highlightDays ? new Date(Date.now() + highlightDays * DAY_MS) : null,
       ...(category !== undefined && { category }),
       content,
       authorId: req.auth.sub,
       published: published ?? false,
-      publishAt: publishAt ? new Date(publishAt) : new Date(),
-      expireAt: expireAt ? new Date(expireAt) : null,
+      publishAt: startsAt,
+      expireAt: expireAt ? new Date(expireAt) : category === EMERGENCY_CATEGORY ? new Date(startsAt.getTime() + EMERGENCY_DEFAULT_MS) : null,
     },
   })
 
@@ -221,7 +231,17 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt, highlighted } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays } = parsed.data
+  // Turning a highlight on starts its clock (3 days unless HR chose); turning it off clears it.
+  const highlightUntil =
+    highlighted === false ? null : highlighted === true || highlightDays !== undefined
+      ? (highlightDays === null ? null : new Date(Date.now() + (highlightDays ?? 3) * DAY_MS))
+      : undefined
+  // An emergency that has no end gets one (24 hours after it started).
+  const before = await prisma.announcement.findUnique({ where: { id }, select: { category: true, expireAt: true, publishAt: true, createdAt: true } })
+  const becomesEmergency = (category ?? before?.category) === EMERGENCY_CATEGORY
+  const noEnd = expireAt === undefined ? !before?.expireAt : !expireAt
+  const emergencyEnd = becomesEmergency && noEnd ? new Date((before?.publishAt ?? before?.createdAt ?? new Date()).getTime() + EMERGENCY_DEFAULT_MS) : undefined
   let announcement
   try {
     announcement = await prisma.announcement.update({
@@ -229,11 +249,13 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
       data: {
         ...(title !== undefined && { title }),
         ...(highlighted !== undefined && { highlighted }),
+        ...(highlightUntil !== undefined && { highlightUntil }),
         ...(category !== undefined && { category }),
         ...(content !== undefined && { content }),
         ...(published !== undefined && { published }),
         ...(publishAt !== undefined && { publishAt: new Date(publishAt) }),
         ...(expireAt !== undefined && { expireAt: expireAt ? new Date(expireAt) : null }),
+        ...(emergencyEnd && { expireAt: emergencyEnd }),
       },
     })
   } catch (err) {

@@ -21,6 +21,8 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   const [expireOn, setExpireOn] = useState('')
   const [published, setPublished] = useState(true)
   const [highlighted, setHighlighted] = useState(false)
+  // How long a highlight lasts: 3 days unless HR picks another, so nobody has to remember to remove it. 0 = until removed.
+  const [highlightDays, setHighlightDays] = useState(3)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,6 +38,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           category,
           published,
           highlighted,
+          ...(highlighted && { highlightDays: highlightDays || null }),
           ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
         })
         onCreated(created)
@@ -107,10 +110,28 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
         Publish immediately
       </label>
-      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-        <input type="checkbox" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
-        Highlight: shown first here and on the BPO Time app
-      </label>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
+          Highlight: shown first here and on the BPO Time app
+        </label>
+        {highlighted && (
+          <label className="flex items-center gap-2">
+            for
+            <select value={highlightDays} onChange={(e) => setHighlightDays(Number(e.target.value))} className="field !w-auto py-1">
+              <option value={1}>1 day</option>
+              <option value={3}>3 days</option>
+              <option value={7}>1 week</option>
+              <option value={0}>until I remove it</option>
+            </select>
+          </label>
+        )}
+      </div>
+      {category === 'Emergency announcements' && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          An emergency stays on everyone's BPO Time panel until they react or press Got it. It ends 24 hours after it is posted unless you set an end date above.
+        </p>
+      )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <Button type="submit" variant="primary" disabled={submitting}>
         {submitting ? 'Posting…' : 'Post announcement'}
@@ -159,7 +180,11 @@ function AnnouncementItem({
       setSaving(true)
       setError(null)
       try {
-        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, { highlighted: !announcement.highlighted })
+        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, {
+          highlighted: !announcement.highlighted,
+          // turning it on starts a 3-day highlight; HR can pick another length when editing the announcement
+          ...(!announcement.highlighted && { highlightDays: 3 }),
+        })
         onUpdated({ ...announcement, ...updated })
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not change the highlight')
@@ -220,6 +245,9 @@ function AnnouncementItem({
             {announcement.featured && (
               <span className="mr-2 inline-flex items-center gap-1 rounded-full bg-gold-500/15 px-2 py-0.5 align-middle text-xs font-semibold text-gold-600 dark:text-gold-400">
                 ★ {announcement.category === EMERGENCY ? 'Always highlighted' : 'Highlighted'}
+                {canManage && announcement.highlightUntil && announcement.category !== EMERGENCY
+                  ? ` until ${dateFormatter.format(new Date(announcement.highlightUntil))}`
+                  : ''}
               </span>
             )}
             {announcement.title}
@@ -244,7 +272,7 @@ function AnnouncementItem({
             </Button>
             {announcement.category !== EMERGENCY && (
               <Button size="sm" onClick={toggleHighlight} disabled={saving}>
-                {announcement.highlighted ? 'Remove highlight' : 'Highlight'}
+                {announcement.highlighted ? 'Remove highlight' : 'Highlight for 3 days'}
               </Button>
             )}
             <Button size="sm" variant="danger" onClick={remove} disabled={saving}>

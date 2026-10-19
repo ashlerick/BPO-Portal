@@ -233,13 +233,28 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
       (r) => r.announcementId,
     ),
   )
+  // Who sees what on the panel:
+  //   - A notice that asks for a "Got it" (Important, Policy, Emergency) shows by itself until this person has given it,
+  //     and a reaction is a Got it. Policy and Important ones only for 30 days after they were posted (older ones stay on
+  //     the portal); an emergency stays until it ends, which is 24 hours after it was posted unless HR set a date.
+  //   - Anything else shows only while HR's highlight is active (it can end by itself), and until this person reacts.
+  // Emergencies come first, then the ones waiting for a Got it, then the rest.
+  const recent = now.getTime() - 30 * 24 * 60 * 60 * 1000
+  const highlightActive = (a: (typeof rows)[number]) => a.highlighted && (!a.highlightUntil || a.highlightUntil > now)
+  const wantsAck = (a: (typeof rows)[number]) => ACK_CATEGORIES.includes(a.category)
+  const rank = (a: (typeof rows)[number]) => (a.category === EMERGENCY_CATEGORY ? 0 : wantsAck(a) ? 1 : 2)
   const shown = rows
-    .filter((a) => (a.highlighted || a.category === EMERGENCY_CATEGORY) && !mine.has(a.id))
+    .filter((a) =>
+      wantsAck(a)
+        ? !done.has(a.id) && (a.category === EMERGENCY_CATEGORY || (a.publishAt?.getTime() ?? 0) >= recent)
+        : highlightActive(a) && !mine.has(a.id),
+    )
+    .sort((x, y) => rank(x) - rank(y))
     .map((a) => ({
       row: a,
-      featured: true,
+      featured: highlightActive(a) || a.category === EMERGENCY_CATEGORY,
       // A notice that asks for a "Got it" which this person has not given yet.
-      needsAck: ACK_CATEGORIES.includes(a.category) && !done.has(a.id),
+      needsAck: wantsAck(a) && !done.has(a.id),
     }))
   const birthdays = await birthdaysToday(employee?.id)
   return res.status(200).json({
@@ -250,6 +265,7 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
       preview: a.content.length > 140 ? `${a.content.slice(0, 140).trimEnd()}…` : a.content,
       publishAt: a.publishAt,
       featured: isFeatured,
+      emergency: a.category === EMERGENCY_CATEGORY,
       needsAck,
     })),
     birthdays,
