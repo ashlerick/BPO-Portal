@@ -327,8 +327,11 @@ model AuditLog {
   resource   String
   resourceId String?
   result     String
+  // What it was about, in words: who it affected and what changed.
+  detail     String?
   createdAt  DateTime @default(now())
 
+  @@index([createdAt])
   @@map("audit_logs")
 }
 

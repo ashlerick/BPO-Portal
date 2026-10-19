@@ -70,7 +70,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     const event = await prisma.calendarEvent.create({
       data: { ...rest, startDate: toDate(startDate), endDate: endDate ? toDate(endDate) : null, createdBy: req.auth.sub },
     })
-    logAudit(req.auth.sub, 'create', 'calendar_event', event.id)
+    logAudit(req.auth.sub, 'create', 'calendar_event', event.id, 'success', `${event.kind}: ${event.title}, ${event.startDate.toISOString().slice(0, 10)}`)
     // A new holiday: anyone who already clocked in on those days worked a holiday.
     if (event.kind === 'holiday') await syncWorkingHoliday(event.startDate, event.endDate ?? event.startDate)
     res.status(201).json(event)
@@ -85,7 +85,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     }
     try {
       const event = await prisma.calendarEvent.update({ where: { id: sub }, data: { disabled: parsed.data.disabled } })
-      logAudit(req.auth.sub, parsed.data.disabled ? 'disable' : 'enable', 'calendar_event', sub)
+      logAudit(req.auth.sub, parsed.data.disabled ? 'disable' : 'enable', 'calendar_event', sub, 'success', `${event.title}, ${event.startDate.toISOString().slice(0, 10)}`)
       if (event.kind === 'holiday') await syncWorkingHoliday(event.startDate, event.endDate ?? event.startDate)
       res.status(200).json(event)
     } catch (err) {
@@ -109,7 +109,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       }
       throw err
     }
-    logAudit(req.auth.sub, 'delete', 'calendar_event', sub)
+    logAudit(req.auth.sub, 'delete', 'calendar_event', sub, 'success', `${removed.title}, ${removed.startDate.toISOString().slice(0, 10)}`)
     if (removed.kind === 'holiday') await syncWorkingHoliday(removed.startDate, removed.endDate ?? removed.startDate)
     res.status(204).end()
     return

@@ -297,7 +297,7 @@ async function handleExportAttendance(req: AuthedRequest, res: VercelResponse) {
   const fileName = `Attendance${oneName} - ${day(range.gte)} to ${day(range.lte)} ${year}.xlsx`
   const url = await getDownloadUrl(storageKey, undefined, fileName)
 
-  logAudit(req.auth.sub, 'export', 'attendance', storageKey)
+  logAudit(req.auth.sub, 'export', 'attendance', null, 'success', `${fileName} (${rows.length} records)`)
   res.status(200).json({ url })
 }
 
@@ -345,20 +345,33 @@ async function handleMarkAbsent(req: AuthedRequest, res: VercelResponse) {
   }
 
   const { employeeId, date: dateStr } = parsed.data
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } })
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    include: { user: { select: { firstName: true, middleName: true, lastName: true } } },
+  })
   if (!employee) {
     res.status(404).json({ message: 'Employee not found' })
     return
   }
 
   const date = new Date(`${dateStr}T00:00:00.000Z`)
+  // Marking absent clears the day's times, so what was there is written into the audit entry.
+  const was = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
+  const at = (d: Date | null) => (d ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : 'none')
   const record = await prisma.attendanceRecord.upsert({
     where: { employeeId_date: { employeeId, date } },
     create: { employeeId, date, status: 'absent', checkInAt: null, checkOutAt: null, markedBy: req.auth.sub },
     update: { status: 'absent', checkInAt: null, checkOutAt: null, markedBy: req.auth.sub },
   })
 
-  logAudit(req.auth.sub, 'mark_absent', 'attendance', record.id)
+  logAudit(
+    req.auth.sub,
+    'mark_absent',
+    'attendance',
+    record.id,
+    'success',
+    `${formatDisplayName(employee.user.firstName, employee.user.middleName, employee.user.lastName)}, ${dateStr}: was ${was ? `in ${at(was.checkInAt)}, out ${at(was.checkOutAt)}` : 'no record'}`,
+  )
   res.status(200).json({ id: record.id, employeeId: record.employeeId, date: record.date, status: record.status })
 }
 
@@ -403,11 +416,15 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
   }
 
   const { employeeId, date: dateStr, status, checkInAt, checkOutAt, checkInIp, checkOutIp, overtimeHours, workingHoliday, breaks } = parsed.data
-  const employee = await prisma.employee.findUnique({ where: { id: employeeId } })
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    include: { user: { select: { firstName: true, middleName: true, lastName: true } } },
+  })
   if (!employee) {
     res.status(404).json({ message: 'Employee not found' })
     return
   }
+  const employeeName = formatDisplayName(employee.user.firstName, employee.user.middleName, employee.user.lastName)
 
   const date = new Date(`${dateStr}T00:00:00.000Z`)
   const before = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
@@ -482,7 +499,7 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
   if (checkOutAt !== undefined) changes.push(`out ${at(before.checkOutAt)} -> ${at(record.checkOutAt)}`)
   if (overtimeHours !== undefined) changes.push(`overtime ${before.overtimeHours ?? 'none'} -> ${record.overtimeHours ?? 'none'}`)
   if (breaks !== undefined) changes.push(`breaks ${summarizeBreaks(readBreaks(before.breaks))} -> ${summarizeBreaks(readBreaks(record.breaks))}`)
-  logAudit(req.auth.sub, `correct_attendance: ${changes.join('; ') || 'no change'}`, 'attendance', record.id)
+  logAudit(req.auth.sub, 'correct_attendance', 'attendance', record.id, 'success', `${employeeName}, ${dateStr}: ${changes.join('; ') || 'no change'}`)
   res.status(200).json({
     id: record.id,
     employeeId: record.employeeId,

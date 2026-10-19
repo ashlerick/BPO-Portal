@@ -4,7 +4,8 @@ import { api, ApiError } from '../../services/api'
 import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { Card } from '../../components/ui/Card'
 import { humanize } from '../../utils/text'
-import type { AuditLogEntry } from '../audit-logs/types'
+import type { AuditLogEntry, AuditLogPage } from '../audit-logs/types'
+import { addDaysIso, todayInManilaIso } from '../../utils/dates'
 
 interface Stats {
   employeeCount: number
@@ -33,11 +34,12 @@ export function AdminWidgets() {
     Promise.all([
       api.get<{ id: string }[]>('/employees'),
       api.get<{ teams: { id: string }[] }>('/directory'),
-      api.get<AuditLogEntry[]>('/audit-logs?limit=5'),
+      // the latest few that are not routine, from the last 30 days
+      api.get<AuditLogPage>(`/audit-logs?from=${addDaysIso(todayInManilaIso(), -29)}&to=${todayInManilaIso()}&limit=5`),
     ])
       .then(([employees, dir, logs]) => {
         setStats({ employeeCount: employees.length, teamCount: dir.teams.length })
-        setRecentActions(logs)
+        setRecentActions(logs.entries)
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Something went wrong'))
       .finally(() => setLoading(false))

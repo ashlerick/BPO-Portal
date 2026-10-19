@@ -288,7 +288,7 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
     },
   })
 
-  logAudit(req.auth.sub, 'create', 'announcement', announcement.id)
+  logAudit(req.auth.sub, 'create', 'announcement', announcement.id, 'success', announcement.title)
   if (announcement.published) await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)
   await createActionTodos(announcement)
   res.status(201).json((await decorate([announcement], req.auth.sub, true))[0])
@@ -342,7 +342,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
     throw err
   }
 
-  logAudit(req.auth.sub, 'update', 'announcement', id)
+  logAudit(req.auth.sub, 'update', 'announcement', id, 'success', announcement.title)
   // A draft that has just been published tells everyone, the same as posting it straight away.
   if (published === true && before && !before.published) {
     await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)
@@ -356,6 +356,7 @@ async function handleDelete(req: AuthedRequest, res: VercelResponse, id: string)
     res.status(403).json({ message: 'Insufficient permissions' })
     return
   }
+  const gone = await prisma.announcement.findUnique({ where: { id }, select: { title: true } })
   try {
     await prisma.announcement.delete({ where: { id } })
     // Its to-dos are hidden with it (soft delete, like every to-do removal).
@@ -367,7 +368,7 @@ async function handleDelete(req: AuthedRequest, res: VercelResponse, id: string)
     }
     throw err
   }
-  logAudit(req.auth.sub, 'delete', 'announcement', id)
+  logAudit(req.auth.sub, 'delete', 'announcement', id, 'success', gone?.title)
   res.status(204).end()
 }
 

@@ -14,6 +14,7 @@ import { handler as shifts } from '../lib/handlers/shifts.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
+import { handler as auditRetention } from '../lib/handlers/auditRetention.js'
 import { createCode, deviceBreakEnd, deviceBreakStart, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
@@ -48,6 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.resource === 'careers') return careers(req, res)
   // Called by the monthly Vercel cron; checks its own CRON_SECRET.
   if (req.query.resource === 'inventory-reminders') return inventoryReminders(req, res)
+  // Monthly clean-up of old audit entries (12 months for routine ones, 5 years for the rest); also CRON_SECRET only.
+  if (req.query.resource === 'audit-retention') return auditRetention(req, res)
   // The desktop app signs in with a one-time code, then a device token (not the portal login).
   if (req.query.resource === 'device-token') return exchangeCode(req, res)
   if (req.query.resource === 'device-me') return deviceMe(req, res)

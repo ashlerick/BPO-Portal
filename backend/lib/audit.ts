@@ -12,9 +12,10 @@ export function logAudit(
   resource: string,
   resourceId: string | null,
   result: 'success' | 'failure' = 'success',
+  detail?: string,
 ): Promise<void> {
   return prisma.auditLog
-    .create({ data: { userId, action, resource, resourceId, result } })
+    .create({ data: { userId, action, resource, resourceId, result, ...(detail && { detail: detail.slice(0, 500) }) } })
     .then(() => undefined)
     .catch((err) => {
       console.error('Failed to write audit log', err)
