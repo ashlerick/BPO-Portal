@@ -49,20 +49,26 @@ export function MyTimePage() {
   const range = mode === 'week' ? { from: mondayOf(anchor), to: addDaysIso(mondayOf(anchor), 6) } : monthBounds(anchor)
   const { data, loading, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?from=${range.from}&to=${range.to}`)
 
-  // Which days of the week this person works comes from their shift (HR sets it), so it follows any schedule. Until a
-  // shift is assigned it is Monday to Friday. 0 is Sunday, as in the shift's work days.
-  const { data: schedule } = useApiData<{ current: { shift: { workDays: number[] } } | null }>('/hr/shifts?kind=schedule')
-  const workDays = schedule?.current?.shift.workDays ?? [1, 2, 3, 4, 5]
+  // Which days this person works comes from the schedule HR assigned them, and it follows the schedule that was in
+  // effect on each date, so a change of shift does not rewrite the past. With no schedule on a date it is Monday to
+  // Friday. 0 is Sunday, as in the shift's work days.
+  interface Assigned { id: string; effectiveFrom: string; shift: { workDays: number[] } }
+  const { data: schedule } = useApiData<{ current: Assigned | null; history: Assigned[] }>('/hr/shifts?kind=schedule')
+  const assignments = [...(schedule?.history ?? []), ...(schedule?.current ? [schedule.current] : [])]
+    .filter((a, i, all) => all.findIndex((b) => b.id === a.id) === i)
+    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+  const isWorkDay = (date: string) => {
+    const inEffect = [...assignments].reverse().find((a) => a.effectiveFrom.slice(0, 10) <= date)
+    const days = inEffect?.shift.workDays ?? [1, 2, 3, 4, 5]
+    return days.includes(new Date(`${date}T00:00:00Z`).getUTCDay())
+  }
 
   const byDate = new Map((data ?? []).map((r) => [r.date.slice(0, 10), r]))
-  // A week lists the days that are work days (empty ones too), plus any other day they did clock in. A day off with no
-  // record is left out. A month lists only the days that have a record.
-  const days =
-    mode === 'week'
-      ? DAY_NAMES.map((_, i) => addDaysIso(range.from, i)).filter(
-          (d) => workDays.includes(new Date(`${d}T00:00:00Z`).getUTCDay()) || byDate.has(d),
-        )
-      : [...byDate.keys()].sort()
+  // Scoped to the schedule: every scheduled work day in the period is listed (an empty one shows a dash), plus any other
+  // day they did clock in. A day off with no record is left out, and a month does not list days that have not come yet.
+  const periodDays: string[] = []
+  for (let d = range.from; d <= range.to; d = addDaysIso(d, 1)) periodDays.push(d)
+  const days = periodDays.filter((d) => byDate.has(d) || (isWorkDay(d) && (mode === 'week' || d <= today)))
 
   const records = data ?? []
   const present = records.filter((r) => r.status === 'present')
@@ -209,9 +215,9 @@ export function MyTimePage() {
           </div>
         )}
 
-        {mode === 'week' && data && (
+        {data && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Your days off, set by your shift, aren't listed unless you clocked in that day.
+            Your days off, set by your assigned schedule, aren't listed unless you clocked in that day.
           </p>
         )}
 
