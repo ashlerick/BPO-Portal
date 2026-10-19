@@ -31,6 +31,14 @@ export interface Announcement {
   reactors?: Record<string, string[]>
   myReaction?: string | null
   needsAck?: boolean
+  // Asks people to do something by this date (a to-do for each person).
+  needsAction?: boolean
+  actionDueAt?: string | null
+  // The caller's own to-do for it.
+  myAction?: { id: string; status: 'open' | 'done' } | null
+  // HR/Admin: how many of the to-dos are done.
+  actionDone?: number
+  actionTotal?: number
   acknowledged?: boolean
   // HR/Admin only, for announcements that need a "Got it".
   ackCount?: number

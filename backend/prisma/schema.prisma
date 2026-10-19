@@ -204,6 +204,9 @@ model Announcement {
   highlighted Boolean                @default(false)
   // When the highlight ends on its own. Null (with highlighted) = until HR removes it.
   highlightUntil DateTime?
+  // Asks people to do something by actionDueAt: each active employee gets a to-do tied to this announcement.
+  needsAction Boolean @default(false)
+  actionDueAt DateTime?
   publishAt   DateTime?
   expireAt    DateTime?
   createdAt   DateTime               @default(now())
@@ -690,10 +693,13 @@ model Todo {
   deletedAt   DateTime?
   createdBy   String
   createdAt   DateTime      @default(now())
+  // Set when the to-do came from an announcement that needs action (see the announcements handler).
+  announcementId String?
   comments    TodoComment[]
 
   @@index([employeeId, status])
   @@index([createdBy])
+  @@index([announcementId])
   @@map("todos")
 }
 

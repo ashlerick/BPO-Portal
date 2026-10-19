@@ -39,6 +39,9 @@ const upsertSchema = z.object({
   highlighted: z.boolean().optional(),
   // How long a new highlight lasts, in days. Null (or left out) with highlighted = until HR removes it.
   highlightDays: z.number().int().min(1).max(30).nullable().optional(),
+  // Asks everyone to do something: a to-do for each active employee, due on this date (YYYY-MM-DD).
+  needsAction: z.boolean().optional(),
+  actionDueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the due date as a date').nullable().optional(),
 })
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -48,12 +51,45 @@ const highlightActive = (a: { highlighted: boolean; highlightUntil: Date | null 
   a.highlighted && (!a.highlightUntil || a.highlightUntil > now)
 
 // Tells every other account about a newly published announcement.
-async function notifyAllOfAnnouncement(title: string, category: string, authorId: string) {
+async function notifyAllOfAnnouncement(title: string, category: string, authorId: string, actionDue?: Date | null) {
   const users = await prisma.user.findMany({ where: { id: { not: authorId } }, select: { id: true } })
   await notifyUsers(
     users.map((u) => u.id),
-    { type: 'announcement', title: `New announcement: ${title}`, body: category, link: '/announcements' },
+    {
+      type: 'announcement',
+      title: `New announcement: ${title}`,
+      body: actionDue ? `${category} · action needed by ${actionDue.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : category,
+      link: '/announcements',
+    },
   )
+}
+
+// "Needs action": an announcement that asks people to do something (submit a form, finish a training, sign a policy) gives
+// each active employee a to-do for it, due on its date. Completing the to-do counts as their "Got it" (see todos.ts). Run
+// when the announcement is published, and only once: a draft gets its to-dos when it is published.
+async function createActionTodos(a: Announcement): Promise<void> {
+  if (!a.needsAction || !a.published) return
+  if ((await prisma.todo.count({ where: { announcementId: a.id } })) > 0) return
+  const author = await prisma.employee.findUnique({ where: { userId: a.authorId }, select: { id: true } })
+  const people = await prisma.employee.findMany({
+    where: { status: 'active', user: { active: true }, ...(author && { id: { not: author.id } }) },
+    select: { id: true },
+  })
+  if (people.length === 0) return
+  const link = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/announcements/${a.id}` : null
+  const preview = a.content.length > 200 ? `${a.content.slice(0, 200).trimEnd()}…` : a.content
+  await prisma.todo.createMany({
+    data: people.map((p) => ({
+      employeeId: p.id,
+      title: a.title,
+      description: `Action needed (from an announcement). ${preview}`,
+      dueDate: a.actionDueAt,
+      link,
+      priority: a.category === EMERGENCY_CATEGORY || a.category === 'Important notices' ? 'urgent' : 'normal',
+      createdBy: a.authorId,
+      announcementId: a.id,
+    })),
+  })
 }
 
 function isManager(req: AuthedRequest): boolean {
@@ -65,7 +101,7 @@ function isManager(req: AuthedRequest): boolean {
 async function decorate(rows: Announcement[], userId: string, manager: boolean) {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
-  const [reacted, ackCounts, myAcks, total] = await Promise.all([
+  const [reacted, ackCounts, myAcks, total, actionCounts, myTodos] = await Promise.all([
     prisma.announcementReaction.findMany({
       where: { announcementId: { in: ids } },
       orderBy: { createdAt: 'asc' },
@@ -76,6 +112,13 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
       : Promise.resolve([]),
     prisma.announcementAck.findMany({ where: { announcementId: { in: ids }, userId }, select: { announcementId: true } }),
     manager ? prisma.user.count({ where: { active: true } }) : Promise.resolve(0),
+    manager
+      ? prisma.todo.groupBy({ by: ['announcementId', 'status'], where: { announcementId: { in: ids }, deletedAt: null }, _count: { _all: true } })
+      : Promise.resolve([]),
+    prisma.todo.findMany({
+      where: { announcementId: { in: ids }, deletedAt: null, employee: { userId } },
+      select: { id: true, announcementId: true, status: true },
+    }),
   ])
   return rows.map((a) => {
     // Counts, the caller's own, and who reacted. Announcements are not anonymous, so everyone sees the names.
@@ -98,6 +141,12 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
       myReaction,
       needsAck,
       acknowledged: myAcks.some((m) => m.announcementId === a.id),
+      // The caller's own to-do for this announcement, when it asks for action.
+      myAction: myTodos.find((t) => t.announcementId === a.id) ?? null,
+      ...(manager && a.needsAction && {
+        actionTotal: actionCounts.filter((c) => c.announcementId === a.id).reduce((n, c) => n + c._count._all, 0),
+        actionDone: actionCounts.find((c) => c.announcementId === a.id && c.status === 'done')?._count._all ?? 0,
+      }),
       ...(manager && needsAck && { ackCount: ackCounts.find((c) => c.announcementId === a.id)?._count._all ?? 0, ackTotal: total }),
     }
   })
@@ -178,6 +227,24 @@ async function handleAckList(req: AuthedRequest, res: VercelResponse, id: string
   })
 }
 
+// HR/Admin: who has done the action and who still has it open.
+async function handleActionList(req: AuthedRequest, res: VercelResponse, id: string) {
+  if (!isManager(req)) {
+    res.status(403).json({ message: 'Insufficient permissions' })
+    return
+  }
+  const todos = await prisma.todo.findMany({
+    where: { announcementId: id, deletedAt: null },
+    include: { employee: { include: { user: { select: { firstName: true, middleName: true, lastName: true } } } } },
+    orderBy: { employee: { user: { lastName: 'asc' } } },
+  })
+  const name = (t: (typeof todos)[number]) => formatDisplayName(t.employee.user.firstName, t.employee.user.middleName, t.employee.user.lastName)
+  res.status(200).json({
+    done: todos.filter((t) => t.status === 'done').map((t) => ({ name: name(t), at: t.completedAt })),
+    pending: todos.filter((t) => t.status !== 'done').map(name),
+  })
+}
+
 async function handleList(req: AuthedRequest, res: VercelResponse) {
   // Expired announcements are still returned to everyone (they make up
   // the "Announcement history" section); the client splits active from
@@ -199,13 +266,19 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays } = parsed.data
+  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays, needsAction, actionDueOn } = parsed.data
+  if (needsAction && !actionDueOn) {
+    res.status(400).json({ message: 'Pick the date the action is due.' })
+    return
+  }
   const startsAt = publishAt ? new Date(publishAt) : new Date()
   const announcement = await prisma.announcement.create({
     data: {
       title,
       highlighted: highlighted ?? false,
       highlightUntil: highlighted && highlightDays ? new Date(Date.now() + highlightDays * DAY_MS) : null,
+      needsAction: !!needsAction,
+      actionDueAt: needsAction && actionDueOn ? new Date(`${actionDueOn}T00:00:00.000Z`) : null,
       ...(category !== undefined && { category }),
       content,
       authorId: req.auth.sub,
@@ -216,7 +289,8 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
   })
 
   logAudit(req.auth.sub, 'create', 'announcement', announcement.id)
-  if (announcement.published) await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub)
+  if (announcement.published) await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)
+  await createActionTodos(announcement)
   res.status(201).json((await decorate([announcement], req.auth.sub, true))[0])
 }
 
@@ -270,7 +344,10 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
 
   logAudit(req.auth.sub, 'update', 'announcement', id)
   // A draft that has just been published tells everyone, the same as posting it straight away.
-  if (published === true && before && !before.published) await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub)
+  if (published === true && before && !before.published) {
+    await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)
+    await createActionTodos(announcement)
+  }
   res.status(200).json((await decorate([announcement], req.auth.sub, true))[0])
 }
 
@@ -281,6 +358,8 @@ async function handleDelete(req: AuthedRequest, res: VercelResponse, id: string)
   }
   try {
     await prisma.announcement.delete({ where: { id } })
+    // Its to-dos are hidden with it (soft delete, like every to-do removal).
+    await prisma.todo.updateMany({ where: { announcementId: id, deletedAt: null }, data: { deletedAt: new Date() } })
   } catch (err) {
     if (isNotFoundError(err)) {
       res.status(404).json({ message: 'Announcement not found' })
@@ -299,6 +378,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (sub && req.method === 'POST' && action === 'react') return handleReact(req, res, sub)
   if (sub && req.method === 'POST' && action === 'ack') return handleAck(req, res, sub)
   if (sub && req.method === 'GET' && action === 'acks') return handleAckList(req, res, sub)
+  if (sub && req.method === 'GET' && action === 'actions') return handleActionList(req, res, sub)
   if (!sub && req.method === 'GET') return handleList(req, res)
   if (!sub && req.method === 'POST') return handleCreate(req, res)
   if (sub && req.method === 'PUT') return handleUpdate(req, res, sub)

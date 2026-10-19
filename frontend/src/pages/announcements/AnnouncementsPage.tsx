@@ -23,6 +23,9 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   const [highlighted, setHighlighted] = useState(false)
   // How long a highlight lasts: 3 days unless HR picks another, so nobody has to remember to remove it. 0 = until removed.
   const [highlightDays, setHighlightDays] = useState(3)
+  // Asks everyone to do something by a date (a to-do for each person).
+  const [needsAction, setNeedsAction] = useState(false)
+  const [actionDueOn, setActionDueOn] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,6 +42,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           published,
           highlighted,
           ...(highlighted && { highlightDays: highlightDays || null }),
+          ...(needsAction && { needsAction: true, actionDueOn }),
           ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
         })
         onCreated(created)
@@ -46,6 +50,8 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         setContent('')
         setExpireOn('')
         setHighlighted(false)
+        setNeedsAction(false)
+        setActionDueOn('')
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not create announcement')
       } finally {
@@ -140,6 +146,23 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           </label>
         )}
       </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-center gap-2" title="Everyone gets a to-do for it">
+          <input type="checkbox" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} />
+          Needs action
+        </label>
+        {needsAction && (
+          <label className="flex items-center gap-2">
+            due on
+            <input type="date" required value={actionDueOn} onChange={(e) => setActionDueOn(e.target.value)} className="field !w-auto py-1" />
+          </label>
+        )}
+      </div>
+      {needsAction && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Everyone gets a to-do for this, due on that date. Finishing the to-do also counts as their "Got it". You can see who is done on the announcement.
+        </p>
+      )}
       {category === 'Emergency announcements' && (
         <p className="text-xs text-gray-500 dark:text-gray-400">
           An emergency stays on everyone's BPO Time panel until they react or press Got it. It ends 24 hours after it is posted unless you set an end date above.

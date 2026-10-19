@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { formatDateOnly } from '../../utils/dates'
 import { api, ApiError } from '../../services/api'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -11,6 +13,11 @@ const NAMES_SHOWN = 10
 
 interface AckList {
   acknowledged: { name: string; at: string }[]
+  pending: string[]
+}
+
+interface ActionList {
+  done: { name: string; at: string | null }[]
   pending: string[]
 }
 
@@ -28,6 +35,8 @@ export function AnnouncementEngagement({
   const toast = useToast()
   const [acks, setAcks] = useState<AckList | null>(null)
   const [showAcks, setShowAcks] = useState(false)
+  const [actions, setActions] = useState<ActionList | null>(null)
+  const [showActions, setShowActions] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const reactions = announcement.reactions ?? {}
@@ -70,6 +79,17 @@ export function AnnouncementEngagement({
       setAcks(await api.get<AckList>(`/announcements/${announcement.id}?action=acks`))
     } catch (err) {
       setShowAcks(false)
+      toast.error(err instanceof ApiError ? err.message : 'Could not load the list')
+    }
+  }
+
+  async function toggleActions() {
+    if (showActions) return setShowActions(false)
+    setShowActions(true)
+    try {
+      setActions(await api.get<ActionList>(`/announcements/${announcement.id}?action=actions`))
+    } catch (err) {
+      setShowActions(false)
       toast.error(err instanceof ApiError ? err.message : 'Could not load the list')
     }
   }
@@ -140,6 +160,42 @@ export function AnnouncementEngagement({
               </p>
             )
           })}
+        </div>
+      )}
+
+      {/* An announcement that asks for action: your to-do, and for HR how many have done it. */}
+      {announcement.needsAction && announcement.actionDueAt && announcement.myAction && (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <Badge tone={announcement.myAction.status === 'done' ? 'green' : 'amber'}>
+            {announcement.myAction.status === 'done' ? '✓ Action done' : `Action needed by ${formatDateOnly(announcement.actionDueAt)}`}
+          </Badge>
+          {announcement.myAction.status !== 'done' && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              It is in your to-dos. <Link to="/" className="underline decoration-dotted underline-offset-2">Open my to-dos</Link>
+            </span>
+          )}
+        </p>
+      )}
+
+      {canManage && announcement.needsAction && announcement.actionTotal !== undefined && (
+        <div className="text-xs text-gray-600 dark:text-gray-400">
+          <button type="button" onClick={toggleActions} className="underline decoration-dotted underline-offset-2 hover:text-gray-900 dark:hover:text-gray-200">
+            Action: {announcement.actionDone ?? 0} of {announcement.actionTotal} done
+            {announcement.actionDueAt ? `, due ${formatDateOnly(announcement.actionDueAt)}` : ''}
+            {showActions ? ' (hide)' : ' (who?)'}
+          </button>
+          {showActions && actions && (
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="font-medium text-gray-800 dark:text-gray-200">Done ({actions.done.length})</p>
+                <p className="mt-1 break-words">{actions.done.map((a) => a.name).join(', ') || 'No one yet.'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-800 dark:text-gray-200">Still to do ({actions.pending.length})</p>
+                <p className="mt-1 break-words">{actions.pending.join(', ') || 'Everyone has.'}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

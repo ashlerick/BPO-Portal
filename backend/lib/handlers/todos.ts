@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
+import { ACK_CATEGORIES } from './announcements.js'
 import { notifyUsers } from '../notify.js'
 import { formatDisplayName } from '../names.js'
 import { dateOnlyPattern, forbid, isHrOrAdmin, isSupervisorOf, myEmployee, notFound, parseBody, queryString, toDate } from './util.js'
@@ -243,6 +244,16 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     })
     if (data.note && data.status === 'done') {
       await prisma.todoComment.create({ data: { todoId: sub, authorId: req.auth.sub, body: data.note } })
+    }
+    // A to-do that came from an announcement: finishing it is the assignee's "Got it" on notices that ask for one.
+    if (becameDone && todo.announcementId) {
+      const [ann, assignee] = await Promise.all([
+        prisma.announcement.findUnique({ where: { id: todo.announcementId }, select: { category: true } }),
+        prisma.employee.findUnique({ where: { id: todo.employeeId }, select: { userId: true } }),
+      ])
+      if (ann && assignee && ACK_CATEGORIES.includes(ann.category)) {
+        await prisma.announcementAck.createMany({ data: [{ announcementId: todo.announcementId, userId: assignee.userId }], skipDuplicates: true })
+      }
     }
     // The person who assigned it hears when it is done.
     if (becameDone && todo.createdBy !== req.auth.sub) {
