@@ -342,6 +342,87 @@ function EditableBreak({
   )
 }
 
+// A day nobody clocked in for: HR picks the person and the day and enters the times. (Fixing a record that exists is done on the
+// row itself; this creates one.) The times are checked before saving, the same as a correction.
+function AddDayForm({ onAdded }: { onAdded: () => void }) {
+  const { guardedAction } = useAuth()
+  const { data: employees } = useApiData<EmployeeRecord[]>('/employees')
+  const [employeeId, setEmployeeId] = useState('')
+  const [date, setDate] = useState(todayInManilaIso())
+  const [timeIn, setTimeIn] = useState('')
+  const [timeOut, setTimeOut] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const span = timeIn && timeOut ? worked(fromManilaLocal(timeIn), fromManilaLocal(timeOut)) : null
+  const canSave = !!employeeId && !!date && !!timeIn && (span ? span.ok : true) && !saving
+
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setMessage(null)
+      try {
+        await api.post('/leave/attendance/add', {
+          employeeId,
+          date,
+          checkInAt: fromManilaLocal(timeIn),
+          checkOutAt: timeOut ? fromManilaLocal(timeOut) : null,
+        })
+        setMessage({ ok: true, text: 'Day added. It is in the table now.' })
+        setTimeIn('')
+        setTimeOut('')
+        onAdded()
+      } catch (err) {
+        setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Could not add the day' })
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        For a day someone worked but never clocked in. A day that already has a time in is changed with the pencil in the table.
+        Times are Manila time; a night shift's time out is on the next day.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+          Employee
+          <select required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="field mt-1">
+            <option value="">Select…</option>
+            {employees?.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+          Day (the shift's day)
+          <input type="date" required max={todayInManilaIso()} value={date} onChange={(e) => setDate(e.target.value)} className="field mt-1" />
+        </label>
+        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+          Time in
+          <input type="datetime-local" required value={timeIn} onChange={(e) => setTimeIn(e.target.value)} className="field mt-1" />
+        </label>
+        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
+          Time out (optional)
+          <input type="datetime-local" value={timeOut} min={timeIn || undefined} onChange={(e) => setTimeOut(e.target.value)} className="field mt-1" />
+        </label>
+      </div>
+      {span && (span.ok ? <p className="text-sm text-brand-700 dark:text-brand-400">{span.text}</p> : <p className="text-sm text-red-600 dark:text-red-400">{span.problem}</p>)}
+      {message && (
+        <p className={`text-sm ${message.ok ? 'text-brand-700 dark:text-brand-400' : 'text-red-600 dark:text-red-400'}`}>{message.text}</p>
+      )}
+      <Button type="submit" variant="primary" size="sm" disabled={!canSave}>
+        {saving ? 'Adding…' : 'Add the day'}
+      </Button>
+    </form>
+  )
+}
+
 function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
   const { guardedAction } = useAuth()
   const { data: employees } = useApiData<EmployeeRecord[]>('/employees')
@@ -626,6 +707,10 @@ export function AttendancePage() {
             label: 'Records',
             content: (
         <SectionStack tabs={false}>
+        <Section id="attendance.addday" title="Add a missing day" hint="Someone worked but never clocked in" roles={['hr', 'admin']}>
+          <AddDayForm onAdded={() => setReloadToken((t) => t + 1)} />
+        </Section>
+
         <Section id="attendance.history" title="Attendance history" hint={`${from} to ${to}`} defaultOpen>
           {data && data.length === 0 && <EmptyState label="No attendance records in this range." />}
           {data && data.length > 1 && byPerson.length > 1 && (

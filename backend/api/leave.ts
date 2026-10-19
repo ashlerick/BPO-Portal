@@ -6,6 +6,7 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { sendEmail } from '../lib/email.js'
 import { inclusiveDayCount, todayInManila } from '../lib/dates.js'
+import { holidayOn } from '../lib/holidays.js'
 import { BREAK_SLOTS, editedBreaks, readBreaks, summarizeBreaks } from '../lib/breaks.js'
 import { buildAttendanceXlsx } from '../lib/attendanceReport.js'
 import { getDownloadUrl, putObject } from '../lib/s3.js'
@@ -322,6 +323,80 @@ async function handleAttendanceToday(req: AuthedRequest, res: VercelResponse) {
   })
 }
 
+const addAttendanceSchema = z.object({
+  employeeId: z.string().min(1),
+  date: z.string().regex(dateOnlyPattern, 'date must be YYYY-MM-DD'),
+  checkInAt: z.string().datetime(),
+  checkOutAt: z.string().datetime().nullable().optional(),
+})
+
+// HR/admin: add a day that has no attendance record (someone worked but never clocked in). Correcting only fixes a record
+// that exists; this creates one. A day that already has a time in is refused (edit it in the table); a day HR marked absent
+// is turned into a present day. The same checks as a correction apply to the times.
+async function handleAddAttendance(req: AuthedRequest, res: VercelResponse) {
+  if (!isHrOrAdmin(req)) {
+    res.status(403).json({ message: 'Insufficient permissions' })
+    return
+  }
+  const parsed = addAttendanceSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid request' })
+    return
+  }
+  const { employeeId, date: dateStr, checkInAt, checkOutAt } = parsed.data
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    include: { user: { select: { firstName: true, middleName: true, lastName: true } } },
+  })
+  if (!employee) {
+    res.status(404).json({ message: 'Employee not found' })
+    return
+  }
+  const date = new Date(`${dateStr}T00:00:00.000Z`)
+  if (date.getTime() > todayInManila().getTime()) {
+    res.status(400).json({ message: "That day hasn't come yet." })
+    return
+  }
+  const timeIn = new Date(checkInAt)
+  const timeOut = checkOutAt ? new Date(checkOutAt) : null
+  // The time in has to belong to that shift day: within a day and a half of its start (a night shift starts that evening).
+  const dayStart = new Date(`${dateStr}T00:00:00+08:00`).getTime()
+  if (timeIn.getTime() < dayStart - 12 * 3_600_000 || timeIn.getTime() > dayStart + 36 * 3_600_000) {
+    res.status(400).json({ message: 'That time in does not fall on that day. Check the date.' })
+    return
+  }
+  if (timeOut) {
+    if (timeOut.getTime() <= timeIn.getTime()) {
+      res.status(400).json({ message: 'Time out has to be after time in. For a night shift, the time out is on the next day.' })
+      return
+    }
+    if (timeOut.getTime() - timeIn.getTime() > 20 * 3_600_000) {
+      res.status(400).json({ message: 'That is more than 20 hours between time in and time out. Check the dates.' })
+      return
+    }
+  }
+  const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
+  if (existing && existing.status === 'present' && existing.checkInAt) {
+    res.status(409).json({ message: 'That day already has a record. Edit it in the table instead.' })
+    return
+  }
+  const data = { status: 'present' as const, checkInAt: timeIn, checkOutAt: timeOut, workingHoliday: !!(await holidayOn(date)) }
+  const record = existing
+    ? await prisma.attendanceRecord.update({ where: { id: existing.id }, data: { ...data, markedBy: null } })
+    : await prisma.attendanceRecord.create({ data: { employeeId, date, ...data } })
+  const at = (d: Date | null) =>
+    d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : 'none'
+  logAudit(
+    req.auth.sub,
+    'add_attendance',
+    'attendance',
+    record.id,
+    'success',
+    `${formatDisplayName(employee.user.firstName, employee.user.middleName, employee.user.lastName)}, ${dateStr}: in ${at(timeIn)}, out ${at(timeOut)}${existing ? ' (was marked absent)' : ''}`,
+  )
+  res.status(201).json({ id: record.id, employeeId, date: record.date, checkInAt: record.checkInAt, checkOutAt: record.checkOutAt })
+}
+
 const markAbsentSchema = z.object({
   employeeId: z.string().min(1),
   date: z.string().regex(dateOnlyPattern, 'date must be YYYY-MM-DD'),
@@ -553,6 +628,7 @@ async function handler(req: AuthedRequest, res: VercelResponse) {
     if (sub === 'export' && req.method === 'GET') return handleExportAttendance(req, res)
     if (sub === 'mark-absent' && req.method === 'POST') return handleMarkAbsent(req, res)
     if (sub === 'correct' && req.method === 'POST') return handleCorrectAttendance(req, res)
+    if (sub === 'add' && req.method === 'POST') return handleAddAttendance(req, res)
     if (sub && req.method === 'DELETE') return handleDeleteAttendance(req, res, sub)
   }
 
