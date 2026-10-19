@@ -111,13 +111,13 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         Publish immediately
       </label>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-center gap-2">
+        <label className="flex items-center gap-2" title="Highlighted announcements are shown first here and on the BPO Time app">
           <input type="checkbox" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
-          Highlight: shown first here and on the BPO Time app
+          Highlight
         </label>
         {highlighted && (
           <label className="flex items-center gap-2">
-            for
+            <span className="sr-only">Highlight for how long</span>
             <select value={highlightDays} onChange={(e) => setHighlightDays(Number(e.target.value))} className="field !w-auto py-1">
               <option value={1}>1 day</option>
               <option value={3}>3 days</option>
