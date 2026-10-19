@@ -119,6 +119,11 @@ async function handleReact(req: AuthedRequest, res: VercelResponse, id: string) 
       create: { announcementId: id, userId: req.auth.sub, emoji },
       update: { emoji },
     })
+    // On a notice that asks for a "Got it" (policy, important, emergency), reacting IS the "Got it": one tap, and HR's
+    // list of who has acknowledged counts it. Taking the reaction back does not undo the acknowledgement.
+    if (ACK_CATEGORIES.includes(announcement.category)) {
+      await prisma.announcementAck.createMany({ data: [{ announcementId: id, userId: req.auth.sub }], skipDuplicates: true })
+    }
   }
   res.status(200).json((await decorate([announcement], req.auth.sub, isManager(req)))[0])
 }
