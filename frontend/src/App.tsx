@@ -8,6 +8,7 @@ import { AnnouncementsPage } from './pages/announcements/AnnouncementsPage'
 import { AnnouncementView } from './pages/announcements/AnnouncementView'
 import { AttendancePage } from './pages/attendance/AttendancePage'
 import { MyTimePage } from './pages/attendance/MyTimePage'
+import { useAuth } from './auth/AuthContext'
 import { AuditLogsPage } from './pages/audit-logs/AuditLogsPage'
 import { BenefitsPage } from './pages/benefits/BenefitsPage'
 import { CalendarPage } from './pages/calendar/CalendarPage'
@@ -36,6 +37,13 @@ import { ReportsPage } from './pages/reports/ReportsPage'
 import { SetPasswordPage } from './pages/set-password/SetPasswordPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { UsersPage } from './pages/users/UsersPage'
+
+// /attendance is HR's page. Anyone else who opens it (an old bookmark or link) is taken to their own page, My Time.
+function AttendanceRoute() {
+  const { effectiveRoles } = useAuth()
+  const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
+  return isReviewer ? <AttendancePage /> : <Navigate to="/my-time" replace />
+}
 
 export default function App() {
   return (
@@ -126,14 +134,7 @@ export default function App() {
               <Route path="/freedom-wall" element={<FreedomWallPage />} />
               <Route path="/leave" element={<LeaveRequestsPage />} />
               <Route path="/my-time" element={<MyTimePage />} />
-              <Route
-                path="/attendance"
-                element={
-                  <RequireAuth roles={['hr', 'admin']}>
-                    <AttendancePage />
-                  </RequireAuth>
-                }
-              />
+              <Route path="/attendance" element={<AttendanceRoute />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/profile" element={<ProfilePage />} />
