@@ -46,7 +46,9 @@ export function readBreaks(json: unknown): BreakEntry[] {
       status: e.status,
       startedAt: typeof e.startedAt === 'string' ? e.startedAt : null,
       endedAt: typeof e.endedAt === 'string' ? e.endedAt : null,
-      overSeconds: typeof e.overSeconds === 'number' && e.overSeconds > 0 ? Math.floor(e.overSeconds) : 0,
+      // Entries saved before the grace period existed may say "4 seconds over". Inside the grace it is not over, so it is
+      // read as 0 here (the stored value is left alone).
+      overSeconds: typeof e.overSeconds === 'number' && e.overSeconds > OVER_GRACE_SECONDS ? Math.floor(e.overSeconds) : 0,
     })
   }
   return out.sort((a, b) => BREAK_SLOTS.indexOf(a.slot) - BREAK_SLOTS.indexOf(b.slot))
