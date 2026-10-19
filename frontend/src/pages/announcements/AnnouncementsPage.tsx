@@ -106,10 +106,23 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           className="field"
         />
       </div>
-      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-        <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
-        Publish immediately
-      </label>
+      <fieldset className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
+        <legend className="sr-only">When to post</legend>
+        <label className="flex items-start gap-2">
+          <input type="radio" name="ann-when" className="mt-1" checked={published} onChange={() => setPublished(true)} />
+          <span>
+            <b className="font-medium">Post now</b>
+            <span className="block text-xs text-gray-500 dark:text-gray-400">Everyone can see it and is notified.</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-2">
+          <input type="radio" name="ann-when" className="mt-1" checked={!published} onChange={() => setPublished(false)} />
+          <span>
+            <b className="font-medium">Save as a draft</b>
+            <span className="block text-xs text-gray-500 dark:text-gray-400">Only HR and Admin can see it. Nobody is notified until you press Publish now on it.</span>
+          </span>
+        </label>
+      </fieldset>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
         <label className="flex items-center gap-2" title="Highlighted announcements are shown first here and on the BPO Time app">
           <input type="checkbox" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
@@ -134,7 +147,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
       )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <Button type="submit" variant="primary" disabled={submitting}>
-        {submitting ? 'Posting…' : 'Post announcement'}
+        {submitting ? (published ? 'Posting…' : 'Saving…') : published ? 'Post announcement' : 'Save draft'}
       </Button>
     </CardForm>
   )
@@ -188,6 +201,22 @@ function AnnouncementItem({
         setChoosing(false)
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not change the highlight')
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
+
+  // A draft goes live: visible to everyone, and everyone is notified.
+  function publishNow() {
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setError(null)
+      try {
+        const updated = await api.put<Announcement>(`/announcements/${announcement.id}`, { published: true })
+        onUpdated({ ...announcement, ...updated })
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Could not publish the announcement')
       } finally {
         setSaving(false)
       }
@@ -276,9 +305,15 @@ function AnnouncementItem({
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{announcement.content}</p>
         <AnnouncementEngagement announcement={announcement} canManage={canManage} onChange={onUpdated} />
         {!announcement.published && (
-          <Badge tone="amber" className="mt-2">
-            Draft
-          </Badge>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge tone="amber">Draft</Badge>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Only HR and Admin can see this. Nobody has been told about it yet.</span>
+            {canManage && (
+              <Button size="sm" variant="primary" onClick={publishNow} disabled={saving}>
+                Publish now
+              </Button>
+            )}
+          </div>
         )}
         {canManage && (
           <div className="mt-3 flex gap-2">

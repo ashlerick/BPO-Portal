@@ -238,7 +238,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
       ? (highlightDays === null ? null : new Date(Date.now() + (highlightDays ?? 3) * DAY_MS))
       : undefined
   // An emergency that has no end gets one (24 hours after it started).
-  const before = await prisma.announcement.findUnique({ where: { id }, select: { category: true, expireAt: true, publishAt: true, createdAt: true } })
+  const before = await prisma.announcement.findUnique({ where: { id }, select: { category: true, expireAt: true, publishAt: true, createdAt: true, published: true } })
   const becomesEmergency = (category ?? before?.category) === EMERGENCY_CATEGORY
   const noEnd = expireAt === undefined ? !before?.expireAt : !expireAt
   const emergencyEnd = becomesEmergency && noEnd ? new Date((before?.publishAt ?? before?.createdAt ?? new Date()).getTime() + EMERGENCY_DEFAULT_MS) : undefined
@@ -254,6 +254,8 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
         ...(content !== undefined && { content }),
         ...(published !== undefined && { published }),
         ...(publishAt !== undefined && { publishAt: new Date(publishAt) }),
+        // Publishing a draft posts it as of now, not as of the day it was first saved.
+        ...(publishAt === undefined && published === true && before && !before.published && { publishAt: new Date() }),
         ...(expireAt !== undefined && { expireAt: expireAt ? new Date(expireAt) : null }),
         ...(emergencyEnd && { expireAt: emergencyEnd }),
       },
@@ -267,6 +269,8 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   }
 
   logAudit(req.auth.sub, 'update', 'announcement', id)
+  // A draft that has just been published tells everyone, the same as posting it straight away.
+  if (published === true && before && !before.published) await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub)
   res.status(200).json((await decorate([announcement], req.auth.sub, true))[0])
 }
 
