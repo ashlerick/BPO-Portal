@@ -174,8 +174,8 @@ export function MyTimePage() {
                   <th className="py-2 pr-4 font-medium">Break 1</th>
                   <th className="py-2 pr-4 font-medium">Lunch</th>
                   <th className="py-2 pr-4 font-medium">Break 2</th>
-                  <th className="py-2 pr-4 font-medium">Hours</th>
-                  <th className="py-2 pr-4 font-medium" title="Hours less the fixed 50 minutes for breaks and lunch">Worked</th>
+                  <th className="py-2 pr-4 font-medium" title="Time in to time out">In to out</th>
+                  <th className="py-2 pr-4 font-medium" title="Time in to time out less the fixed 50 minutes for breaks and lunch">Hours worked</th>
                   <th className="py-2 font-medium">Notes</th>
                 </tr>
               </thead>
@@ -255,12 +255,12 @@ export function MyTimePage() {
               <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{absent}</dd>
             </div>
             <div>
-              <dt className="text-gray-500 dark:text-gray-400">Hours</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalHours.toFixed(1)}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">Hours worked</dt>
+              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalWorked.toFixed(1)}</dd>
             </div>
             <div>
-              <dt className="text-gray-500 dark:text-gray-400">Worked (after breaks)</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalWorked.toFixed(1)}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">In to out</dt>
+              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalHours.toFixed(1)}</dd>
             </div>
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Overtime</dt>

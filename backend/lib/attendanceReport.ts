@@ -26,7 +26,7 @@ const DAY_MS = 24 * 3_600_000
 const MANILA_MS = 8 * 3_600_000
 const RULES = 'Rules' // sheet name
 const R = { b1: `${RULES}!$B$2`, lunch: `${RULES}!$B$3`, b2: `${RULES}!$B$4`, grace: `${RULES}!$B$5`, deduct: `${RULES}!$B$6` }
-const HEADS = ['Date', 'Time in', 'Time out', 'Break 1', 'Lunch', 'Break 2', 'Hours', 'Worked', 'Breaks over', 'Status', 'Overtime', 'Holiday worked', 'Notes']
+const HEADS = ['Date', 'Time in', 'Time out', 'Break 1', 'Lunch', 'Break 2', 'In to out (h)', 'Hours worked', 'Breaks over', 'Status', 'Overtime', 'Holiday worked', 'Notes']
 const LAST_COL = HEADS.length
 
 const rangeDateFmt = (d: Date) =>
@@ -152,7 +152,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
   summary.addRow([rangeText])
   summary.addRow([])
   const summaryHead = summary.addRow([
-    'Employee', 'Days present', 'Days absent', 'Total hours', 'Worked (after breaks)', 'Overtime hours', 'Working holidays', 'Breaks over limit',
+    'Employee', 'Days present', 'Days absent', 'In to out (h)', 'Hours worked', 'Overtime hours', 'Working holidays', 'Breaks over limit',
   ])
   summaryHead.font = { bold: true }
   summaryHead.eachCell((c) => (c.fill = HEADER_FILL))
@@ -161,7 +161,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
   // ---- Rules: the break rules, once. Change a value and every sheet follows. (Rows 2 to 6, as R expects.)
   const rules = workbook.addWorksheet(RULES)
   rules.columns = [{ width: 44 }, { width: 14 }, { width: 70 }]
-  rules.addRow(['Break rules (agreed 2026-10-16, pending HR confirmation). Change a value and every sheet follows.']).font = { bold: true }
+  rules.addRow(['Break rules (agreed 2026-10-16). Breaks are not counted in the hours. Change a value and every sheet follows.']).font = { bold: true }
   for (const [label, seconds] of [
     ['Break 1 allowed', ALLOWANCE.morning],
     ['Lunch allowed', ALLOWANCE.lunch],
@@ -184,7 +184,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
     sheet.columns = [16, 12, 12, 11, 11, 11, 9, 9, 12, 10, 10, 15, 28].map((width) => ({ width }))
     sheet.addRow([name]).font = { bold: true, size: 14 }
     sheet.addRow([rangeText])
-    sheet.addRow(['Raw data from the portal. Hours, Worked, Breaks over and every total are formulas (break rules on the Rules sheet).']).font = {
+    sheet.addRow(['Raw data from the portal. Hours worked = time in to out less the fixed 50 minutes for breaks and lunch. The hours, the over counts and every total are formulas (break rules on the Rules sheet).']).font = {
       italic: true,
       size: 9,
     }

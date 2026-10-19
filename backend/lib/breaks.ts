@@ -1,4 +1,4 @@
-// Breaks and lunch on the desktop app (BPO Time). Rules agreed 2026-10-16, pending HR's confirmation; this file
+// Breaks and lunch on the desktop app (BPO Time). Rules agreed 2026-10-16 and confirmed 2026-10-20: breaks are not counted in the hours; this file
 // is the one place that holds them, so a number or a rule can change here and nowhere else.
 //
 //  - Three slots a day, in order: morning break, lunch, afternoon break. Each is used at most once.

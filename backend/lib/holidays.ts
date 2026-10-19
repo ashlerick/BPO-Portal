@@ -20,7 +20,7 @@ interface NagerDay {
   types?: string[]
 }
 
-// Local holidays for the office's place (Iloilo) that a national list cannot know. They are added switched OFF: a local day
+// Local holidays for the office's place (Iloilo City, confirmed 2026-10-20) that a national list cannot know. They are added switched OFF: a local day
 // like Javier Day is observed some years and not others, so HR decides, and presses "Count as holiday" on the Calendar in the
 // years it is observed. Add new proclamations here, or on the Calendar by hand (those count at once).
 // Sources: Republic Act 7601 (Feb 11, every year, Antique, Capiz, Aklan and Iloilo) and Proclamation No. 1388 (Lawphil).

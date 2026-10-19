@@ -7,8 +7,11 @@ export interface BreakEntry {
   overSeconds: number // seconds past the allowance (after the grace); 0 when within it
 }
 
-// 10 + 30 + 10 minutes come off the day's worked time whatever was taken (backend/lib/breaks.ts; pending HR's confirmation).
+// 10 + 30 + 10 minutes come off the day's worked time whatever was taken (backend/lib/breaks.ts). Breaks are not counted in the hours.
 export const BREAK_DEDUCTION_HOURS = 50 / 60
+
+/** Hours worked: time in to time out less the fixed break time. 0 for a day with no time out yet. */
+export const netHours = (gross: number | null): number => (gross && gross > 0 ? Math.max(0, gross - BREAK_DEDUCTION_HOURS) : 0)
 
 const LABEL = { morning: 'Break 1', lunch: 'Lunch', afternoon: 'Break 2' } as const
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`

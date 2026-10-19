@@ -15,6 +15,7 @@ import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
 import { LateReport } from './Shifts'
 import { BreakSlotCell } from '../../components/ui/BreaksCell'
+import { netHours } from '../../utils/breaks'
 
 const timeFmt = formatManilaTime
 
@@ -520,7 +521,8 @@ function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reload
     const rec = data?.find((r) => r.date.slice(0, 10) === date && r.status === 'present')
     return { name, date, rec }
   })
-  const hours = (r?: AttendanceRecord) => (r ? Math.round(hoursBetween(r.checkInAt, r.checkOutAt) * 100) / 100 : 0)
+  // Hours worked: time in to out, less the fixed 50 minutes for breaks and lunch.
+  const hours = (r?: AttendanceRecord) => (r ? Math.round(netHours(hoursBetween(r.checkInAt, r.checkOutAt)) * 100) / 100 : 0)
   const totalRegular = days.reduce((a, d) => a + hours(d.rec), 0)
   const totalOt = days.reduce((a, d) => a + (d.rec?.overtimeHours ?? 0), 0)
 
@@ -580,7 +582,7 @@ function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reload
         </table>
       </div>
       {employeeId === '' && (
-        <p className="text-xs text-gray-500 dark:text-gray-400">Hours come from time in / time out. Overtime and working holiday are entered by HR.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">Hours are time in to time out less the fixed 50 minutes for breaks and lunch. Overtime and working holiday are entered by HR.</p>
       )}
     </div>
   )
@@ -619,7 +621,7 @@ export function AttendancePage() {
       else groups.push({ name: r.employeeName, rows: [r] })
       return groups
     }, [])
-  const totalHours = present.reduce((sum, r) => sum + hoursBetween(r.checkInAt, r.checkOutAt), 0)
+  const totalHours = present.reduce((sum, r) => sum + netHours(hoursBetween(r.checkInAt, r.checkOutAt)), 0)
   const completedDays = present.filter((r) => r.checkInAt && r.checkOutAt).length
 
   async function handleExport() {
