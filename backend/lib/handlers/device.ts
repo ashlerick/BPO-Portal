@@ -222,7 +222,7 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
     // Everything that is live, newest first. A company has a handful at a time; capped anyway.
     prisma.announcement.findMany({ where: live, orderBy: { publishAt: 'desc' }, take: 60 }),
     prisma.announcementAck.findMany({ where: { userId: device.userId }, select: { announcementId: true } }),
-    prisma.employee.findUnique({ where: { userId: device.userId }, select: { id: true } }),
+    prisma.employee.findUnique({ where: { userId: device.userId }, select: { id: true, dateHired: true } }),
   ])
   const done = new Set(acked.map((a) => a.announcementId))
   // The panel only carries what HR highlighted (and emergencies, which are always highlighted), and only until this
@@ -234,9 +234,13 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
     ),
   )
   // Who sees what on the panel:
-  //   - A notice that asks for a "Got it" (Important, Policy, Emergency) shows by itself until this person has given it,
-  //     and a reaction is a Got it. Policy and Important ones only for 30 days after they were posted (older ones stay on
-  //     the portal); an emergency stays until it ends, which is 24 hours after it was posted unless HR set a date.
+  //   - A notice that asks for a "Got it" shows by itself until this person has given it, and a reaction is a Got it. Never
+  //     past the end date HR set (the `live` filter above). Then, by kind:
+  //       Policy updates: until acknowledged, however old, but not for someone hired after it was posted (it is not news to them;
+  //         it stays on the portal for onboarding).
+  //       Important notices (and mandatory events): 30 days after they were posted; older ones stay on the portal.
+  //       Emergencies: until they end, which is 24 hours after they were posted unless HR set a date.
+  //       An event notice also stops once the day of the event has passed.
   //   - Anything else shows only while HR's highlight is active (it can end by itself), and until this person reacts.
   // Emergencies come first, then the ones waiting for a Got it, then the rest.
   const recent = now.getTime() - 30 * 24 * 60 * 60 * 1000
@@ -246,7 +250,12 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
   const shown = rows
     .filter((a) =>
       wantsAck(a)
-        ? !done.has(a.id) && (a.category === EMERGENCY_CATEGORY || (a.publishAt?.getTime() ?? 0) >= recent)
+        ? !done.has(a.id) &&
+          (a.category === EMERGENCY_CATEGORY ||
+            (a.category === 'Policy updates'
+              ? !(employee?.dateHired && a.publishAt && a.publishAt.getTime() < employee.dateHired.getTime())
+              : (a.publishAt?.getTime() ?? 0) >= recent)) &&
+          (!a.isEvent || !a.eventDate || a.eventDate.getTime() >= todayInManila().getTime())
         : highlightActive(a) && !mine.has(a.id),
     )
     .sort((x, y) => rank(x) - rank(y))
