@@ -455,6 +455,7 @@ export function AssignShift() {
       })
       setMessage(`Assigned ${assigned} ${assigned === 1 ? 'person' : 'people'}.`)
       setSelected([])
+      api.get<EmployeeRecord[]>('/employees').then(setPeople).catch(() => undefined)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not assign the shift')
     }
@@ -496,14 +497,22 @@ export function AssignShift() {
         <ul className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-black/10 p-2 text-sm dark:border-white/10">
           {shown.map((p) => (
             <li key={p.id}>
-              <label className="flex items-center gap-2">
+              <label className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <input
                   type="checkbox"
                   checked={selected.includes(p.id)}
                   onChange={(e) => setSelected((prev) => (e.target.checked ? [...prev, p.id] : prev.filter((id) => id !== p.id)))}
                 />
-                {p.name}
-                {p.team && <span className="text-gray-500 dark:text-gray-400"> · {p.team}</span>}
+                <span>
+                  {p.name}
+                  {p.team && <span className="text-gray-500 dark:text-gray-400"> · {p.team}</span>}
+                </span>
+                {/* where this person is assigned now, so HR sees what they are changing */}
+                <span
+                  className={`ml-auto text-xs ${p.shift ? 'text-gray-500 dark:text-gray-400' : 'text-amber-700 dark:text-amber-500'}`}
+                >
+                  {p.shift ? `${p.shift.name} · ${shiftHoursWithChange(p.shift, todayInManilaIso())}` : 'No shift assigned'}
+                </span>
               </label>
             </li>
           ))}
