@@ -8,6 +8,7 @@ import { prisma } from './prisma.js'
 // Nager marks every day just "Public": it does not say regular or special, so no type is stored yet.
 
 const SOURCE = 'nager'
+const LOCAL = 'local'
 const URL_FOR = (year: number) => `https://date.nager.at/api/v3/PublicHolidays/${year}/PH`
 const RETRY_AFTER_MS = 10 * 60 * 1000
 const lastTried = new Map<number, number>()
@@ -19,8 +20,50 @@ interface NagerDay {
   types?: string[]
 }
 
+// Local (Panay) holidays that a national list cannot know. Prefilled like the national ones, with the place in the name, and
+// HR can switch any off ("Not a holiday") if the office is elsewhere. Add new proclamations here, or on the Calendar by hand.
+// Sources: Republic Act 7601 (Feb 11, every year); Proclamations 1172, 1181, 1388 (Lawphil, 2026) and 1474 (news coverage,
+// not yet checked against the signed text).
+interface LocalHoliday {
+  /** 'MM-DD' for a holiday that repeats every year, or 'YYYY-MM-DD' for one proclamation */
+  date: string
+  title: string
+  place: string
+  basis: string
+}
+const LOCAL_HOLIDAYS: LocalHoliday[] = [
+  { date: '02-11', title: 'Governor Evelio B. Javier Day', place: 'Antique, Capiz, Aklan and Iloilo', basis: 'Republic Act 7601' },
+  { date: '2026-03-14', title: 'Passi City Founding Anniversary', place: 'Passi City, Iloilo', basis: 'Proclamation No. 1172' },
+  { date: '2026-03-26', title: 'Special non-working day in Mambusao', place: 'Mambusao, Capiz', basis: 'Proclamation No. 1181' },
+  { date: '2026-08-25', title: 'Iloilo City Charter Day', place: 'Iloilo City', basis: 'Proclamation No. 1388' },
+  { date: '2026-10-28', title: 'Cry of Lincud', place: 'Dingle, Iloilo', basis: 'Proclamation No. 1474' },
+]
+const localDone = new Set<number>()
+
+async function ensureLocalHolidays(year: number): Promise<void> {
+  if (localDone.has(year)) return
+  const rows = LOCAL_HOLIDAYS.map((h) => ({ ...h, full: h.date.length === 5 ? `${year}-${h.date}` : h.date }))
+    .filter((h) => h.full.startsWith(`${year}-`))
+    .map((h) => ({
+      title: `${h.title} (${h.place})`,
+      kind: 'holiday',
+      startDate: new Date(`${h.full}T00:00:00.000Z`),
+      description: `Local holiday, applies in ${h.place} only (${h.basis}). Switch it off if the office is elsewhere.`,
+      createdBy: 'system',
+      source: LOCAL,
+      externalKey: `${LOCAL}:${h.full}`,
+    }))
+  try {
+    if (rows.length) await prisma.calendarEvent.createMany({ data: rows, skipDuplicates: true })
+    localDone.add(year)
+  } catch {
+    // try again on the next call
+  }
+}
+
 /** Import one year's national list if it has not been imported yet. Never throws: no internet just means no prefill. */
 export async function ensureHolidaysImported(year: number): Promise<void> {
+  await ensureLocalHolidays(year)
   const already = await prisma.calendarEvent.findFirst({
     where: { source: SOURCE, externalKey: { startsWith: `${SOURCE}:${year}-` } },
     select: { id: true },
