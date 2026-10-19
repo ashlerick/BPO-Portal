@@ -85,45 +85,164 @@ function EmployeeFilter({
   )
 }
 
+// Manila wall-clock text for a <input type="datetime-local"> ("2026-09-08T19:31"), and back to a real moment.
+function toManilaLocal(iso: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    })
+      .formatToParts(new Date(iso))
+      .map((p) => [p.type, p.value]),
+  )
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
+}
+const fromManilaLocal = (value: string) => new Date(`${value}:00+08:00`).toISOString()
+
+function worked(a: string, b: string): { text: string; ok: boolean; problem?: string } {
+  const mins = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)
+  if (mins <= 0) return { text: '', ok: false, problem: 'Time out has to be after time in. For a night shift, the time out is on the next day.' }
+  if (mins > 20 * 60) return { text: '', ok: false, problem: 'More than 20 hours. Check the dates.' }
+  return { text: `${Math.floor(mins / 60)}h ${mins % 60}m worked`, ok: true }
+}
+
+// A check-in or check-out time HR can fix right where it is shown. A missing time out (someone forgot to clock out) is
+// flagged, with one button to add it. The editor shows how long the shift comes to before saving, and refuses times that
+// cannot be right (time out before time in, a shift past 20 hours).
+function EditableTime({
+  record,
+  field,
+  onSaved,
+}: {
+  record: AttendanceRecord
+  field: 'checkInAt' | 'checkOutAt'
+  onSaved: () => void
+}) {
+  const { guardedAction } = useAuth()
+  const value = record[field]
+  const other = field === 'checkInAt' ? record.checkOutAt : record.checkInAt
+  const label = field === 'checkInAt' ? 'time in' : 'time out'
+  const [editing, setEditing] = useState(false)
+  const [input, setInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function open() {
+    // Start from the current time; for a missing time out, from the time in (which is not valid until it is changed).
+    setInput(toManilaLocal(value ?? record.checkInAt ?? new Date().toISOString()))
+    setError(null)
+    setEditing(true)
+  }
+
+  const next = input ? fromManilaLocal(input) : null
+  const span = next && other ? (field === 'checkInAt' ? worked(next, other) : worked(other, next)) : null
+  const unchanged = next === value
+  const canSave = !!next && !unchanged && (span ? span.ok : true) && !saving
+
+  function save() {
+    if (!next) return
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setError(null)
+      try {
+        await api.post('/leave/attendance/correct', {
+          employeeId: record.employeeId,
+          date: record.date.slice(0, 10),
+          [field]: next,
+        })
+        setEditing(false)
+        onSaved()
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : `Could not save the ${label}`)
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
+
+  if (!editing) {
+    const missing = !value && field === 'checkOutAt'
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        {missing ? (
+          <button
+            type="button"
+            onClick={open}
+            className="rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-400"
+          >
+            No time out · Add
+          </button>
+        ) : (
+          <>
+            <span>{timeFmt(value)}</span>
+            {value && (
+              <button
+                type="button"
+                onClick={open}
+                aria-label={`Edit ${label} for ${record.employeeName}`}
+                title={`Edit ${label}`}
+                className="rounded p-0.5 text-gray-400 hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
+              >
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                </svg>
+              </button>
+            )}
+          </>
+        )}
+      </span>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <input
+        type="datetime-local"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        aria-label={`New ${label} (Manila time)`}
+        className="field w-full min-w-[12rem] px-2 py-1 text-sm"
+      />
+      <p className="text-xs text-gray-500 dark:text-gray-400">Manila time. A night shift's time out is on the next day.</p>
+      {span && (span.ok ? <p className="text-xs text-brand-700 dark:text-brand-400">{span.text}</p> : <p className="text-xs text-red-600 dark:text-red-400">{span.problem}</p>)}
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      <div className="flex gap-2">
+        <Button size="sm" variant="primary" disabled={!canSave} onClick={save}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button size="sm" onClick={() => setEditing(false)} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
   const { guardedAction } = useAuth()
   const { data: employees } = useApiData<EmployeeRecord[]>('/employees')
   const [employeeId, setEmployeeId] = useState('')
   const [date, setDate] = useState(todayInManilaIso())
-  const [checkIn, setCheckIn] = useState('')
-  const [checkOut, setCheckOut] = useState('')
   const [overtime, setOvertime] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
-  // <input type="time"> gives "HH:MM"; the app works in Manila time.
-  const toIso = (time: string) => new Date(`${date}T${time}:00+08:00`).toISOString()
-
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!checkIn && !checkOut && overtime === '') {
-      setMessage({ ok: false, text: 'Enter a time or overtime hours.' })
+    if (overtime === '') {
+      setMessage({ ok: false, text: 'Enter the overtime hours.' })
       return
     }
     guardedAction(['hr', 'admin'], async () => {
       setSubmitting(true)
       setMessage(null)
       try {
-        await api.post('/leave/attendance/correct', {
-          employeeId,
-          date,
-          status: 'present',
-          ...(checkIn && { checkInAt: toIso(checkIn) }),
-          ...(checkOut && { checkOutAt: toIso(checkOut) }),
-          ...(overtime !== '' && { overtimeHours: Number(overtime) }),
-        })
-        setMessage({ ok: true, text: 'Attendance corrected.' })
-        setCheckIn('')
-        setCheckOut('')
+        await api.post('/leave/attendance/correct', { employeeId, date, overtimeHours: Number(overtime) })
+        setMessage({ ok: true, text: 'Overtime saved.' })
         setOvertime('')
         onCorrected()
       } catch (err) {
-        setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Could not correct attendance' })
+        setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Could not save the overtime' })
       } finally {
         setSubmitting(false)
       }
@@ -133,9 +252,9 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Fix the times on an existing attendance record. Times are Manila time; leave a field empty to keep it as is.
+        Overtime hours for one person on one day. To fix a time in or time out, edit it right in the Records tab.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
           Employee
           <select required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="field mt-1">
@@ -152,20 +271,9 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
           <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="field mt-1" />
         </label>
         <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          Check in
-          <input type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="field mt-1" />
-        </label>
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          Check out
-          <input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="field mt-1" />
-        </label>
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
           Overtime hours
           <input type="number" min="0" max="24" step="0.25" value={overtime} onChange={(e) => setOvertime(e.target.value)} className="field mt-1" />
         </label>
-        <p className="self-end pb-2 text-xs text-gray-500 dark:text-gray-400">
-          Holidays are set once for the whole day on the Calendar, not per person.
-        </p>
       </div>
       {message && (
         <p className={`text-sm ${message.ok ? 'text-brand-700 dark:text-brand-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -173,7 +281,7 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
         </p>
       )}
       <Button type="submit" variant="primary" size="sm" disabled={submitting}>
-        {submitting ? 'Saving…' : 'Apply correction'}
+        {submitting ? 'Saving…' : 'Save overtime'}
       </Button>
     </form>
   )
@@ -442,10 +550,10 @@ export function AttendancePage() {
                       ) : (
                         <>
                           <td data-label="Check In" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            {timeFmt(r.checkInAt)}
+                            <EditableTime record={r} field="checkInAt" onSaved={() => setReloadToken((t) => t + 1)} />
                           </td>
                           <td data-label="Check Out" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            {timeFmt(r.checkOutAt)}
+                            <EditableTime record={r} field="checkOutAt" onSaved={() => setReloadToken((t) => t + 1)} />
                           </td>
                           {isReviewer && (
                             <td
@@ -556,10 +664,10 @@ export function AttendancePage() {
             ? [
                 {
                   id: 'corrections',
-                  label: 'Corrections',
+                  label: 'Overtime',
                   content: (
         <SectionStack tabs={false}>
-        <Section id="attendance.corrections" title="Attendance corrections" hint="HR / Admin" roles={['hr', 'admin']}>
+        <Section id="attendance.corrections" title="Overtime" hint="HR / Admin" roles={['hr', 'admin']}>
           <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />
         </Section>
         </SectionStack>

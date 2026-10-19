@@ -397,6 +397,27 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
   }
 
   const date = new Date(`${dateStr}T00:00:00.000Z`)
+  const before = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
+  if (!before) {
+    res.status(404).json({ message: 'No attendance record for that employee/date' })
+    return
+  }
+
+  // People are not perfect, so the times are checked before they are saved: time out must come after time in, and a
+  // shift cannot run past 20 hours. A night shift's time out is on the next calendar day, so the date matters.
+  const nextIn = checkInAt !== undefined ? (checkInAt === null ? null : new Date(checkInAt)) : before.checkInAt
+  const nextOut = checkOutAt !== undefined ? (checkOutAt === null ? null : new Date(checkOutAt)) : before.checkOutAt
+  if (nextIn && nextOut) {
+    if (nextOut.getTime() <= nextIn.getTime()) {
+      res.status(400).json({ message: 'Time out has to be after time in. For a night shift, the time out is on the next day.' })
+      return
+    }
+    if (nextOut.getTime() - nextIn.getTime() > 20 * 3_600_000) {
+      res.status(400).json({ message: 'That is more than 20 hours between time in and time out. Check the dates.' })
+      return
+    }
+  }
+
   const data = {
     ...(status !== undefined && { status }),
     ...(checkInAt !== undefined && { checkInAt: checkInAt === null ? null : new Date(checkInAt) }),
@@ -418,7 +439,14 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
     throw err
   }
 
-  logAudit(req.auth.sub, 'correct_attendance', 'attendance', record.id)
+  // The audit log keeps what was there before and what it became (Philippine time), so a correction can always be traced.
+  const at = (d: Date | null) =>
+    d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : 'none'
+  const changes: string[] = []
+  if (checkInAt !== undefined) changes.push(`in ${at(before.checkInAt)} -> ${at(record.checkInAt)}`)
+  if (checkOutAt !== undefined) changes.push(`out ${at(before.checkOutAt)} -> ${at(record.checkOutAt)}`)
+  if (overtimeHours !== undefined) changes.push(`overtime ${before.overtimeHours ?? 'none'} -> ${record.overtimeHours ?? 'none'}`)
+  logAudit(req.auth.sub, `correct_attendance: ${changes.join('; ') || 'no change'}`, 'attendance', record.id)
   res.status(200).json({
     id: record.id,
     employeeId: record.employeeId,
