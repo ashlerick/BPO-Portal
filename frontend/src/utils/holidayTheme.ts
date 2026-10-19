@@ -13,3 +13,28 @@ export function holidayTheme(name: string): HolidayTheme {
   if (/independence|valor|heroes|bonifacio|rizal|aquino|edsa|national|republic/.test(n)) return 'national'
   return 'other'
 }
+
+// A short, warm greeting for the day. Says nothing about pay or how the day is recorded: HR can change that.
+// Same wording as the BPO Time panel.
+export function holidayGreeting(name: string, theme: HolidayTheme): string {
+  const n = name.toLowerCase()
+  if (/rizal|aquino/.test(n)) return 'Remembering a hero of our country.'
+  if (/chinese/.test(n)) return 'Gung hei fat choy!'
+  if (/last day of the year|year.?s eve/.test(n)) return 'Wishing you a great end to the year.'
+  switch (theme) {
+    case 'newyear':
+      return 'Happy New Year!'
+    case 'holyweek':
+      return 'Wishing you a peaceful, reflective day.'
+    case 'christmas':
+      return 'Merry Christmas! Wishing you a joyful day.'
+    case 'saints':
+      return 'Wishing you a quiet, peaceful day.'
+    case 'national':
+      return `Mabuhay! Happy ${name}.`
+    case 'labour':
+      return 'Thank you for all your hard work.'
+    default:
+      return 'Enjoy the holiday!'
+  }
+}

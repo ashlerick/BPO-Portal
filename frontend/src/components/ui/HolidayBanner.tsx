@@ -1,4 +1,4 @@
-import { holidayTheme } from '../../utils/holidayTheme'
+import { holidayGreeting, holidayTheme } from '../../utils/holidayTheme'
 
 // "Holiday today" banner for the dashboard, in the day's colours (index.css). Confetti for New Year, snow for Christmas;
 // reduced motion hides them. Nothing here changes any other colour in the portal.
@@ -25,7 +25,7 @@ export function HolidayBanner({ name }: { name: string }) {
         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--holiday-ink)]">Holiday today</div>
         <div className="text-xl font-bold text-[var(--holiday-ink)]">{name}</div>
         <p className="mt-0.5 text-sm text-gray-700 dark:text-gray-300">
-          On the company holiday list. Check with HR if you are unsure.
+          {holidayGreeting(name, theme)}
         </p>
       </div>
     </div>
