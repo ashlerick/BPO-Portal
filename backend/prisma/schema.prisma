@@ -355,6 +355,12 @@ model CalendarEvent {
   endDate     DateTime?
   description String?
   createdBy   String
+  // hr (typed in by HR) | nager (prefilled national holiday, see lib/holidays.ts)
+  source      String    @default("hr")
+  // 'nager:2026-12-25' for imported rows, so the import can run twice without duplicating.
+  externalKey String?   @unique
+  // HR marked this prefilled holiday as not a holiday. Kept (not deleted) so the import does not re-add it.
+  disabled    Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
   @@index([startDate])

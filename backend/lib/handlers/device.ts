@@ -11,6 +11,7 @@ import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
 import { ACK_CATEGORIES, EMERGENCY_CATEGORY } from './announcements.js'
 import { measure } from './shifts.js'
+import { holidayOn } from '../holidays.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
@@ -255,8 +256,10 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
   })
 }
 
-function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null; breaks?: unknown } | null) {
+function attendanceBody(record: { status: string; checkInAt: Date | null; checkOutAt: Date | null; workingHoliday?: boolean; breaks?: unknown } | null) {
   return {
+    // true when this day's attendance counts as a working holiday (clocked in on a holiday)
+    workingHoliday: !!record?.workingHoliday,
     checkedIn: !!record?.checkInAt,
     checkedOut: !!record?.checkOutAt,
     status: record?.status ?? null,
@@ -305,7 +308,9 @@ async function shiftFor(employeeId: string, record: { checkInAt: Date | null } |
 
 // Today's attendance plus the shift, the shape every device endpoint answers with.
 async function attendanceView(employeeId: string, record: Parameters<typeof attendanceBody>[0]) {
-  return { ...attendanceBody(record), shift: await shiftFor(employeeId, record) }
+  // holiday: the name when today is a holiday (so the panel can say so), otherwise null.
+  const holiday = await holidayOn(todayInManila())
+  return { ...attendanceBody(record), shift: await shiftFor(employeeId, record), holiday: holiday ? { name: holiday.name } : null }
 }
 
 async function deviceAttendance(
@@ -340,7 +345,8 @@ export async function deviceClockIn(req: VercelRequest, res: VercelResponse) {
     // Already clocked in today (for instance from the portal's own page) is a normal answer, not an error.
     if (existing?.checkInAt) return void res.status(200).json(await attendanceView(employeeId, existing))
 
-    const data = { checkInAt: new Date(), checkInIp: getClientIp(req) }
+    // Clocking in on a holiday makes this a working-holiday attendance (the same flag HR sets by hand on the weekly tracker).
+    const data = { checkInAt: new Date(), checkInIp: getClientIp(req), workingHoliday: !!(await holidayOn(date)) }
     const record = existing
       ? await prisma.attendanceRecord.update({ where: { id: existing.id }, data })
       : await prisma.attendanceRecord.create({ data: { employeeId, date, ...data } })

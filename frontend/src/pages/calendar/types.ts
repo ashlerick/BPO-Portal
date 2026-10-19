@@ -15,4 +15,8 @@ export interface CalendarEventRecord {
   startDate: string
   endDate: string | null
   description: string | null
+  /** 'nager' = prefilled national holiday, 'hr' = typed in by HR */
+  source: string
+  /** HR marked a prefilled holiday as not a holiday */
+  disabled: boolean
 }

@@ -125,6 +125,15 @@ export function CalendarPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  async function setDisabled(id: string, disabled: boolean) {
+    try {
+      const updated = await api.put<CalendarEventRecord>(`/calendar/${id}`, { disabled })
+      setEvents((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null)
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'Could not change the holiday')
+    }
+  }
+
   async function remove(id: string) {
     if (!window.confirm('Remove this event from the calendar?')) return
     try {
@@ -136,7 +145,7 @@ export function CalendarPage() {
   }
 
   const calendarEvents: CalendarEvent[] = [
-    ...(events ?? []).flatMap((e) =>
+    ...(events ?? []).filter((e) => !e.disabled).flatMap((e) =>
       eachDay(e.startDate, e.endDate ?? e.startDate).map((date) => ({
         id: `${e.id}-${date}`,
         date,
@@ -161,6 +170,13 @@ export function CalendarPage() {
   return (
     <div>
       <PageHeader title="Calendar" description="Holidays, company events, meetings, training and deadlines." />
+      {isManager && (
+        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+          National holidays are prefilled and count as holidays unless you press <b>Not a holiday</b>. A day that is not listed is an ordinary
+          day until you add it below as a holiday with its name (local holidays go here too). Anyone who clocks in on a holiday is
+          marked as a working holiday.
+        </p>
+      )}
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
@@ -189,7 +205,14 @@ export function CalendarPage() {
                       <li key={e.id}>
                         <Card className="flex flex-wrap items-start justify-between gap-2 !py-3">
                           <div className="min-w-0">
-                            <div className="font-medium text-gray-900 dark:text-gray-100">{e.title}</div>
+                            <div className={`font-medium text-gray-900 dark:text-gray-100 ${e.disabled ? 'line-through opacity-60' : ''}`}>
+                              {e.title}
+                              {e.source === 'nager' && (
+                                <span className="ml-2 rounded-full border border-gray-300 px-2 py-0.5 text-xs font-normal text-gray-500 no-underline dark:border-gray-600 dark:text-gray-400">
+                                  {e.disabled ? 'Not a holiday' : 'Prefilled'}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-sm text-gray-500 dark:text-gray-400">
                               {formatDateOnly(e.startDate)}
                               {e.endDate && e.endDate.slice(0, 10) !== e.startDate.slice(0, 10)
@@ -201,9 +224,16 @@ export function CalendarPage() {
                             )}
                           </div>
                           {isManager && (
-                            <Button size="sm" variant="danger" onClick={() => remove(e.id)}>
-                              Remove
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              {e.kind === 'holiday' && (
+                                <Button size="sm" onClick={() => setDisabled(e.id, !e.disabled)}>
+                                  {e.disabled ? 'Count as holiday' : 'Not a holiday'}
+                                </Button>
+                              )}
+                              <Button size="sm" variant="danger" onClick={() => remove(e.id)}>
+                                Remove
+                              </Button>
+                            </div>
                           )}
                         </Card>
                       </li>
