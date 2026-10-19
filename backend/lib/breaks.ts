@@ -54,6 +54,51 @@ export function readBreaks(json: unknown): BreakEntry[] {
   return out.sort((a, b) => BREAK_SLOTS.indexOf(a.slot) - BREAK_SLOTS.indexOf(b.slot))
 }
 
+const SLOT_LABEL: Record<BreakSlot, string> = { morning: 'Break 1', lunch: 'Lunch', afternoon: 'Break 2' }
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+/** A day's breaks as short text for the audit log, for example "Break 1 10:04, Lunch 30:43, Break 2 not taken". */
+export function summarizeBreaks(entries: BreakEntry[]): string {
+  if (entries.length === 0) return 'none'
+  return entries
+    .map((e) => {
+      if (e.status === 'not_taken') return `${SLOT_LABEL[e.slot]} not taken`
+      if (!e.startedAt || !e.endedAt) return `${SLOT_LABEL[e.slot]} no end`
+      return `${SLOT_LABEL[e.slot]} ${mmss(Math.round((new Date(e.endedAt).getTime() - new Date(e.startedAt).getTime()) / 1000))}`
+    })
+    .join(', ')
+}
+
+export type EditedBreak = { slot: BreakSlot; status: 'taken' | 'not_taken'; startedAt: string | null; endedAt: string | null }
+
+/**
+ * HR's edit of a day's breaks. Each slot at most once; a taken break needs a start and an end, in that order, no longer than
+ * three hours; two breaks cannot overlap. How far a break ran over is worked out here, from the times, by the same grace rule
+ * the app uses, so an edit can never store a different answer than the rules give.
+ */
+export function editedBreaks(input: EditedBreak[]): BreakResult {
+  const out: BreakEntry[] = []
+  for (const e of input) {
+    const label = SLOT_LABEL[e.slot]
+    if (out.some((x) => x.slot === e.slot)) return { error: `${label} is listed twice.` }
+    if (e.status === 'not_taken') {
+      out.push({ slot: e.slot, status: 'not_taken', startedAt: null, endedAt: null, overSeconds: 0 })
+      continue
+    }
+    if (!e.startedAt || !e.endedAt) return { error: `${label} needs a start and an end time.` }
+    const start = new Date(e.startedAt)
+    const end = new Date(e.endedAt)
+    if (end.getTime() <= start.getTime()) return { error: `${label}: the end has to be after the start.` }
+    if (end.getTime() - start.getTime() > 3 * 3_600_000) return { error: `${label} is longer than 3 hours. Check the times.` }
+    out.push({ slot: e.slot, status: 'taken', startedAt: e.startedAt, endedAt: e.endedAt, overSeconds: overSecondsFor(e.slot, e.startedAt, end) })
+  }
+  const taken = out.filter((e) => e.status === 'taken').sort((a, b) => new Date(a.startedAt!).getTime() - new Date(b.startedAt!).getTime())
+  for (let i = 1; i < taken.length; i++) {
+    if (new Date(taken[i].startedAt!).getTime() < new Date(taken[i - 1].endedAt!).getTime()) return { error: 'Two breaks overlap. Check the times.' }
+  }
+  return { entries: out.sort((a, b) => BREAK_SLOTS.indexOf(a.slot) - BREAK_SLOTS.indexOf(b.slot)) }
+}
+
 export function runningBreak(entries: BreakEntry[]): BreakEntry | undefined {
   return entries.find((e) => e.status === 'taken' && e.startedAt && !e.endedAt)
 }

@@ -6,7 +6,7 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { sendEmail } from '../lib/email.js'
 import { inclusiveDayCount, todayInManila } from '../lib/dates.js'
-import { readBreaks } from '../lib/breaks.js'
+import { BREAK_SLOTS, editedBreaks, readBreaks, summarizeBreaks } from '../lib/breaks.js'
 import { buildAttendanceXlsx } from '../lib/attendanceReport.js'
 import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { formatDisplayName } from '../lib/names.js'
@@ -370,6 +370,18 @@ const correctAttendanceSchema = z.object({
   checkOutAt: z.string().datetime().nullable().optional(),
   checkInIp: z.string().nullable().optional(),
   checkOutIp: z.string().nullable().optional(),
+  // HR's edit of the day's breaks (the whole list). See editedBreaks in lib/breaks.ts.
+  breaks: z
+    .array(
+      z.object({
+        slot: z.enum(BREAK_SLOTS),
+        status: z.enum(['taken', 'not_taken']),
+        startedAt: z.string().datetime().nullable(),
+        endedAt: z.string().datetime().nullable(),
+      }),
+    )
+    .max(3)
+    .optional(),
   overtimeHours: z.number().min(0).max(24).nullable().optional(),
   workingHoliday: z.boolean().optional(),
 })
@@ -390,7 +402,7 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
     return
   }
 
-  const { employeeId, date: dateStr, status, checkInAt, checkOutAt, checkInIp, checkOutIp, overtimeHours, workingHoliday } = parsed.data
+  const { employeeId, date: dateStr, status, checkInAt, checkOutAt, checkInIp, checkOutIp, overtimeHours, workingHoliday, breaks } = parsed.data
   const employee = await prisma.employee.findUnique({ where: { id: employeeId } })
   if (!employee) {
     res.status(404).json({ message: 'Employee not found' })
@@ -419,8 +431,30 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
     }
   }
 
+  // Breaks: checked as a set, and against the shift (a break cannot start before time in or end after time out).
+  let newBreaks: ReturnType<typeof editedBreaks> | null = null
+  if (breaks !== undefined) {
+    newBreaks = editedBreaks(breaks)
+    if ('error' in newBreaks) {
+      res.status(400).json({ message: newBreaks.error })
+      return
+    }
+    for (const e of newBreaks.entries) {
+      if (e.status !== 'taken') continue
+      if (nextIn && new Date(e.startedAt!).getTime() < nextIn.getTime()) {
+        res.status(400).json({ message: 'A break cannot start before time in.' })
+        return
+      }
+      if (nextOut && new Date(e.endedAt!).getTime() > nextOut.getTime()) {
+        res.status(400).json({ message: 'A break cannot end after time out.' })
+        return
+      }
+    }
+  }
+
   const data = {
     ...(status !== undefined && { status }),
+    ...(newBreaks && 'entries' in newBreaks && { breaks: newBreaks.entries }),
     ...(checkInAt !== undefined && { checkInAt: checkInAt === null ? null : new Date(checkInAt) }),
     ...(checkOutAt !== undefined && { checkOutAt: checkOutAt === null ? null : new Date(checkOutAt) }),
     ...(checkInIp !== undefined && { checkInIp }),
@@ -447,6 +481,7 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
   if (checkInAt !== undefined) changes.push(`in ${at(before.checkInAt)} -> ${at(record.checkInAt)}`)
   if (checkOutAt !== undefined) changes.push(`out ${at(before.checkOutAt)} -> ${at(record.checkOutAt)}`)
   if (overtimeHours !== undefined) changes.push(`overtime ${before.overtimeHours ?? 'none'} -> ${record.overtimeHours ?? 'none'}`)
+  if (breaks !== undefined) changes.push(`breaks ${summarizeBreaks(readBreaks(before.breaks))} -> ${summarizeBreaks(readBreaks(record.breaks))}`)
   logAudit(req.auth.sub, `correct_attendance: ${changes.join('; ') || 'no change'}`, 'attendance', record.id)
   res.status(200).json({
     id: record.id,

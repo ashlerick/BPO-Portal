@@ -219,6 +219,129 @@ function EditableTime({
   )
 }
 
+// One break slot (Break 1, Lunch or Break 2) in its own column, with a pencil. HR can change when it started and ended, mark it
+// not taken, or remove the record. The portal checks the times before saving (the end after the start, inside the shift, no
+// overlap with another break) and works out "over" itself by the grace rule; every change is traced in the audit log.
+function EditableBreak({
+  record,
+  slot,
+  onSaved,
+}: {
+  record: AttendanceRecord
+  slot: 'morning' | 'lunch' | 'afternoon'
+  onSaved: () => void
+}) {
+  const { guardedAction } = useAuth()
+  const label = { morning: 'Break 1', lunch: 'Lunch', afternoon: 'Break 2' }[slot]
+  const entry = record.breaks?.find((b) => b.slot === slot)
+  const [editing, setEditing] = useState(false)
+  const [mode, setMode] = useState<'taken' | 'not_taken' | 'none'>('taken')
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function open() {
+    setMode(entry ? entry.status : 'taken')
+    const base = record.checkInAt ?? new Date().toISOString()
+    setStart(toManilaLocal(entry?.startedAt ?? base))
+    setEnd(toManilaLocal(entry?.endedAt ?? entry?.startedAt ?? base))
+    setError(null)
+    setEditing(true)
+  }
+
+  const secs = start && end ? Math.round((new Date(fromManilaLocal(end)).getTime() - new Date(fromManilaLocal(start)).getTime()) / 1000) : null
+  const timesOk = mode !== 'taken' || (secs !== null && secs > 0 && secs <= 3 * 3600)
+  const mmss = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`
+
+  function save() {
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setError(null)
+      try {
+        const others = (record.breaks ?? [])
+          .filter((b) => b.slot !== slot)
+          .map(({ slot: sl, status, startedAt, endedAt }) => ({ slot: sl, status, startedAt, endedAt }))
+        const mine =
+          mode === 'none'
+            ? []
+            : [{ slot, status: mode, startedAt: mode === 'taken' ? fromManilaLocal(start) : null, endedAt: mode === 'taken' ? fromManilaLocal(end) : null }]
+        await api.post('/leave/attendance/correct', {
+          employeeId: record.employeeId,
+          date: record.date.slice(0, 10),
+          breaks: [...others, ...mine],
+        })
+        setEditing(false)
+        onSaved()
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : `Could not save ${label}`)
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
+
+  if (!editing) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <BreakSlotCell breaks={record.breaks} slot={slot} />
+        <button
+          type="button"
+          onClick={open}
+          aria-label={`${entry ? 'Edit' : 'Add'} ${label} for ${record.employeeName}`}
+          title={entry ? `Edit ${label}` : `Add ${label}`}
+          className="rounded p-0.5 text-gray-400 hover:bg-black/5 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
+        >
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+          </svg>
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <div className="min-w-[13rem] space-y-1.5 text-xs">
+      <div className="flex flex-wrap gap-x-3 gap-y-1" role="radiogroup" aria-label={`${label} status`}>
+        {([['taken', 'Taken'], ['not_taken', 'Not taken'], ['none', 'No record']] as const).map(([v, text]) => (
+          <label key={v} className="flex items-center gap-1">
+            <input type="radio" name={`brk-${record.id}-${slot}`} checked={mode === v} onChange={() => setMode(v)} />
+            {text}
+          </label>
+        ))}
+      </div>
+      {mode === 'taken' && (
+        <>
+          <label className="block">
+            <span className="text-gray-500 dark:text-gray-400">Started (Manila time)</span>
+            <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="field mt-0.5 w-full px-2 py-1 text-sm" />
+          </label>
+          <label className="block">
+            <span className="text-gray-500 dark:text-gray-400">Ended</span>
+            <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="field mt-0.5 w-full px-2 py-1 text-sm" />
+          </label>
+          {secs !== null &&
+            (timesOk ? (
+              <p className="text-brand-700 dark:text-brand-400">{mmss(secs)} long</p>
+            ) : (
+              <p className="text-red-600 dark:text-red-400">The end has to be after the start, and within 3 hours.</p>
+            ))}
+        </>
+      )}
+      {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+      <div className="flex gap-2">
+        <Button size="sm" variant="primary" disabled={!timesOk || saving} onClick={save}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button size="sm" onClick={() => setEditing(false)} disabled={saving}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
   const { guardedAction } = useAuth()
   const { data: employees } = useApiData<EmployeeRecord[]>('/employees')
@@ -404,6 +527,9 @@ export function AttendancePage() {
   const absences = records.filter((r) => r.status === 'absent')
   const present = records.filter((r) => r.status === 'present')
   // One block per person (the same grouping the Excel export uses for its sheets), people A to Z, days in order.
+  // With everyone shown, each person's block starts closed (a header line with the counts and what needs a look); with one
+  // person chosen it starts open. Opening or closing is remembered per person until the list changes.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({})
   const byPerson = [...records]
     .sort((a, b) => a.employeeName.localeCompare(b.employeeName) || a.date.localeCompare(b.date))
     .reduce<{ name: string; rows: AttendanceRecord[] }[]>((groups, r) => {
@@ -502,6 +628,16 @@ export function AttendancePage() {
         <SectionStack tabs={false}>
         <Section id="attendance.history" title="Attendance history" hint={`${from} to ${to}`} defaultOpen>
           {data && data.length === 0 && <EmptyState label="No attendance records in this range." />}
+          {data && data.length > 1 && byPerson.length > 1 && (
+            <div className="mb-2 flex gap-2">
+              <Button size="sm" onClick={() => setToggled(Object.fromEntries(byPerson.map((g) => [g.rows[0].employeeId ?? g.name, true])))}>
+                Open all
+              </Button>
+              <Button size="sm" onClick={() => setToggled(Object.fromEntries(byPerson.map((g) => [g.rows[0].employeeId ?? g.name, false])))}>
+                Close all
+              </Button>
+            </div>
+          )}
           {data && data.length > 0 && (
             <Card className="overflow-x-auto !p-0">
               <table className="stack-table w-full text-left text-sm">
@@ -518,17 +654,43 @@ export function AttendancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {byPerson.flatMap(({ name, rows }) => [
-                    <tr key={`h-${rows[0].employeeId ?? name}`} className="bg-black/[0.04] dark:bg-white/[0.05]">
-                      <td colSpan={8} data-primary className="py-2 pl-4 pr-4 font-medium text-gray-900 dark:text-gray-100">
-                        {name}
-                        <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-                          {rows.filter((x) => x.status === 'present').length} present
-                          {rows.some((x) => x.status === 'absent') ? `, ${rows.filter((x) => x.status === 'absent').length} absent` : ''}
-                        </span>
+                  {byPerson.flatMap(({ name, rows }) => {
+                    const key = rows[0].employeeId ?? name
+                    const isOpen = toggled[key] ?? byPerson.length === 1
+                    const presentDays = rows.filter((x) => x.status === 'present').length
+                    const absentDays = rows.filter((x) => x.status === 'absent').length
+                    const missingOut = rows.filter((x) => x.status === 'present' && x.checkInAt && !x.checkOutAt).length
+                    const overBreaks = rows.reduce((n, x) => n + (x.breaks ?? []).filter((b) => b.overSeconds > 0).length, 0)
+                    return [
+                    <tr key={`h-${key}`} className="bg-black/[0.04] dark:bg-white/[0.05]">
+                      <td colSpan={8} data-primary className="p-0">
+                        <button
+                          type="button"
+                          onClick={() => setToggled((t) => ({ ...t, [key]: !isOpen }))}
+                          aria-expanded={isOpen}
+                          className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-left font-medium text-gray-900 hover:bg-black/[0.03] dark:text-gray-100 dark:hover:bg-white/[0.04]"
+                        >
+                          <span aria-hidden className={`inline-block text-xs text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`}>
+                            ▶
+                          </span>
+                          {name}
+                          <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
+                            {presentDays} present{absentDays ? `, ${absentDays} absent` : ''}
+                          </span>
+                          {missingOut > 0 && (
+                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-400">
+                              {missingOut} no time out
+                            </span>
+                          )}
+                          {overBreaks > 0 && (
+                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-400">
+                              {overBreaks} break{overBreaks === 1 ? '' : 's'} over
+                            </span>
+                          )}
+                        </button>
                       </td>
                     </tr>,
-                    ...rows.map((r) => (
+                    ...(!isOpen ? [] : rows.map((r) => (
                     <tr
                       key={r.id}
                       className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]"
@@ -560,13 +722,13 @@ export function AttendancePage() {
                             <EditableTime record={r} field="checkOutAt" onSaved={() => setReloadToken((t) => t + 1)} />
                           </td>
                           <td data-label="Break 1" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <BreakSlotCell breaks={r.breaks} slot="morning" />
+                            <EditableBreak record={r} slot="morning" onSaved={() => setReloadToken((t) => t + 1)} />
                           </td>
                           <td data-label="Lunch" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <BreakSlotCell breaks={r.breaks} slot="lunch" />
+                            <EditableBreak record={r} slot="lunch" onSaved={() => setReloadToken((t) => t + 1)} />
                           </td>
                           <td data-label="Break 2" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <BreakSlotCell breaks={r.breaks} slot="afternoon" />
+                            <EditableBreak record={r} slot="afternoon" onSaved={() => setReloadToken((t) => t + 1)} />
                           </td>
                           {isReviewer && (
                             <td
@@ -587,8 +749,9 @@ export function AttendancePage() {
                         </>
                       )}
                     </tr>
-                    )),
-                  ])}
+                    ))),
+                    ]
+                  })}
                 </tbody>
               </table>
             </Card>
