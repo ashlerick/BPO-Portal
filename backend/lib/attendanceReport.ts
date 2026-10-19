@@ -25,7 +25,7 @@ export interface AttendanceReportRow {
 const DAY_MS = 24 * 3_600_000
 const MANILA_MS = 8 * 3_600_000
 const RULES = 'Rules' // sheet name
-const R = { b1: `${RULES}!$B$2`, lunch: `${RULES}!$B$3`, b2: `${RULES}!$B$4`, grace: `${RULES}!$B$5`, deduct: `${RULES}!$B$6` }
+const R = { b1: `${RULES}!$B$2`, lunch: `${RULES}!$B$3`, b2: `${RULES}!$B$4`, grace: `${RULES}!$B$5` }
 const HEADS = ['Date', 'Time in', 'Time out', 'Break 1', 'Lunch', 'Break 2', 'In to out (h)', 'Hours worked', 'Breaks over', 'Status', 'Overtime', 'Holiday worked', 'Notes']
 const LAST_COL = HEADS.length
 
@@ -42,7 +42,12 @@ const round2 = (n: number) => Math.round(n * 100) / 100
 const hoursBetween = (a: Date | null, b: Date | null) => (a && b ? Math.max(0, round2((b.getTime() - a.getTime()) / 3_600_000)) : null)
 
 const ALLOWANCE: Record<BreakSlot, number> = BREAK_ALLOWANCE_SECONDS
-const DEDUCTION_HOURS = Object.values(ALLOWANCE).reduce((a, b) => a + b, 0) / 3600
+const ALL_SLOTS_HOURS = Object.values(ALLOWANCE).reduce((a, b) => a + b, 0) / 3600
+
+// The hours a day's recorded breaks take off, exactly as the BPO Time app counts them: a break or lunch that was taken (and
+// ended) or marked not taken takes its full allowance off; one with no record takes nothing. Breaks are not counted in the hours.
+const deductionHours = (entries: BreakEntry[]) =>
+  entries.reduce((sum, e) => sum + (e.status === 'not_taken' || (e.startedAt && e.endedAt) ? ALLOWANCE[e.slot] / 3600 : 0), 0)
 
 /** A break slot's raw cell: its duration (a number of days, shown as m:ss), or text when it was not taken / has no end. */
 function breakValue(entries: BreakEntry[], slot: BreakSlot): { value: number | string | null; seconds: number | null } {
@@ -161,7 +166,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
   // ---- Rules: the break rules, once. Change a value and every sheet follows. (Rows 2 to 6, as R expects.)
   const rules = workbook.addWorksheet(RULES)
   rules.columns = [{ width: 44 }, { width: 14 }, { width: 70 }]
-  rules.addRow(['Break rules (agreed 2026-10-16). Breaks are not counted in the hours. Change a value and every sheet follows.']).font = { bold: true }
+  rules.addRow(['Break rules (agreed 2026-10-16). Breaks are not counted in the hours, as in the BPO Time app. Change a value and every sheet follows.']).font = { bold: true }
   for (const [label, seconds] of [
     ['Break 1 allowed', ALLOWANCE.morning],
     ['Lunch allowed', ALLOWANCE.lunch],
@@ -171,11 +176,12 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
     const row = rules.addRow([label, seconds / 86400])
     row.getCell(2).numFmt = 'h:mm:ss'
   }
-  const deductRow = rules.addRow(['Fixed deduction from the day (hours)'])
-  deductRow.getCell(2).value = { formula: '(B2+B3+B4)*24', result: DEDUCTION_HOURS }
+  const deductRow = rules.addRow(['All three together (hours)'])
+  deductRow.getCell(2).value = { formula: '(B2+B3+B4)*24', result: ALL_SLOTS_HOURS }
   deductRow.getCell(2).numFmt = '0.00'
   rules.getCell('C5').value = 'A break only counts as over once it runs past its allowance plus this grace.'
-  rules.getCell('C6').value = 'Hours less this is "Worked". The deduction is the same whether or not the breaks were taken.'
+  rules.getCell('C2').value = 'A break or lunch that was recorded (taken or marked not taken) takes its full allowance off the day.'
+  rules.getCell('C6').value = 'A day with no break records takes nothing off. A break that was started but never ended takes nothing off until it is fixed.'
 
   for (const [, list] of byPerson) {
     const name = list[0].employeeName
@@ -184,7 +190,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
     sheet.columns = [16, 12, 12, 11, 11, 11, 9, 9, 12, 10, 10, 15, 28].map((width) => ({ width }))
     sheet.addRow([name]).font = { bold: true, size: 14 }
     sheet.addRow([rangeText])
-    sheet.addRow(['Raw data from the portal. Hours worked = time in to out less the fixed 50 minutes for breaks and lunch. The hours, the over counts and every total are formulas (break rules on the Rules sheet).']).font = {
+    sheet.addRow(['Raw data from the portal. Hours worked = time in to out less the breaks and lunch that were recorded (each takes its allowance off, as in the BPO Time app). The hours, the over counts and every total are formulas; the break rules are on the Rules sheet.']).font = {
       italic: true,
       size: 9,
     }
@@ -245,9 +251,13 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
 
         // Formulas, each with its result stored too so the numbers also show in Protected View.
         const h = absent ? null : hoursBetween(r.checkInAt, r.checkOutAt)
-        const worked = h === null ? null : Math.max(0, round2(h - DEDUCTION_HOURS))
+        const worked = h === null ? null : Math.max(0, round2(h - deductionHours(r.breaks)))
         row.getCell(7).value = { formula: `IF(AND(ISNUMBER(B${n}),ISNUMBER(C${n})),ROUND((C${n}-B${n})*24,2),"")`, result: h ?? '' }
-        row.getCell(8).value = { formula: `IF(ISNUMBER(G${n}),MAX(0,ROUND(G${n}-${R.deduct},2)),"")`, result: worked ?? '' }
+        const cut = (cell: string, allowed: string) => `IF(OR(ISNUMBER(${cell}),${cell}="Not taken"),${allowed},0)`
+        row.getCell(8).value = {
+          formula: `IF(ISNUMBER(G${n}),MAX(0,ROUND(G${n}-(${cut(`D${n}`, R.b1)}+${cut(`E${n}`, R.lunch)}+${cut(`F${n}`, R.b2)})*24,2)),"")`,
+          result: worked ?? '',
+        }
         const over = (cell: string, allowed: string) => `IF(AND(ISNUMBER(${cell}),${cell}>${allowed}+${R.grace}),1,0)`
         const overCount = absent
           ? 0

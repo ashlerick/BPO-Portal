@@ -11,7 +11,7 @@ import { addDaysIso, formatDateOnly, formatManilaTime, todayInManilaIso } from '
 import type { AttendanceRecord } from './types'
 import { MySchedule } from './Shifts'
 import { BreakSlotCell } from '../../components/ui/BreaksCell'
-import { BREAK_DEDUCTION_HOURS } from '../../utils/breaks'
+import { netHours } from '../../utils/breaks'
 
 // The employee's own page: today, then one table of their days (a week at a time, or a month), then their shift. It
 // replaces the old all-in-one Attendance page for everyone who is not HR, so nothing here lists other people or exports.
@@ -80,7 +80,7 @@ export function MyTimePage() {
   // Hours less the fixed break deduction, for each finished day.
   const totalWorked = present.reduce((sum, r) => {
     const h = hoursBetween(r.checkInAt, r.checkOutAt)
-    return h === null ? sum : sum + Math.max(0, h - BREAK_DEDUCTION_HOURS)
+    return h === null ? sum : sum + netHours(h, r.breaks)
   }, 0)
 
   function step(by: number) {
@@ -175,7 +175,7 @@ export function MyTimePage() {
                   <th className="py-2 pr-4 font-medium">Lunch</th>
                   <th className="py-2 pr-4 font-medium">Break 2</th>
                   <th className="py-2 pr-4 font-medium" title="Time in to time out">In to out</th>
-                  <th className="py-2 pr-4 font-medium" title="Time in to time out less the fixed 50 minutes for breaks and lunch">Hours worked</th>
+                  <th className="py-2 pr-4 font-medium" title="Time in to time out less your recorded breaks and lunch">Hours worked</th>
                   <th className="py-2 font-medium">Notes</th>
                 </tr>
               </thead>
@@ -223,7 +223,7 @@ export function MyTimePage() {
                             {hours === null ? '—' : hours.toFixed(2)}
                           </td>
                           <td data-label="Worked" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
-                            {hours === null ? '—' : Math.max(0, hours - BREAK_DEDUCTION_HOURS).toFixed(2)}
+                            {hours === null ? '—' : netHours(hours, r?.breaks).toFixed(2)}
                           </td>
                           <td data-label="Notes" className="py-2 text-gray-500 dark:text-gray-400">
                             {notes.join(' · ') || (r ? '' : '')}
