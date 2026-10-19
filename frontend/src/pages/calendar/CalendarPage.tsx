@@ -170,13 +170,6 @@ export function CalendarPage() {
   return (
     <div>
       <PageHeader title="Calendar" description="Holidays, company events, meetings, training and deadlines." />
-      {isManager && (
-        <p className="mb-3 text-sm text-gray-600 dark:text-gray-400">
-          National holidays are prefilled and count as holidays unless you press <b>Not a holiday</b>. A day that is not listed is an ordinary
-          day until you add it below as a holiday with its name (local holidays go here too). Anyone who clocks in on a holiday is
-          marked as a working holiday.
-        </p>
-      )}
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}

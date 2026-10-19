@@ -164,7 +164,7 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
           <input type="number" min="0" max="24" step="0.25" value={overtime} onChange={(e) => setOvertime(e.target.value)} className="field mt-1" />
         </label>
         <p className="self-end pb-2 text-xs text-gray-500 dark:text-gray-400">
-          Holidays are set once for the whole day below, not per person.
+          Holidays are set once for the whole day on the Calendar, not per person.
         </p>
       </div>
       {message && (
@@ -174,63 +174,6 @@ function CorrectionForm({ onCorrected }: { onCorrected: () => void }) {
       )}
       <Button type="submit" variant="primary" size="sm" disabled={submitting}>
         {submitting ? 'Saving…' : 'Apply correction'}
-      </Button>
-    </form>
-  )
-}
-
-// A holiday is a property of the day: name it once and everyone who clocked in that day is marked as having worked a
-// holiday (the same record the Calendar's Holidays list uses). Prefilled national holidays are already there; a day
-// that is not listed becomes a holiday here, with its name, and a prefilled one can be switched off on the Calendar.
-function HolidayForDay({ onChanged }: { onChanged: () => void }) {
-  const { guardedAction } = useAuth()
-  const [date, setDate] = useState(todayInManilaIso())
-  const [name, setName] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    guardedAction(['hr', 'admin'], async () => {
-      setSubmitting(true)
-      setMessage(null)
-      try {
-        await api.post('/calendar', { title: name, kind: 'holiday', startDate: date })
-        setMessage({ ok: true, text: `${name} is now a holiday on ${formatDateOnly(date)}. Anyone who clocked in that day is marked as working a holiday.` })
-        setName('')
-        onChanged()
-      } catch (err) {
-        setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Could not add the holiday' })
-      } finally {
-        setSubmitting(false)
-      }
-    })
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        Mark a whole day as a holiday, for everyone. National holidays are already prefilled; use this for a day that is not
-        listed, such as a local holiday. To remove one, press "Not a holiday" on the{' '}
-        <Link to="/calendar" className="text-brand-700 underline dark:text-brand-400">Calendar</Link>.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          Date
-          <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="field mt-1" />
-        </label>
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          Holiday name
-          <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Iloilo City Charter Day" className="field mt-1" />
-        </label>
-      </div>
-      {message && (
-        <p className={`text-sm ${message.ok ? 'text-brand-700 dark:text-brand-400' : 'text-red-600 dark:text-red-400'}`}>
-          {message.text}
-        </p>
-      )}
-      <Button type="submit" variant="primary" size="sm" disabled={submitting}>
-        {submitting ? 'Saving…' : 'Mark as holiday'}
       </Button>
     </form>
   )
@@ -616,9 +559,6 @@ export function AttendancePage() {
                   label: 'Corrections',
                   content: (
         <SectionStack tabs={false}>
-        <Section id="attendance.holiday" title="Holiday for a day" hint="Applies to everyone" roles={['hr', 'admin']}>
-          <HolidayForDay onChanged={() => setReloadToken((t) => t + 1)} />
-        </Section>
         <Section id="attendance.corrections" title="Attendance corrections" hint="HR / Admin" roles={['hr', 'admin']}>
           <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />
         </Section>
