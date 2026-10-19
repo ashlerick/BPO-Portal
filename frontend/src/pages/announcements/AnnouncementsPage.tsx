@@ -1,3 +1,4 @@
+import { FormattedText } from '../../components/ui/FormattedText'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
@@ -116,11 +117,14 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         <textarea
           id="ann-content"
           required
-          rows={3}
+          rows={6}
           value={content}
           onChange={(e) => setContent(e.target.value)}
           className="field"
         />
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Line breaks are kept. Use **bold**, _italic_, and start a line with - for a list. Web links become links.
+        </p>
       </div>
       <fieldset className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
         <legend className="sr-only">When to post</legend>
@@ -414,7 +418,7 @@ function AnnouncementItem({
             </span>
           )}
         </div>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{announcement.content}</p>
+        <FormattedText text={announcement.content} clamp className="mt-1 text-sm text-gray-600 dark:text-gray-400" />
         <AnnouncementEngagement announcement={announcement} canManage={canManage} onChange={onUpdated} />
         {!announcement.published && (
           <div className="mt-2 flex flex-wrap items-center gap-2">

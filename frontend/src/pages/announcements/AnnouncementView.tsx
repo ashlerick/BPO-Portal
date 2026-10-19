@@ -1,3 +1,4 @@
+import { FormattedText } from '../../components/ui/FormattedText'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '../../components/AsyncState'
@@ -60,7 +61,7 @@ export function AnnouncementView() {
           {isExpired(announcement) && <Badge tone="gray">Expired</Badge>}
         </div>
         <h1 className="mt-3 break-words text-2xl font-bold tracking-tight text-gold-600 dark:text-gold-400">{announcement.title}</h1>
-        <p className="mt-4 whitespace-pre-wrap break-words text-base leading-relaxed text-gray-700 dark:text-gray-300">{announcement.content}</p>
+        <FormattedText text={announcement.content} className="mt-4 text-base leading-relaxed text-gray-700 dark:text-gray-300" />
         <AnnouncementEngagement announcement={announcement} canManage={canManage} onChange={setAnnouncement} />
       </Card>
     </div>
