@@ -9,7 +9,7 @@ import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
-import { EMERGENCY_CATEGORY, asksAck } from './announcements.js'
+import { EMERGENCY_CATEGORY, asksAck, instantOf } from './announcements.js'
 import { measure } from './shifts.js'
 import { holidayOn } from '../holidays.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
@@ -256,6 +256,15 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
       // A notice that asks for a "Got it" which this person has not given yet.
       needsAck: wantsAck(a) && !done.has(a.id),
     }))
+  // The person's own open deadlines (a "needs action" announcement they have not done yet).
+  const openDeadlines = new Set(
+    (
+      await prisma.todo.findMany({
+        where: { announcementId: { in: shown.map((s) => s.row.id) }, deletedAt: null, status: 'open', employee: { userId: device.userId } },
+        select: { announcementId: true },
+      })
+    ).map((t) => t.announcementId),
+  )
   const birthdays = await birthdaysToday(employee?.id)
   return res.status(200).json({
     announcements: shown.map(({ row: a, featured: isFeatured, needsAck }) => ({
@@ -267,6 +276,10 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
       featured: isFeatured,
       emergency: a.category === EMERGENCY_CATEGORY,
       needsAck,
+      // An event: its day (date-only), the real moment when it has a time, the place, and whether it is mandatory.
+      event: a.isEvent ? { date: a.eventDate, at: instantOf(a.eventDate, a.eventTime, a.eventZone), place: a.eventPlace, mandatory: a.eventMandatory } : null,
+      // The deadline, only while this person still has the to-do open.
+      due: openDeadlines.has(a.id) ? { date: a.actionDueAt, at: instantOf(a.actionDueAt, a.actionDueTime, a.actionDueZone) } : null,
     })),
     birthdays,
   })

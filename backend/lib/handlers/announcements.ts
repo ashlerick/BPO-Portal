@@ -71,7 +71,7 @@ export function asksAck(a: { category: string; isEvent: boolean; eventMandatory:
 }
 
 // A date and time of day typed in one of the two zones, as the real moment (null when no time was given).
-const instantOf = (date: Date | null, time: string | null, zone: string | null): Date | null =>
+export const instantOf = (date: Date | null, time: string | null, zone: string | null): Date | null =>
   date && time && zone ? zonedInstant(date.toISOString().slice(0, 10), time, zone) : null
 
 const DAY_MS = 24 * 60 * 60 * 1000
