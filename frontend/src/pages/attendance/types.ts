@@ -8,6 +8,8 @@ export interface AttendanceRecord {
   checkOutAt: string | null
   overtimeHours?: number | null
   workingHoliday?: boolean
+  // Breaks and lunch taken in the BPO Time app.
+  breaks?: import('../../utils/breaks').BreakEntry[]
   checkInIp?: string | null
   checkInOffSite?: boolean
 }

@@ -280,6 +280,7 @@ async function handleExportAttendance(req: AuthedRequest, res: VercelResponse) {
     checkOutAt: r.checkOutAt,
     overtimeHours: r.overtimeHours === null ? null : Number(r.overtimeHours.toString()),
     workingHoliday: r.workingHoliday,
+    breaks: readBreaks(r.breaks),
   }))
   const buffer = await buildAttendanceXlsx(rows, range.gte, range.lte)
 

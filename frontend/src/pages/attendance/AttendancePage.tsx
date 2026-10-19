@@ -14,6 +14,7 @@ import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
 import { LateReport } from './Shifts'
+import { BreaksCell } from '../../components/ui/BreaksCell'
 
 const timeFmt = formatManilaTime
 
@@ -509,6 +510,7 @@ export function AttendancePage() {
                     <th className="py-3 pr-4 pl-4 font-medium first:pl-4">Date</th>
                     <th className="py-3 pr-4 font-medium">Check In</th>
                     <th className="py-3 pr-4 font-medium">Check Out</th>
+                    <th className="py-3 pr-4 font-medium">Breaks</th>
                     {isReviewer && <th className="py-3 pr-4 font-medium">Check-in IP</th>}
                     {isReviewer && <th className="py-3 pr-4 font-medium">Actions</th>}
                   </tr>
@@ -516,7 +518,7 @@ export function AttendancePage() {
                 <tbody>
                   {byPerson.flatMap(({ name, rows }) => [
                     <tr key={`h-${rows[0].employeeId ?? name}`} className="bg-black/[0.04] dark:bg-white/[0.05]">
-                      <td colSpan={5} data-primary className="py-2 pl-4 pr-4 font-medium text-gray-900 dark:text-gray-100">
+                      <td colSpan={6} data-primary className="py-2 pl-4 pr-4 font-medium text-gray-900 dark:text-gray-100">
                         {name}
                         <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
                           {rows.filter((x) => x.status === 'present').length} present
@@ -536,7 +538,7 @@ export function AttendancePage() {
                         <>
                           <td
                             data-label="Status"
-                            colSpan={isReviewer ? 3 : 2}
+                            colSpan={isReviewer ? 4 : 3}
                             className="py-2.5 pr-4 text-amber-700 dark:text-amber-500"
                           >
                             Absent
@@ -554,6 +556,9 @@ export function AttendancePage() {
                           </td>
                           <td data-label="Check Out" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
                             <EditableTime record={r} field="checkOutAt" onSaved={() => setReloadToken((t) => t + 1)} />
+                          </td>
+                          <td data-label="Breaks" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                            <BreaksCell breaks={r.breaks} />
                           </td>
                           {isReviewer && (
                             <td

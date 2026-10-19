@@ -10,6 +10,7 @@ import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { addDaysIso, formatDateOnly, formatManilaTime, todayInManilaIso } from '../../utils/dates'
 import type { AttendanceRecord } from './types'
 import { MySchedule } from './Shifts'
+import { BreaksCell } from '../../components/ui/BreaksCell'
 
 // The employee's own page: today, then one table of their days (a week at a time, or a month), then their shift. It
 // replaces the old all-in-one Attendance page for everyone who is not HR, so nothing here lists other people or exports.
@@ -164,6 +165,7 @@ export function MyTimePage() {
                   <th className="py-2 pr-4 font-medium">Date</th>
                   <th className="py-2 pr-4 font-medium">Time in</th>
                   <th className="py-2 pr-4 font-medium">Time out</th>
+                  <th className="py-2 pr-4 font-medium">Breaks</th>
                   <th className="py-2 pr-4 font-medium">Hours</th>
                   <th className="py-2 font-medium">Notes</th>
                 </tr>
@@ -188,7 +190,7 @@ export function MyTimePage() {
                         {isToday && <span className="ml-2 text-xs text-brand-700 dark:text-brand-400">Today</span>}
                       </td>
                       {r?.status === 'absent' ? (
-                        <td data-label="Status" colSpan={4} className="py-2 text-amber-700 dark:text-amber-500">
+                        <td data-label="Status" colSpan={5} className="py-2 text-amber-700 dark:text-amber-500">
                           Absent
                         </td>
                       ) : (
@@ -198,6 +200,9 @@ export function MyTimePage() {
                           </td>
                           <td data-label="Time out" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
                             {r ? formatManilaTime(r.checkOutAt) : '—'}
+                          </td>
+                          <td data-label="Breaks" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
+                            <BreaksCell breaks={r?.breaks} />
                           </td>
                           <td data-label="Hours" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
                             {hours === null ? '—' : hours.toFixed(2)}
