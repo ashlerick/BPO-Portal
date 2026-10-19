@@ -49,11 +49,19 @@ export function MyTimePage() {
   const range = mode === 'week' ? { from: mondayOf(anchor), to: addDaysIso(mondayOf(anchor), 6) } : monthBounds(anchor)
   const { data, loading, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?from=${range.from}&to=${range.to}`)
 
+  // Which days of the week this person works comes from their shift (HR sets it), so it follows any schedule. Until a
+  // shift is assigned it is Monday to Friday. 0 is Sunday, as in the shift's work days.
+  const { data: schedule } = useApiData<{ current: { shift: { workDays: number[] } } | null }>('/hr/shifts?kind=schedule')
+  const workDays = schedule?.current?.shift.workDays ?? [1, 2, 3, 4, 5]
+
   const byDate = new Map((data ?? []).map((r) => [r.date.slice(0, 10), r]))
-  // A week shows all seven days (empty ones too); a month shows only the days that have a record.
+  // A week lists the days that are work days (empty ones too), plus any other day they did clock in. A day off with no
+  // record is left out. A month lists only the days that have a record.
   const days =
     mode === 'week'
-      ? DAY_NAMES.map((_, i) => addDaysIso(range.from, i))
+      ? DAY_NAMES.map((_, i) => addDaysIso(range.from, i)).filter(
+          (d) => workDays.includes(new Date(`${d}T00:00:00Z`).getUTCDay()) || byDate.has(d),
+        )
       : [...byDate.keys()].sort()
 
   const records = data ?? []
@@ -199,6 +207,12 @@ export function MyTimePage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {mode === 'week' && data && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Your days off, set by your shift, aren't listed unless you clocked in that day.
+          </p>
         )}
 
         {data && (
