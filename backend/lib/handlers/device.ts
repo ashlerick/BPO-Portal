@@ -9,7 +9,7 @@ import { getClientIp } from '../request.js'
 import { formatDisplayName } from '../names.js'
 import { notFound, parseBody, queryString } from './util.js'
 import { birthdaysToday } from './birthdays.js'
-import { ACK_CATEGORIES, EMERGENCY_CATEGORY } from './announcements.js'
+import { EMERGENCY_CATEGORY, asksAck } from './announcements.js'
 import { measure } from './shifts.js'
 import { holidayOn } from '../holidays.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
@@ -241,7 +241,7 @@ export async function deviceFeed(req: VercelRequest, res: VercelResponse) {
   // Emergencies come first, then the ones waiting for a Got it, then the rest.
   const recent = now.getTime() - 30 * 24 * 60 * 60 * 1000
   const highlightActive = (a: (typeof rows)[number]) => a.highlighted && (!a.highlightUntil || a.highlightUntil > now)
-  const wantsAck = (a: (typeof rows)[number]) => ACK_CATEGORIES.includes(a.category)
+  const wantsAck = (a: (typeof rows)[number]) => asksAck(a)
   const rank = (a: (typeof rows)[number]) => (a.category === EMERGENCY_CATEGORY ? 0 : wantsAck(a) ? 1 : 2)
   const shown = rows
     .filter((a) =>

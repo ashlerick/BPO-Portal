@@ -37,6 +37,7 @@ model User {
   deviceCodes           DeviceCode[]
   announcementReactions AnnouncementReaction[]
   announcementAcks      AnnouncementAck[]
+  announcementRsvps     AnnouncementRsvp[]
   employee              Employee?
   resetTokens           PasswordResetToken[]
   createdAt             DateTime               @default(now())
@@ -209,16 +210,47 @@ model Announcement {
   actionDueAt DateTime?
   // { teamIds, employeeIds } the action is for; null = everyone.
   actionAudience Json?
+  // The deadline's time of day ('HH:mm') and the zone it is in, when it has one (actionDueAt is just the day).
+  actionDueTime String?
+  actionDueZone String?
+  // An event: its day (date-only), time ('HH:mm') and zone ('Asia/Manila' | 'America/Los_Angeles'), place, and whether it is
+  // mandatory (joining is assumed once the person has pressed Got it, unless they say they cannot make it). The Calendar entry
+  // made for it is kept in calendarEventId.
+  isEvent Boolean @default(false)
+  eventDate DateTime?
+  eventTime String?
+  eventZone String?
+  eventPlace String?
+  eventMandatory Boolean @default(false)
+  calendarEventId String?
   publishAt   DateTime?
   expireAt    DateTime?
   createdAt   DateTime               @default(now())
   reactions   AnnouncementReaction[]
   acks        AnnouncementAck[]
+  rsvps       AnnouncementRsvp[]
 
   @@map("announcements")
 }
 
 // One reaction (a thumbs up, heart or party popper) per person per announcement.
+// Whether a person is joining an event (joining true or false), with an optional reason when they cannot.
+model AnnouncementRsvp {
+  id             String       @id @default(uuid())
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcementId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  joining        Boolean
+  note           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_rsvps")
+}
+
 model AnnouncementReaction {
   id             String       @id @default(uuid())
   announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)

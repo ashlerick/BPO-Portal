@@ -6,6 +6,7 @@ import { logAudit } from '../audit.js'
 import { isNotFoundError } from '../errors.js'
 import { notifyUsers } from '../notify.js'
 import { formatDisplayName } from '../names.js'
+import { zonedInstant } from '../dates.js'
 import type { Announcement } from '@prisma/client'
 
 // GET /announcements, POST /announcements (create), PUT/DELETE
@@ -25,9 +26,13 @@ const ANNOUNCEMENT_CATEGORIES = [
 const REACTIONS = ['👍', '❤️', '🎉'] as const
 export const ACK_CATEGORIES: readonly string[] = ['Policy updates', 'Important notices', 'Emergency announcements']
 const reactSchema = z.object({ emoji: z.enum(REACTIONS).nullable() })
+const rsvpSchema = z.object({ joining: z.boolean().nullable(), note: z.string().trim().max(300).nullable().optional() })
 export const EMERGENCY_CATEGORY = 'Emergency announcements'
 // Names sent per reaction; the count is always exact, the page says "and N more" past this.
 const MAX_REACTOR_NAMES = 30
+
+const ZONES = ['Asia/Manila', 'America/Los_Angeles'] as const
+const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Enter the time as hours and minutes')
 
 const upsertSchema = z.object({
   title: z.string().min(1),
@@ -42,12 +47,32 @@ const upsertSchema = z.object({
   // Asks everyone to do something: a to-do for each active employee, due on this date (YYYY-MM-DD).
   needsAction: z.boolean().optional(),
   actionDueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the due date as a date').nullable().optional(),
+  // The deadline's time of day, and the zone it is in (Philippines or California).
+  actionDueTime: timeOfDay.nullable().optional(),
+  actionDueZone: z.enum(ZONES).nullable().optional(),
+  // An event: its day, time, zone and place. Mandatory: joining is assumed once the person has pressed Got it.
+  isEvent: z.boolean().optional(),
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the event day as a date').nullable().optional(),
+  eventTime: timeOfDay.nullable().optional(),
+  eventZone: z.enum(ZONES).nullable().optional(),
+  eventPlace: z.string().trim().max(200).nullable().optional(),
+  eventMandatory: z.boolean().optional(),
   // Who it is for: these teams and these people. Left out (or both empty) = everyone.
   actionAudience: z
     .object({ teamIds: z.array(z.string()).max(100).optional(), employeeIds: z.array(z.string()).max(500).optional() })
     .nullable()
     .optional(),
 })
+
+
+/** Whether it asks people for a "Got it": the notice categories, and any mandatory event. */
+export function asksAck(a: { category: string; isEvent: boolean; eventMandatory: boolean }): boolean {
+  return ACK_CATEGORIES.includes(a.category) || (a.isEvent && a.eventMandatory)
+}
+
+// A date and time of day typed in one of the two zones, as the real moment (null when no time was given).
+const instantOf = (date: Date | null, time: string | null, zone: string | null): Date | null =>
+  date && time && zone ? zonedInstant(date.toISOString().slice(0, 10), time, zone) : null
 
 const DAY_MS = 24 * 60 * 60 * 1000
 // An emergency ends 24 hours after it is posted unless HR sets an end date, so one cannot linger for weeks.
@@ -82,6 +107,13 @@ function readAudience(json: unknown): Audience | null {
   return teamIds.length + employeeIds.length > 0 ? { teamIds, employeeIds } : null
 }
 
+/** The deadline in words, with its time in both zones when it has one ("Fri, Oct 30, 11:00 AM California, Sat, Oct 31, 2:00 AM Manila"). */
+function deadlineText(a: Announcement): string {
+  const at = instantOf(a.actionDueAt, a.actionDueTime, a.actionDueZone)
+  if (at) return both(at)
+  return a.actionDueAt ? a.actionDueAt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) : ''
+}
+
 async function createActionTodos(a: Announcement): Promise<void> {
   if (!a.needsAction || !a.published) return
   if ((await prisma.todo.count({ where: { announcementId: a.id } })) > 0) return
@@ -104,7 +136,7 @@ async function createActionTodos(a: Announcement): Promise<void> {
     data: people.map((p) => ({
       employeeId: p.id,
       title: a.title,
-      description: `Action needed (from an announcement). ${preview}`,
+      description: `Action needed${deadlineText(a) ? ` by ${deadlineText(a)}` : ''} (from an announcement). ${preview}`,
       dueDate: a.actionDueAt,
       link,
       priority: a.category === EMERGENCY_CATEGORY || a.category === 'Important notices' ? 'urgent' : 'normal',
@@ -112,6 +144,21 @@ async function createActionTodos(a: Announcement): Promise<void> {
       announcementId: a.id,
     })),
   })
+}
+
+// An event goes on the Calendar when it is published, once. The entry says where, and when in both zones (the Calendar itself only
+// holds the day). It is removed with the announcement.
+const both = (at: Date) =>
+  `${at.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles' })} California, ` +
+  `${at.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' })} Manila`
+async function createEventOnCalendar(a: Announcement): Promise<void> {
+  if (!a.isEvent || !a.published || !a.eventDate || a.calendarEventId) return
+  const at = instantOf(a.eventDate, a.eventTime, a.eventZone)
+  const parts = [a.eventPlace ? `Where: ${a.eventPlace}.` : '', at ? `When: ${both(at)}.` : '', 'From an announcement.'].filter(Boolean)
+  const event = await prisma.calendarEvent.create({
+    data: { title: a.title, kind: 'event', startDate: a.eventDate, description: parts.join(' '), createdBy: a.authorId, source: 'announcement' },
+  })
+  await prisma.announcement.update({ where: { id: a.id }, data: { calendarEventId: event.id } })
 }
 
 function isManager(req: AuthedRequest): boolean {
@@ -123,7 +170,7 @@ function isManager(req: AuthedRequest): boolean {
 async function decorate(rows: Announcement[], userId: string, manager: boolean) {
   if (rows.length === 0) return []
   const ids = rows.map((r) => r.id)
-  const [reacted, ackCounts, myAcks, total, actionCounts, myTodos] = await Promise.all([
+  const [reacted, ackCounts, myAcks, total, actionCounts, myTodos, myRsvps, eventRsvps, eventAcks] = await Promise.all([
     prisma.announcementReaction.findMany({
       where: { announcementId: { in: ids } },
       orderBy: { createdAt: 'asc' },
@@ -141,6 +188,14 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
       where: { announcementId: { in: ids }, deletedAt: null, employee: { userId } },
       select: { id: true, announcementId: true, status: true },
     }),
+    prisma.announcementRsvp.findMany({ where: { announcementId: { in: ids }, userId }, select: { announcementId: true, joining: true, note: true } }),
+    // HR also gets the whole picture for events: everyone's answer and who has pressed Got it.
+    manager
+      ? prisma.announcementRsvp.findMany({ where: { announcementId: { in: rows.filter((r) => r.isEvent).map((r) => r.id) } }, select: { announcementId: true, userId: true, joining: true } })
+      : Promise.resolve([]),
+    manager
+      ? prisma.announcementAck.findMany({ where: { announcementId: { in: rows.filter((r) => r.isEvent && r.eventMandatory).map((r) => r.id) } }, select: { announcementId: true, userId: true } })
+      : Promise.resolve([]),
   ])
   return rows.map((a) => {
     // Counts, the caller's own, and who reacted. Announcements are not anonymous, so everyone sees the names.
@@ -153,9 +208,22 @@ async function decorate(rows: Announcement[], userId: string, manager: boolean) 
       if ((reactors[r.emoji] ??= []).length < MAX_REACTOR_NAMES) reactors[r.emoji].push(formatDisplayName(r.user.firstName, r.user.middleName, r.user.lastName))
       if (r.userId === userId) myReaction = r.emoji
     }
-    const needsAck = ACK_CATEGORIES.includes(a.category)
+    const needsAck = asksAck(a)
+    // Who is joining an event. Mandatory: pressing Got it counts as joining, unless they said they cannot make it. Optional: only
+    // a Yes counts, and no answer is no answer.
+    const answers = eventRsvps.filter((r) => r.announcementId === a.id)
+    const said = (yes: boolean) => answers.filter((r) => r.joining === yes).map((r) => r.userId)
+    const assumed = a.eventMandatory ? eventAcks.filter((k) => k.announcementId === a.id).map((k) => k.userId) : []
+    const notJoining = new Set(said(false))
+    const joining = new Set([...said(true), ...assumed.filter((u) => !notJoining.has(u))])
     return {
       ...a,
+      // the real moments, for showing in both zones
+      eventStartAt: instantOf(a.eventDate, a.eventTime, a.eventZone),
+      actionDueInstant: instantOf(a.actionDueAt, a.actionDueTime, a.actionDueZone),
+      myRsvp: myRsvps.find((r) => r.announcementId === a.id) ?? null,
+      ...(manager && a.isEvent && { eventJoining: joining.size, eventNotJoining: notJoining.size, eventTotal: total }),
+
       // Pinned by HR, or an emergency (those are always highlighted). Shown first on the portal and on the app.
       featured: highlightActive(a) || a.category === EMERGENCY_CATEGORY,
       reactions,
@@ -201,7 +269,7 @@ async function handleReact(req: AuthedRequest, res: VercelResponse, id: string) 
     })
     // On a notice that asks for a "Got it" (policy, important, emergency), reacting IS the "Got it": one tap, and HR's
     // list of who has acknowledged counts it. Taking the reaction back does not undo the acknowledgement.
-    if (ACK_CATEGORIES.includes(announcement.category)) {
+    if (asksAck(announcement)) {
       await prisma.announcementAck.createMany({ data: [{ announcementId: id, userId: req.auth.sub }], skipDuplicates: true })
     }
   }
@@ -215,7 +283,7 @@ async function handleAck(req: AuthedRequest, res: VercelResponse, id: string) {
     res.status(404).json({ message: 'Announcement not found' })
     return
   }
-  if (!ACK_CATEGORIES.includes(announcement.category)) {
+  if (!asksAck(announcement)) {
     res.status(400).json({ message: "This announcement doesn't need an acknowledgement" })
     return
   }
@@ -224,6 +292,72 @@ async function handleAck(req: AuthedRequest, res: VercelResponse, id: string) {
 }
 
 // HR/Admin: who has acknowledged, and which active accounts still have not.
+// Joining an event. Mandatory: the person is counted as joining once they press Got it (or react), unless they say they cannot make it
+// (joining false, with an optional reason); saying yes again puts them back. Optional: a plain Yes or No, and no answer stays open.
+// joining null takes the answer back.
+async function handleRsvp(req: AuthedRequest, res: VercelResponse, id: string) {
+  const parsed = rsvpSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ message: 'Say whether you are joining.' })
+    return
+  }
+  const announcement = await findVisible(req, id)
+  if (!announcement || !announcement.isEvent) {
+    res.status(404).json({ message: 'Event not found' })
+    return
+  }
+  const { joining, note } = parsed.data
+  if (joining === null) {
+    await prisma.announcementRsvp.deleteMany({ where: { announcementId: id, userId: req.auth.sub } })
+  } else {
+    await prisma.announcementRsvp.upsert({
+      where: { announcementId_userId: { announcementId: id, userId: req.auth.sub } },
+      create: { announcementId: id, userId: req.auth.sub, joining, note: joining ? null : (note ?? null) },
+      update: { joining, note: joining ? null : (note ?? null) },
+    })
+    // On a mandatory event, answering also settles the check (Got it).
+    if (announcement.eventMandatory) {
+      await prisma.announcementAck.createMany({ data: [{ announcementId: id, userId: req.auth.sub }], skipDuplicates: true })
+    }
+  }
+  res.status(200).json((await decorate([announcement], req.auth.sub, isManager(req)))[0])
+}
+
+// HR/Admin: who is joining an event, who is not (and why), and who has not answered.
+async function handleRsvpList(req: AuthedRequest, res: VercelResponse, id: string) {
+  if (!isManager(req)) {
+    res.status(403).json({ message: 'Insufficient permissions' })
+    return
+  }
+  const announcement = await prisma.announcement.findUnique({ where: { id } })
+  if (!announcement || !announcement.isEvent) {
+    res.status(404).json({ message: 'Event not found' })
+    return
+  }
+  const [users, answers, acks] = await Promise.all([
+    prisma.user.findMany({
+      where: { active: true },
+      select: { id: true, firstName: true, middleName: true, lastName: true },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+    }),
+    prisma.announcementRsvp.findMany({ where: { announcementId: id } }),
+    prisma.announcementAck.findMany({ where: { announcementId: id }, select: { userId: true } }),
+  ])
+  const answer = new Map(answers.map((a) => [a.userId, a]))
+  const acked = new Set(acks.map((a) => a.userId))
+  const joining: { name: string }[] = []
+  const notJoining: { name: string; note: string | null }[] = []
+  const noAnswer: string[] = []
+  for (const u of users) {
+    const name = formatDisplayName(u.firstName, u.middleName, u.lastName)
+    const a = answer.get(u.id)
+    if (a && !a.joining) notJoining.push({ name, note: a.note })
+    else if (a?.joining || (announcement.eventMandatory && acked.has(u.id))) joining.push({ name })
+    else noAnswer.push(name)
+  }
+  res.status(200).json({ joining, notJoining, noAnswer, mandatory: announcement.eventMandatory })
+}
+
 async function handleAckList(req: AuthedRequest, res: VercelResponse, id: string) {
   if (!isManager(req)) {
     res.status(403).json({ message: 'Insufficient permissions' })
@@ -289,10 +423,17 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
     return
   }
 
-  const { title, category, content, published, publishAt, expireAt, highlighted, highlightDays, needsAction, actionDueOn, actionAudience } = parsed.data
+  const {
+    title, category, content, published, publishAt, expireAt, highlighted, highlightDays, needsAction, actionDueOn, actionAudience,
+    actionDueTime, actionDueZone, isEvent, eventDate, eventTime, eventZone, eventPlace, eventMandatory,
+  } = parsed.data
   const audience = needsAction ? readAudience(actionAudience) : null
   if (needsAction && !actionDueOn) {
     res.status(400).json({ message: 'Pick the date the action is due.' })
+    return
+  }
+  if (isEvent && !eventDate) {
+    res.status(400).json({ message: 'Pick the day of the event.' })
     return
   }
   const startsAt = publishAt ? new Date(publishAt) : new Date()
@@ -304,6 +445,14 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
       needsAction: !!needsAction,
       actionDueAt: needsAction && actionDueOn ? new Date(`${actionDueOn}T00:00:00.000Z`) : null,
       ...(audience && { actionAudience: audience }),
+      actionDueTime: needsAction ? (actionDueTime ?? null) : null,
+      actionDueZone: needsAction && actionDueTime ? (actionDueZone ?? 'Asia/Manila') : null,
+      isEvent: !!isEvent,
+      eventDate: isEvent && eventDate ? new Date(`${eventDate}T00:00:00.000Z`) : null,
+      eventTime: isEvent ? (eventTime ?? null) : null,
+      eventZone: isEvent ? (eventZone ?? 'Asia/Manila') : null,
+      eventPlace: isEvent ? (eventPlace || null) : null,
+      eventMandatory: !!(isEvent && eventMandatory),
       ...(category !== undefined && { category }),
       content,
       authorId: req.auth.sub,
@@ -316,6 +465,7 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
   logAudit(req.auth.sub, 'create', 'announcement', announcement.id, 'success', announcement.title)
   if (announcement.published) await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)
   await createActionTodos(announcement)
+  await createEventOnCalendar(announcement)
   res.status(201).json((await decorate([announcement], req.auth.sub, true))[0])
 }
 
@@ -380,6 +530,7 @@ async function handleUpdate(req: AuthedRequest, res: VercelResponse, id: string)
   if (published === true && before && !before.published) {
     await notifyAllOfAnnouncement(announcement.title, announcement.category, req.auth.sub, announcement.actionDueAt)
     await createActionTodos(announcement)
+    await createEventOnCalendar(announcement)
   }
   res.status(200).json((await decorate([announcement], req.auth.sub, true))[0])
 }
@@ -389,11 +540,12 @@ async function handleDelete(req: AuthedRequest, res: VercelResponse, id: string)
     res.status(403).json({ message: 'Insufficient permissions' })
     return
   }
-  const gone = await prisma.announcement.findUnique({ where: { id }, select: { title: true } })
+  const gone = await prisma.announcement.findUnique({ where: { id }, select: { title: true, calendarEventId: true } })
   try {
     await prisma.announcement.delete({ where: { id } })
     // Its to-dos are hidden with it (soft delete, like every to-do removal).
     await prisma.todo.updateMany({ where: { announcementId: id, deletedAt: null }, data: { deletedAt: new Date() } })
+    if (gone?.calendarEventId) await prisma.calendarEvent.deleteMany({ where: { id: gone.calendarEventId } })
   } catch (err) {
     if (isNotFoundError(err)) {
       res.status(404).json({ message: 'Announcement not found' })
@@ -412,6 +564,8 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (sub && req.method === 'POST' && action === 'react') return handleReact(req, res, sub)
   if (sub && req.method === 'POST' && action === 'ack') return handleAck(req, res, sub)
   if (sub && req.method === 'GET' && action === 'acks') return handleAckList(req, res, sub)
+  if (sub && req.method === 'POST' && action === 'rsvp') return handleRsvp(req, res, sub)
+  if (sub && req.method === 'GET' && action === 'rsvps') return handleRsvpList(req, res, sub)
   if (sub && req.method === 'GET' && action === 'actions') return handleActionList(req, res, sub)
   if (!sub && req.method === 'GET') return handleList(req, res)
   if (!sub && req.method === 'POST') return handleCreate(req, res)

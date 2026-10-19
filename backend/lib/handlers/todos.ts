@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
-import { ACK_CATEGORIES } from './announcements.js'
+import { asksAck } from './announcements.js'
 import { notifyUsers } from '../notify.js'
 import { formatDisplayName } from '../names.js'
 import { dateOnlyPattern, forbid, isHrOrAdmin, isSupervisorOf, myEmployee, notFound, parseBody, queryString, toDate } from './util.js'
@@ -248,10 +248,10 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     // A to-do that came from an announcement: finishing it is the assignee's "Got it" on notices that ask for one.
     if (becameDone && todo.announcementId) {
       const [ann, assignee] = await Promise.all([
-        prisma.announcement.findUnique({ where: { id: todo.announcementId }, select: { category: true } }),
+        prisma.announcement.findUnique({ where: { id: todo.announcementId }, select: { category: true, isEvent: true, eventMandatory: true } }),
         prisma.employee.findUnique({ where: { id: todo.employeeId }, select: { userId: true } }),
       ])
-      if (ann && assignee && ACK_CATEGORIES.includes(ann.category)) {
+      if (ann && assignee && asksAck(ann)) {
         await prisma.announcementAck.createMany({ data: [{ announcementId: todo.announcementId, userId: assignee.userId }], skipDuplicates: true })
       }
     }
