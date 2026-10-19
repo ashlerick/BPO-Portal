@@ -44,7 +44,6 @@ export const defaultNavGroups: NavGroup[] = [
       { to: '/notifications', label: 'Notifications', icon: 'notifications' },
       { to: '/calendar', label: 'Calendar', icon: 'calendar' },
       { to: '/my-time', label: 'My Time', icon: 'attendance' },
-      { to: '/attendance', label: 'Attendance', icon: 'attendance', roles: ['hr', 'admin'] },
       { to: '/leave', label: 'Leave Requests', icon: 'leave' },
       { to: '/reports', label: 'Weekly Reports', icon: 'reports', roles: ['team_leader', 'manager', 'hr', 'admin'] },
       { to: '/performance', label: 'Performance', icon: 'performance' },
@@ -71,10 +70,11 @@ export const defaultNavGroups: NavGroup[] = [
   {
     label: 'HR',
     items: [
-      // In the order things happen to a person: hire, pay, benefits, exit.
+      // In the order things happen to a person: hire, manage and track time, pay, benefits, exit.
       { to: '/recruitment', label: 'Recruitment', icon: 'recruitment', roles: ['hr', 'admin'] },
       { to: '/onboarding', label: 'Onboarding', icon: 'onboarding', roles: ['hr', 'admin'] },
       { to: '/hris', label: 'Employee Management', icon: 'people', roles: ['hr', 'admin'] },
+      { to: '/attendance', label: 'Attendance', icon: 'attendance', roles: ['hr', 'admin'] },
       { to: '/payroll', label: 'Payroll', icon: 'payroll', roles: ['hr', 'admin'] },
       { to: '/benefits-admin', label: 'Benefits Administration', icon: 'shield', roles: ['hr', 'admin'] },
       { to: '/inventory', label: 'Inventory', icon: 'inventory', roles: ['hr', 'admin'] },
