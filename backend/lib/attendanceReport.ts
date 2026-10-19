@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs'
-import type { BreakEntry, BreakSlot } from './breaks.js'
+import { BREAK_ALLOWANCE_SECONDS, type BreakEntry, type BreakSlot } from './breaks.js'
 
 export interface AttendanceReportRow {
   employeeId: string
@@ -36,6 +36,11 @@ function breakCell(entries: BreakEntry[], slot: BreakSlot): string {
   return mmss(secs) + (e.overSeconds > 0 ? ` (${mmss(e.overSeconds)} over)` : '')
 }
 
+// The fixed deduction for breaks and lunch (10 + 30 + 10 minutes), the rule in lib/breaks.ts (agreed 2026-10-16, pending HR's
+// confirmation). "Hours" stays time in to time out; "Worked" is those hours less this, shown beside it, never instead of it.
+const BREAK_DEDUCTION_HOURS = Object.values(BREAK_ALLOWANCE_SECONDS).reduce((a, b) => a + b, 0) / 3600
+const afterBreaks = (hours: number | null) => (hours === null ? null : Math.max(0, Math.round((hours - BREAK_DEDUCTION_HOURS) * 100) / 100))
+
 const hoursBetween = (a: Date | null, b: Date | null) =>
   a && b ? Math.max(0, Math.round(((b.getTime() - a.getTime()) / 3_600_000) * 100) / 100) : null
 
@@ -64,7 +69,7 @@ const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E
 // A full-width band across the six columns (the week heading).
 function bandRow(sheet: ExcelJS.Worksheet, text: string, argb: string, bold: boolean) {
   const row = sheet.addRow([text])
-  sheet.mergeCells(row.number, 1, row.number, 9)
+  sheet.mergeCells(row.number, 1, row.number, 10)
   row.font = { bold }
   row.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
 }
@@ -73,7 +78,7 @@ function bandRow(sheet: ExcelJS.Worksheet, text: string, argb: string, bold: boo
 function footerRow(
   sheet: ExcelJS.Worksheet,
   label: string,
-  t: { present: number; absent: number; hours: number; overtime: number; holidays: number; over: number },
+  t: { present: number; absent: number; hours: number; worked: number; overtime: number; holidays: number; over: number },
   argb: string,
 ) {
   const days = `${t.present} day${t.present === 1 ? '' : 's'} present${t.absent ? `, ${t.absent} absent` : ''}`
@@ -84,10 +89,10 @@ function footerRow(
   ]
     .filter(Boolean)
     .join(' \u00b7 ')
-  const row = sheet.addRow([`${label}: ${days}`, '', '', '', '', '', t.hours, '', extra])
+  const row = sheet.addRow([`${label}: ${days}`, '', '', '', '', '', t.hours, t.worked, '', extra])
   sheet.mergeCells(row.number, 1, row.number, 6)
   row.font = { bold: true }
-  for (let c = 1; c <= 9; c++) {
+  for (let c = 1; c <= 10; c++) {
     const cell = row.getCell(c)
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
     cell.border = { top: { style: 'thin' } }
@@ -114,6 +119,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
     { key: 'present', width: 14 },
     { key: 'absent', width: 14 },
     { key: 'hours', width: 14 },
+    { key: 'worked', width: 18 },
     { key: 'overtime', width: 16 },
     { key: 'holiday', width: 18 },
     { key: 'over', width: 18 },
@@ -121,7 +127,7 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
   summary.addRow(['Attendance summary']).font = { bold: true, size: 14 }
   summary.addRow([rangeText])
   summary.addRow([])
-  const summaryHead = summary.addRow(['Employee', 'Days present', 'Days absent', 'Total hours', 'Overtime hours', 'Working holidays', 'Breaks over limit'])
+  const summaryHead = summary.addRow(['Employee', 'Days present', 'Days absent', 'Total hours', 'Worked (after breaks)', 'Overtime hours', 'Working holidays', 'Breaks over limit'])
   summaryHead.font = { bold: true }
   summaryHead.eachCell((c) => (c.fill = HEADER_FILL))
   summary.views = [{ state: 'frozen', ySplit: summaryHead.number }]
@@ -137,11 +143,13 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
       { key: 'lunch', width: 18 },
       { key: 'break2', width: 14 },
       { key: 'hours', width: 10 },
+      { key: 'worked', width: 12 },
       { key: 'status', width: 12 },
       { key: 'notes', width: 34 },
     ]
     sheet.addRow([name]).font = { bold: true, size: 14 }
     sheet.addRow([rangeText])
+    sheet.addRow(['Hours = time in to time out. Worked = those hours less the fixed 50 minutes for breaks and lunch (rule pending HR confirmation).']).font = { italic: true, size: 9 }
 
     // Split into Monday to Sunday weeks. Each week has its own heading, column titles and a footer with that week's totals.
     const weeks = new Map<string, AttendanceReportRow[]>()
@@ -150,17 +158,17 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
       weeks.set(key, [...(weeks.get(key) ?? []), r])
     }
 
-    const totals = { present: 0, absent: 0, hours: 0, overtime: 0, holidays: 0, over: 0 }
+    const totals = { present: 0, absent: 0, hours: 0, worked: 0, overtime: 0, holidays: 0, over: 0 }
     for (const [key, weekRows] of [...weeks].sort(([a], [b]) => a.localeCompare(b))) {
       const monday = new Date(`${key}T00:00:00.000Z`)
       const sunday = new Date(monday.getTime() + 6 * 24 * 3_600_000)
       sheet.addRow([])
       bandRow(sheet, `Week of ${shortDate(monday)} to ${rangeDateFmt(sunday)}`, 'FFD1D5DB', true)
-      const head = sheet.addRow(['Date', 'Time in', 'Time out', 'Break 1', 'Lunch', 'Break 2', 'Hours', 'Status', 'Notes'])
+      const head = sheet.addRow(['Date', 'Time in', 'Time out', 'Break 1', 'Lunch', 'Break 2', 'Hours', 'Worked', 'Status', 'Notes'])
       head.font = { bold: true, size: 10 }
       head.eachCell((c) => (c.fill = HEADER_FILL))
 
-      const w = { present: 0, absent: 0, hours: 0, overtime: 0, holidays: 0, over: 0 }
+      const w = { present: 0, absent: 0, hours: 0, worked: 0, overtime: 0, holidays: 0, over: 0 }
       for (const r of weekRows) {
         const h = r.status === 'absent' ? null : hoursBetween(r.checkInAt, r.checkOutAt)
         const notes: string[] = []
@@ -175,31 +183,37 @@ export async function buildAttendanceXlsx(rows: AttendanceReportRow[], from: Dat
           r.status === 'absent' ? '' : breakCell(r.breaks, 'lunch'),
           r.status === 'absent' ? '' : breakCell(r.breaks, 'afternoon'),
           h,
+          afterBreaks(h),
           r.status === 'absent' ? 'Absent' : 'Present',
           notes.join(' \u00b7 '),
         ])
         if (r.status === 'absent') w.absent++
         else w.present++
         if (h) w.hours += h
+        if (h) w.worked += afterBreaks(h) ?? 0
         if (r.overtimeHours) w.overtime += r.overtimeHours
         if (r.workingHoliday) w.holidays++
         w.over += r.breaks.filter((b) => b.overSeconds > 0).length
       }
       w.hours = Math.round(w.hours * 100) / 100
+      w.worked = Math.round(w.worked * 100) / 100
       footerRow(sheet, 'Week total', w, 'FFF3F4F6')
       for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += w[k]
     }
 
     sheet.addRow([])
     totals.hours = Math.round(totals.hours * 100) / 100
+    totals.worked = Math.round(totals.worked * 100) / 100
     totals.overtime = Math.round(totals.overtime * 100) / 100
     footerRow(sheet, 'Total for the period', totals, 'FFD1D5DB')
     sheet.getColumn('hours').numFmt = '0.00'
+    sheet.getColumn('worked').numFmt = '0.00'
 
-    const { present, absent, hours, overtime, holidays, over } = totals
-    summary.addRow([name, present, absent, hours, Math.round(overtime * 100) / 100, holidays, over])
+    const { present, absent, hours, worked, overtime, holidays, over } = totals
+    summary.addRow([name, present, absent, hours, worked, Math.round(overtime * 100) / 100, holidays, over])
   }
   summary.getColumn('hours').numFmt = '0.00'
+  summary.getColumn('worked').numFmt = '0.00'
 
   if (rows.length === 0) {
     summary.addRow(['No attendance records in this range.'])

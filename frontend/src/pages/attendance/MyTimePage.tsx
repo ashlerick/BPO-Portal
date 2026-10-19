@@ -11,6 +11,7 @@ import { addDaysIso, formatDateOnly, formatManilaTime, todayInManilaIso } from '
 import type { AttendanceRecord } from './types'
 import { MySchedule } from './Shifts'
 import { BreaksCell } from '../../components/ui/BreaksCell'
+import { BREAK_DEDUCTION_HOURS } from '../../utils/breaks'
 
 // The employee's own page: today, then one table of their days (a week at a time, or a month), then their shift. It
 // replaces the old all-in-one Attendance page for everyone who is not HR, so nothing here lists other people or exports.
@@ -76,6 +77,11 @@ export function MyTimePage() {
   const absent = records.filter((r) => r.status === 'absent').length
   const totalHours = present.reduce((sum, r) => sum + (hoursBetween(r.checkInAt, r.checkOutAt) ?? 0), 0)
   const overtime = records.reduce((sum, r) => sum + (r.overtimeHours ?? 0), 0)
+  // Hours less the fixed break deduction, for each finished day.
+  const totalWorked = present.reduce((sum, r) => {
+    const h = hoursBetween(r.checkInAt, r.checkOutAt)
+    return h === null ? sum : sum + Math.max(0, h - BREAK_DEDUCTION_HOURS)
+  }, 0)
 
   function step(by: number) {
     setAnchor(mode === 'week' ? addDaysIso(anchor, 7 * by) : shiftMonth(anchor, by))
@@ -167,6 +173,7 @@ export function MyTimePage() {
                   <th className="py-2 pr-4 font-medium">Time out</th>
                   <th className="py-2 pr-4 font-medium">Breaks</th>
                   <th className="py-2 pr-4 font-medium">Hours</th>
+                  <th className="py-2 pr-4 font-medium" title="Hours less the fixed 50 minutes for breaks and lunch">Worked</th>
                   <th className="py-2 font-medium">Notes</th>
                 </tr>
               </thead>
@@ -190,7 +197,7 @@ export function MyTimePage() {
                         {isToday && <span className="ml-2 text-xs text-brand-700 dark:text-brand-400">Today</span>}
                       </td>
                       {r?.status === 'absent' ? (
-                        <td data-label="Status" colSpan={5} className="py-2 text-amber-700 dark:text-amber-500">
+                        <td data-label="Status" colSpan={6} className="py-2 text-amber-700 dark:text-amber-500">
                           Absent
                         </td>
                       ) : (
@@ -206,6 +213,9 @@ export function MyTimePage() {
                           </td>
                           <td data-label="Hours" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
                             {hours === null ? '—' : hours.toFixed(2)}
+                          </td>
+                          <td data-label="Worked" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
+                            {hours === null ? '—' : Math.max(0, hours - BREAK_DEDUCTION_HOURS).toFixed(2)}
                           </td>
                           <td data-label="Notes" className="py-2 text-gray-500 dark:text-gray-400">
                             {notes.join(' · ') || (r ? '' : '')}
@@ -227,7 +237,7 @@ export function MyTimePage() {
         )}
 
         {data && (
-          <dl className="grid grid-cols-2 gap-4 border-t border-black/5 pt-3 text-sm dark:border-white/10 sm:grid-cols-4">
+          <dl className="grid grid-cols-2 gap-4 border-t border-black/5 pt-3 text-sm dark:border-white/10 sm:grid-cols-5">
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Days present</dt>
               <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{present.length}</dd>
@@ -239,6 +249,10 @@ export function MyTimePage() {
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Hours</dt>
               <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalHours.toFixed(1)}</dd>
+            </div>
+            <div>
+              <dt className="text-gray-500 dark:text-gray-400">Worked (after breaks)</dt>
+              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalWorked.toFixed(1)}</dd>
             </div>
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Overtime</dt>
