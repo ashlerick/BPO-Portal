@@ -6,15 +6,18 @@ import { useApiData } from '../../hooks/useApiData'
 import { api, ApiError } from '../../services/api'
 import type { EmployeeRecord } from '../hris/types'
 import { addDaysIso, formatDateOnly, formatManilaTime, startOfMonthIso, todayInManilaIso } from '../../utils/dates'
+import { zoneLabel } from '../../utils/shiftTime'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/ui/PageHeader'
-import { Section, SectionStack } from '../../components/ui/Section'
 import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
-import { LateReport } from './Shifts'
+import type { ReportRow } from './Shifts'
 import { OvertimeAllotments } from './OvertimeAllotments'
+import { WeeklyTab } from './WeeklyTab'
+import { IssuesTab } from './IssuesTab'
+import { issueRows, issuesFor, reportKey, type IssueKind } from './attendanceIssues'
 import { BreakSlotCell } from '../../components/ui/BreaksCell'
 import { netHours } from '../../utils/breaks'
 
@@ -49,17 +52,6 @@ function MarkAbsentRowButton({ record, onMarked }: { record: AttendanceRecord; o
       {submitting ? 'Marking…' : 'Mark Absent'}
     </Button>
   )
-}
-
-function rangePresets() {
-  const today = todayInManilaIso()
-  const yesterday = addDaysIso(today, -1)
-  return [
-    { label: 'Today', from: today, to: today },
-    { label: 'Yesterday', from: yesterday, to: yesterday },
-    { label: 'Last 7 days', from: addDaysIso(today, -6), to: today },
-    { label: 'This month', from: startOfMonthIso(today), to: today },
-  ]
 }
 
 function EmployeeFilter({
@@ -499,135 +491,245 @@ function hoursBetween(a: string | null, b: string | null): number {
   return Math.max(0, (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000)
 }
 
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const RANGES = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: '7', label: 'Last 7 days' },
+  { key: 'month', label: 'This month' },
+  { key: 'custom', label: 'Custom range…' },
+] as const
+type RangeKey = (typeof RANGES)[number]['key']
 
-function mondayOf(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`)
-  const back = (d.getUTCDay() + 6) % 7
-  return addDaysIso(iso, -back)
+function rangeFor(key: RangeKey, customFrom: string, customTo: string): { from: string; to: string } {
+  const today = todayInManilaIso()
+  if (key === 'today') return { from: today, to: today }
+  if (key === 'yesterday') return { from: addDaysIso(today, -1), to: addDaysIso(today, -1) }
+  if (key === '7') return { from: addDaysIso(today, -6), to: today }
+  if (key === 'month') return { from: startOfMonthIso(today), to: today }
+  return { from: customFrom, to: customTo }
 }
 
-// The old sheet's weekly tracker: Regular Hours (from time in/out),
-// OverTime and Working Holiday (entered by HR) for one Mon-Sun week.
-function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reloadToken: number }) {
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayInManilaIso()))
-  const weekEnd = addDaysIso(weekStart, 6)
-  const q = new URLSearchParams({ from: weekStart, to: weekEnd })
-  if (employeeId) q.set('employeeId', employeeId)
-  q.set('_r', String(reloadToken))
-  const { data, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?${q.toString()}`)
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('')
 
-  const days = DAY_NAMES.map((name, i) => {
-    const date = addDaysIso(weekStart, i)
-    const rec = data?.find((r) => r.date.slice(0, 10) === date && r.status === 'present')
-    return { name, date, rec }
-  })
-  // Hours worked: time in to out, less the breaks and lunch that were recorded (as in the BPO Time app).
-  const hours = (r?: AttendanceRecord) => (r ? Math.round(netHours(hoursBetween(r.checkInAt, r.checkOutAt), r.breaks) * 100) / 100 : 0)
-  const totalRegular = days.reduce((a, d) => a + hours(d.rec), 0)
-  // Overtime that counts: the hours HR typed in plus the allotted overtime.
-  const otOf = (r?: AttendanceRecord) => Math.round(((r?.overtimeHours ?? 0) + (r?.overtimeAllottedHours ?? 0)) * 100) / 100
-  const totalOt = Math.round(days.reduce((a, d) => a + otOf(d.rec), 0) * 100) / 100
+function Tile({ label, value, sub, tone, onClick }: { label: string; value: string; sub: string; tone?: 'amber' | 'red'; onClick: () => void }) {
+  const valueClass = tone === 'amber' ? 'text-amber-600 dark:text-amber-400' : tone === 'red' ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-black/5 bg-white/80 px-3.5 py-3 text-left shadow-sm transition hover:border-brand-500 dark:border-white/10 dark:bg-white/[0.035]"
+    >
+      <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</span>
+      <span className={`block text-2xl font-semibold tabular-nums ${valueClass}`}>{value}</span>
+      <span className="block text-xs text-gray-500 dark:text-gray-400">{sub}</span>
+    </button>
+  )
+}
+
+// One person's days: a card with their name, shift and what needs a look, then a row per day. The header opens and closes the days.
+function PersonCard({
+  name,
+  rows,
+  reports,
+  today,
+  isReviewer,
+  open,
+  onToggle,
+  onChanged,
+}: {
+  name: string
+  rows: AttendanceRecord[]
+  reports: Map<string, ReportRow>
+  today: string
+  isReviewer: boolean
+  open: boolean
+  onToggle: () => void
+  onChanged: () => void
+}) {
+  const withIssues = rows.map((r) => ({ r, rep: reports.get(reportKey(r.employeeId, r.date)) })).map((x) => ({ ...x, issues: issuesFor(x.r, x.rep, today) }))
+  const days = (kind: IssueKind) => withIssues.filter((x) => x.issues.some((i) => i.kind === kind)).length
+  const presentDays = rows.filter((r) => r.status === 'present').length
+  const shift = withIssues.find((x) => x.rep)?.rep
+  const chips: { label: string; tone: 'green' | 'amber' | 'red' }[] = [
+    { label: `${presentDays} present`, tone: 'green' },
+    ...([
+      ['late', 'late', 'amber'],
+      ['undertime', 'undertime', 'red'],
+      ['absent', 'absent', 'red'],
+      ['noOut', 'no time out', 'amber'],
+      ['breakOver', 'break over', 'red'],
+    ] as const).flatMap(([kind, text, tone]) => (days(kind) > 0 ? [{ label: `${days(kind)} ${text}`, tone }] : [])),
+  ]
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
-          <Button size="sm" onClick={() => setWeekStart(addDaysIso(weekStart, -7))}>
-            ← Previous
-          </Button>
-          <Button size="sm" onClick={() => setWeekStart(addDaysIso(weekStart, 7))}>
-            Next →
-          </Button>
-        </div>
-        <span className="text-sm text-gray-600 dark:text-gray-400">
-          {formatDateOnly(weekStart)} – {formatDateOnly(weekEnd)}
+    <article className="overflow-hidden rounded-xl border border-black/5 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 border-l-4 border-brand-500 bg-black/[0.03] px-4 py-3 text-left hover:bg-black/[0.05] dark:bg-white/[0.05] dark:hover:bg-white/[0.07]"
+      >
+        <span aria-hidden className="grid h-9 w-9 flex-none place-items-center rounded-full bg-brand-600 text-xs font-bold text-white">
+          {initials(name)}
         </span>
-      </div>
-      {error && <ErrorState message={error} />}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[34rem] text-center text-sm">
-          <thead>
-            <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
-              <th className="py-2 pr-3 text-left font-medium" />
-              {days.map((d) => (
-                <th key={d.date} className="px-1 py-2 font-medium">
-                  {d.name}
-                  <div className="text-xs font-normal">{d.date.slice(5)}</div>
-                </th>
-              ))}
-              <th className="px-1 py-2 font-medium">Total</th>
-            </tr>
-          </thead>
-          <tbody className="text-gray-800 dark:text-gray-200">
-            <tr className="border-b border-black/5 dark:border-white/5">
-              <td className="py-2 pr-3 text-left font-medium">Regular hours</td>
-              {days.map((d) => (
-                <td key={d.date}>{d.rec ? hours(d.rec) : ''}</td>
-              ))}
-              <td className="font-medium">{Math.round(totalRegular * 100) / 100}</td>
-            </tr>
-            <tr className="border-b border-black/5 dark:border-white/5">
-              <td className="py-2 pr-3 text-left font-medium">Overtime</td>
-              {days.map((d) => (
-                <td key={d.date}>{otOf(d.rec) || ''}</td>
-              ))}
-              <td className="font-medium">{totalOt}</td>
-            </tr>
-            <tr>
-              <td className="py-2 pr-3 text-left font-medium">Working holiday</td>
-              {days.map((d) => (
-                <td key={d.date}>{d.rec?.workingHoliday ? '✓' : ''}</td>
-              ))}
-              <td />
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      {employeeId === '' && (
-        <p className="text-xs text-gray-500 dark:text-gray-400">Hours are time in to time out less the recorded breaks and lunch. Overtime is what HR allotted and the person clocked, plus any hours HR typed in. Working holiday is entered by HR.</p>
+        <span className="min-w-0 flex-1 basis-48">
+          <span className="block truncate text-[15px] font-semibold text-gray-900 dark:text-gray-100">{name}</span>
+          <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+            {shift ? `${shift.shiftName} · ${shift.scheduledStart}–${shift.scheduledEnd} ${zoneLabel(shift.timezone)}` : 'No shift measured'}
+          </span>
+        </span>
+        <span className="flex flex-wrap items-center gap-1.5">
+          {chips.map((c) => (
+            <Badge key={c.label} tone={c.tone}>
+              {c.label}
+            </Badge>
+          ))}
+          <span aria-hidden className={`ml-1 inline-block text-xs text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`}>
+            ▶
+          </span>
+        </span>
+      </button>
+      {open && (
+        <div className="overflow-x-auto">
+          <table className="stack-table w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
+                <th className="py-2.5 pl-4 pr-4 font-medium">Day</th>
+                <th className="py-2.5 pr-4 font-medium">In</th>
+                <th className="py-2.5 pr-4 font-medium">Out</th>
+                <th className="py-2.5 pr-4 font-medium">Break 1</th>
+                <th className="py-2.5 pr-4 font-medium">Lunch</th>
+                <th className="py-2.5 pr-4 font-medium">Break 2</th>
+                <th className="py-2.5 pr-4 font-medium">Worked</th>
+                <th className="py-2.5 pr-4 font-medium">Flags</th>
+                {isReviewer && <th className="py-2.5 pr-4 font-medium">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {withIssues.map(({ r, issues }) => {
+                const gross = hoursBetween(r.checkInAt, r.checkOutAt)
+                return (
+                  <tr key={r.id} className="border-t border-black/5 first:border-0 dark:border-white/5">
+                    <td data-primary className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">
+                      {formatDateOnly(r.date)}
+                    </td>
+                    {r.status === 'absent' ? (
+                      <>
+                        <td data-label="Status" colSpan={isReviewer ? 7 : 6} className="py-2.5 pr-4 text-amber-700 dark:text-amber-500">
+                          Absent
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td data-label="In" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                          <EditableTime record={r} field="checkInAt" onSaved={onChanged} />
+                        </td>
+                        <td data-label="Out" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                          <EditableTime record={r} field="checkOutAt" onSaved={onChanged} />
+                        </td>
+                        <td data-label="Break 1" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                          <EditableBreak record={r} slot="morning" onSaved={onChanged} />
+                        </td>
+                        <td data-label="Lunch" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                          <EditableBreak record={r} slot="lunch" onSaved={onChanged} />
+                        </td>
+                        <td data-label="Break 2" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
+                          <EditableBreak record={r} slot="afternoon" onSaved={onChanged} />
+                        </td>
+                        <td data-label="Worked" className="py-2.5 pr-4 tabular-nums text-gray-700 dark:text-gray-300">
+                          {gross > 0 ? `${netHours(gross, r.breaks).toFixed(1)} h` : '—'}
+                        </td>
+                        <td data-label="Flags" className="py-2.5 pr-4">
+                          <span className="flex flex-wrap justify-end gap-1.5 md:justify-start">
+                            {issues.length === 0 && r.checkOutAt ? <Badge tone="green">OK</Badge> : null}
+                            {issues.map((i) => (
+                              <Badge key={i.kind} tone={i.tone}>
+                                {i.label}
+                              </Badge>
+                            ))}
+                          </span>
+                        </td>
+                        {isReviewer && (
+                          <td data-actions className="py-2.5 pr-4">
+                            <MarkAbsentRowButton record={r} onMarked={onChanged} />
+                          </td>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
-    </div>
+    </article>
   )
 }
 
 export function AttendancePage() {
   const { effectiveRoles } = useAuth()
   const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
+  const today = todayInManilaIso()
 
-  // What is shown (from, to, employeeId) changes only when the person presses Show records (or a quick range); the fields
-  // hold a draft until then, so picking a date does not reload the page.
-  const [from, setFrom] = useState(todayInManilaIso())
-  const [to, setTo] = useState(todayInManilaIso())
+  // What is shown (from, to, employeeId) changes only when the person presses Show records; the toolbar holds a draft until then,
+  // so picking a date does not reload the page.
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
   const [employeeId, setEmployeeId] = useState('')
-  const [draftFrom, setDraftFrom] = useState(from)
-  const [draftTo, setDraftTo] = useState(to)
+  const [rangeKey, setRangeKey] = useState<RangeKey>('today')
+  const [customFrom, setCustomFrom] = useState(today)
+  const [customTo, setCustomTo] = useState(today)
   const [draftEmployee, setDraftEmployee] = useState('')
-  const draftInvalid = draftTo < draftFrom
-  const unapplied = draftFrom !== from || draftTo !== to || draftEmployee !== employeeId
+  const draft = rangeFor(rangeKey, customFrom, customTo)
+  const draftInvalid = !draft.from || !draft.to || draft.to < draft.from
+  const unapplied = draft.from !== from || draft.to !== to || draftEmployee !== employeeId
   function applyFilters() {
     if (draftInvalid) return
-    setFrom(draftFrom)
-    setTo(draftTo)
+    setFrom(draft.from)
+    setTo(draft.to)
     setEmployeeId(draftEmployee)
   }
+
+  const [tab, setTab] = useState('records')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+  const [adding, setAdding] = useState(false)
+  const [byHand, setByHand] = useState(false)
+  const reload = () => setReloadToken((t) => t + 1)
 
-  const rangeInvalid = to < from
   const params = new URLSearchParams({ from, to })
   if (employeeId) params.set('employeeId', employeeId)
   if (reloadToken) params.set('_r', String(reloadToken))
-  const path = rangeInvalid ? '/leave/attendance' : `/leave/attendance?${params.toString()}`
-  const { data, loading, error } = useApiData<AttendanceRecord[]>(path)
+  const { data, loading, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?${params.toString()}`)
+  const reportParams = new URLSearchParams({ kind: 'report', from, to })
+  if (employeeId) reportParams.set('employeeId', employeeId)
+  if (reloadToken) reportParams.set('_r', String(reloadToken))
+  const { data: report } = useApiData<ReportRow[]>(`/hr/shifts?${reportParams.toString()}`)
 
   const records = data ?? []
-  const absences = records.filter((r) => r.status === 'absent')
+  const reports = new Map((report ?? []).map((r) => [reportKey(r.employeeId, r.date), r]))
   const present = records.filter((r) => r.status === 'present')
-  // One block per person (the same grouping the Excel export uses for its sheets), people A to Z, days in order.
-  // With everyone shown, each person's block starts closed (a header line with the counts and what needs a look); with one
-  // person chosen it starts open. Opening or closing is remembered per person until the list changes.
+  const absences = records.filter((r) => r.status === 'absent')
+  const issues = issueRows(records, reports, today)
+  const lateDays = (report ?? []).filter((r) => r.lateMinutes > 0)
+  const shortDays = (report ?? []).filter((r) => r.undertimeMinutes > 0)
+  const lateMinutes = lateDays.reduce((n, r) => n + r.lateMinutes, 0)
+  const shortMinutes = shortDays.reduce((n, r) => n + r.undertimeMinutes, 0)
+  const totalHours = present.reduce((sum, r) => sum + netHours(hoursBetween(r.checkInAt, r.checkOutAt), r.breaks), 0)
+  const completedDays = present.filter((r) => r.checkInAt && r.checkOutAt).length
+  const overtimeHours = records.reduce((n, r) => n + (r.overtimeHours ?? 0) + (r.overtimeGivenHours ?? 0), 0)
+  const rangeText = from === to ? formatDateOnly(from) : `${formatDateOnly(from)} to ${formatDateOnly(to)}`
+
+  // One card per person (the same grouping the Excel export uses for its sheets), people A to Z, days in order. With everyone shown,
+  // each card starts closed; with one person chosen it starts open. Opening or closing is remembered until the list changes.
   const [toggled, setToggled] = useState<Record<string, boolean>>({})
   const byPerson = [...records]
     .sort((a, b) => a.employeeName.localeCompare(b.employeeName) || a.date.localeCompare(b.date))
@@ -637,11 +739,8 @@ export function AttendancePage() {
       else groups.push({ name: r.employeeName, rows: [r] })
       return groups
     }, [])
-  const totalHours = present.reduce((sum, r) => sum + netHours(hoursBetween(r.checkInAt, r.checkOutAt), r.breaks), 0)
-  const completedDays = present.filter((r) => r.checkInAt && r.checkOutAt).length
 
   async function handleExport() {
-    if (rangeInvalid) return
     setExporting(true)
     setExportError(null)
     try {
@@ -657,314 +756,156 @@ export function AttendancePage() {
   }
 
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader title="Attendance" description="Everyone's records, by person. Your own time is under My Time." />
-      <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+      <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
         Set up and assign shifts in <Link to="/hris?tab=shifts" className="text-brand-700 underline dark:text-brand-400">Employee Management, Shifts</Link>.
       </p>
 
-      <Card className="mb-4 space-y-3">
-        {/* Quick ranges — the handful people actually want. Equal-width
-            2x2 on phones, one row of four from 480px, natural-width
-            chips from md. Never scrolls. */}
-        <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 md:flex md:flex-wrap">
-          {rangePresets().map((p) => {
-            const active = p.from === from && p.to === to
-            return (
-              <Button
-                key={p.label}
-                size="sm"
-                aria-pressed={active}
-                className={`w-full whitespace-nowrap md:w-auto ${active ? '!border-brand-500 !bg-brand-600/15 !text-brand-700 dark:!text-brand-300' : ''}`}
-                onClick={() => {
-                  setFrom(p.from)
-                  setTo(p.to)
-                  setDraftFrom(p.from)
-                  setDraftTo(p.to)
-                  setEmployeeId(draftEmployee)
-                }}
-              >
-                {p.label}
-              </Button>
-            )
-          })}
-        </div>
-        {/* Phones: From/To share a row (stacking below 360px), Employee
-            and Export get full-width rows. md+: one wrapping row. */}
+      <Card>
         <form
           onSubmit={(e) => {
             e.preventDefault()
             applyFilters()
           }}
-          className="grid grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:flex md:flex-wrap md:items-end"
+          className="grid grid-cols-2 items-end gap-3 max-[359px]:grid-cols-1 md:flex md:flex-wrap"
         >
-          <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
-            From
-            <input type="date" value={draftFrom} max={draftTo} onChange={(e) => setDraftFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+          <label className="col-span-full flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400 md:col-auto md:w-52">
+            Range
+            <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value as RangeKey)} className="field mt-1">
+              {RANGES.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
           </label>
-          <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
-            To
-            <input type="date" value={draftTo} min={draftFrom} onChange={(e) => setDraftTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
-          </label>
-          {isReviewer && (
-            <EmployeeFilter value={draftEmployee} onChange={setDraftEmployee} className="col-span-full md:col-auto" />
+          {rangeKey === 'custom' && (
+            <>
+              <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
+                From
+                <input type="date" value={customFrom} max={customTo} onChange={(e) => setCustomFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+              </label>
+              <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
+                To
+                <input type="date" value={customTo} min={customFrom} onChange={(e) => setCustomTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+              </label>
+            </>
           )}
+          {isReviewer && <EmployeeFilter value={draftEmployee} onChange={setDraftEmployee} className="col-span-full md:col-auto md:w-64" />}
           <Button type="submit" variant="primary" disabled={draftInvalid || !unapplied} className="col-span-full w-full md:col-auto md:w-auto">
             Show records
           </Button>
           {isReviewer && (
-            <Button
-              type="button"
-              onClick={handleExport}
-              disabled={exporting || rangeInvalid}
-              className="col-span-full w-full md:col-auto md:w-auto"
-            >
+            <Button type="button" onClick={handleExport} disabled={exporting} className="col-span-full w-full md:col-auto md:w-auto">
               {exporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
           )}
         </form>
+        {draftInvalid && <p className="mt-2 text-sm text-red-600 dark:text-red-400">"To" can't be before "From".</p>}
+        {exportError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{exportError}</p>}
       </Card>
-      {draftInvalid && <p className="mb-2 text-sm text-red-600 dark:text-red-400">"To" can't be before "From".</p>}
-      {exportError && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{exportError}</p>}
+
+      <div className="grid grid-cols-2 gap-2.5 min-[560px]:grid-cols-3 lg:grid-cols-6">
+        <Tile label="Present" value={String(present.length)} sub={present.length === 1 ? 'day' : 'days'} onClick={() => setTab('records')} />
+        <Tile label="Absent" value={String(absences.length)} sub={absences.length === 1 ? 'day' : 'days'} onClick={() => setTab('issues')} />
+        <Tile label="Late" value={String(lateDays.length)} sub={lateMinutes ? `${lateMinutes} min in total` : 'none'} tone={lateDays.length ? 'amber' : undefined} onClick={() => setTab('issues')} />
+        <Tile label="Undertime" value={String(shortDays.length)} sub={shortMinutes ? `${shortMinutes} min in total` : 'none'} tone={shortDays.length ? 'red' : undefined} onClick={() => setTab('issues')} />
+        <Tile label="Hours worked" value={totalHours.toFixed(1)} sub={completedDays > 0 ? `avg ${(totalHours / completedDays).toFixed(1)} a day` : 'no finished days'} onClick={() => setTab('records')} />
+        <Tile label="Overtime" value={`${Math.round(overtimeHours * 100) / 100} h`} sub="given and typed in" onClick={() => setTab('overtime')} />
+      </div>
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
 
       <Tabs
+        active={tab}
+        onChange={setTab}
         tabs={[
           {
-            id: 'history',
+            id: 'records',
             label: 'Records',
             content: (
-        <SectionStack tabs={false}>
-        <Section id="attendance.addday" title="Add a missing day" hint="Someone worked but never clocked in" roles={['hr', 'admin']}>
-          <AddDayForm onAdded={() => setReloadToken((t) => t + 1)} />
-        </Section>
-
-        <Section id="attendance.history" title="Attendance history" hint={`${from} to ${to}`} defaultOpen>
-          {data && data.length === 0 && <EmptyState label="No attendance records in this range." />}
-          {data && data.length > 1 && byPerson.length > 1 && (
-            <div className="mb-2 flex gap-2">
-              <Button size="sm" onClick={() => setToggled(Object.fromEntries(byPerson.map((g) => [g.rows[0].employeeId ?? g.name, true])))}>
-                Open all
-              </Button>
-              <Button size="sm" onClick={() => setToggled(Object.fromEntries(byPerson.map((g) => [g.rows[0].employeeId ?? g.name, false])))}>
-                Close all
-              </Button>
-            </div>
-          )}
-          {data && data.length > 0 && (
-            <Card className="overflow-x-auto !p-0">
-              <table className="stack-table w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-black/5 text-xs uppercase tracking-wide text-gray-500 dark:border-white/10 dark:text-gray-400">
-                    <th className="py-3 pr-4 pl-4 font-medium first:pl-4">Date</th>
-                    <th className="py-3 pr-4 font-medium">Check In</th>
-                    <th className="py-3 pr-4 font-medium">Check Out</th>
-                    <th className="py-3 pr-4 font-medium">Break 1</th>
-                    <th className="py-3 pr-4 font-medium">Lunch</th>
-                    <th className="py-3 pr-4 font-medium">Break 2</th>
-                    {isReviewer && <th className="py-3 pr-4 font-medium">Check-in IP</th>}
-                    {isReviewer && <th className="py-3 pr-4 font-medium">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {byPerson.flatMap(({ name, rows }) => {
-                    const key = rows[0].employeeId ?? name
-                    const isOpen = toggled[key] ?? byPerson.length === 1
-                    const presentDays = rows.filter((x) => x.status === 'present').length
-                    const absentDays = rows.filter((x) => x.status === 'absent').length
-                    const missingOut = rows.filter((x) => x.status === 'present' && x.checkInAt && !x.checkOutAt).length
-                    const overBreaks = rows.reduce((n, x) => n + (x.breaks ?? []).filter((b) => b.overSeconds > 0).length, 0)
-                    return [
-                    <tr key={`h-${key}`} className="bg-black/[0.04] dark:bg-white/[0.05]">
-                      <td colSpan={8} data-primary className="p-0">
-                        <button
-                          type="button"
-                          onClick={() => setToggled((t) => ({ ...t, [key]: !isOpen }))}
-                          aria-expanded={isOpen}
-                          className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-left font-medium text-gray-900 hover:bg-black/[0.03] dark:text-gray-100 dark:hover:bg-white/[0.04]"
-                        >
-                          <span aria-hidden className={`inline-block text-xs text-gray-500 transition-transform ${isOpen ? 'rotate-90' : ''}`}>
-                            ▶
-                          </span>
-                          {name}
-                          <span className="text-xs font-normal text-gray-500 dark:text-gray-400">
-                            {presentDays} present{absentDays ? `, ${absentDays} absent` : ''}
-                          </span>
-                          {missingOut > 0 && (
-                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-400">
-                              {missingOut} no time out
-                            </span>
-                          )}
-                          {overBreaks > 0 && (
-                            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-400">
-                              {overBreaks} break{overBreaks === 1 ? '' : 's'} over
-                            </span>
-                          )}
-                        </button>
-                      </td>
-                    </tr>,
-                    ...(!isOpen ? [] : rows.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-b border-black/5 transition-colors last:border-0 hover:bg-black/[0.02] dark:border-white/5 dark:hover:bg-white/[0.03]"
-                    >
-                      <td data-primary className="py-2.5 pl-4 pr-4 text-gray-700 dark:text-gray-300">
-                        {formatDateOnly(r.date)}
-                      </td>
-                      {r.status === 'absent' ? (
-                        <>
-                          <td
-                            data-label="Status"
-                            colSpan={isReviewer ? 6 : 5}
-                            className="py-2.5 pr-4 text-amber-700 dark:text-amber-500"
-                          >
-                            Absent
-                          </td>
-                          {isReviewer && (
-                            <td data-hide-mobile className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                              —
-                            </td>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <td data-label="Check In" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <EditableTime record={r} field="checkInAt" onSaved={() => setReloadToken((t) => t + 1)} />
-                          </td>
-                          <td data-label="Check Out" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <EditableTime record={r} field="checkOutAt" onSaved={() => setReloadToken((t) => t + 1)} />
-                          </td>
-                          <td data-label="Break 1" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <EditableBreak record={r} slot="morning" onSaved={() => setReloadToken((t) => t + 1)} />
-                          </td>
-                          <td data-label="Lunch" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <EditableBreak record={r} slot="lunch" onSaved={() => setReloadToken((t) => t + 1)} />
-                          </td>
-                          <td data-label="Break 2" className="py-2.5 pr-4 text-gray-700 dark:text-gray-300">
-                            <EditableBreak record={r} slot="afternoon" onSaved={() => setReloadToken((t) => t + 1)} />
-                          </td>
-                          {isReviewer && (
-                            <td
-                              data-label="Check-in IP"
-                              className={`py-2.5 pr-4 ${r.checkInOffSite ? 'text-amber-700 dark:text-amber-500' : 'text-gray-700 dark:text-gray-300'}`}
-                            >
-                              <span>
-                                {r.checkInIp ?? '—'}
-                                {r.checkInOffSite && <span className="ml-1 whitespace-nowrap text-xs">(off-site)</span>}
-                              </span>
-                            </td>
-                          )}
-                          {isReviewer && (
-                            <td data-actions className="py-2.5 pr-4">
-                              <MarkAbsentRowButton record={r} onMarked={() => setReloadToken((t) => t + 1)} />
-                            </td>
-                          )}
-                        </>
-                      )}
-                    </tr>
-                    ))),
-                    ]
-                  })}
-                </tbody>
-              </table>
-            </Card>
-          )}
-        </Section>
-
-        <Section id="attendance.summary" title="Attendance summary" hint={`${from} to ${to}`}>
-          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-            <div>
-              <dt className="text-gray-500 dark:text-gray-400">Days present</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{present.length}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500 dark:text-gray-400">Days absent</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{absences.length}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500 dark:text-gray-400">Hours worked</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{totalHours.toFixed(1)}</dd>
-            </div>
-            <div>
-              <dt className="text-gray-500 dark:text-gray-400">Avg hours / day</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {completedDays > 0 ? (totalHours / completedDays).toFixed(1) : '—'}
-              </dd>
-            </div>
-          </dl>
-          {isReviewer && !employeeId && (
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              Totals cover every employee in the range. Pick an employee above for an individual summary.
-            </p>
-          )}
-        </Section>
-
-        </SectionStack>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Attendance records <span className="font-normal text-gray-500 dark:text-gray-400">{rangeText}</span>
+                  </h2>
+                  <div className="flex flex-wrap gap-2">
+                    {byPerson.length > 1 && (
+                      <>
+                        <Button size="sm" onClick={() => setToggled(Object.fromEntries(byPerson.map((g) => [g.rows[0].employeeId ?? g.name, true])))}>
+                          Open all
+                        </Button>
+                        <Button size="sm" onClick={() => setToggled(Object.fromEntries(byPerson.map((g) => [g.rows[0].employeeId ?? g.name, false])))}>
+                          Close all
+                        </Button>
+                      </>
+                    )}
+                    {isReviewer && (
+                      <Button size="sm" aria-expanded={adding} onClick={() => setAdding((a) => !a)}>
+                        Add a missing day
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {adding && isReviewer && (
+                  <Card>
+                    <AddDayForm
+                      onAdded={() => {
+                        reload()
+                        setAdding(false)
+                      }}
+                    />
+                  </Card>
+                )}
+                {data && data.length === 0 && <EmptyState label="No attendance records in this range." />}
+                {byPerson.map(({ name, rows }) => {
+                  const key = rows[0].employeeId ?? name
+                  return (
+                    <PersonCard
+                      key={key}
+                      name={name}
+                      rows={rows}
+                      reports={reports}
+                      today={today}
+                      isReviewer={isReviewer}
+                      open={toggled[key] ?? byPerson.length === 1}
+                      onToggle={() => setToggled((t) => ({ ...t, [key]: !(t[key] ?? byPerson.length === 1) }))}
+                      onChanged={reload}
+                    />
+                  )
+                })}
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Hours are time in to time out less the recorded breaks and lunch. The pencil changes a time; a login address shows only when it looks off-site.
+                </p>
+              </div>
             ),
           },
-          {
-            id: 'weekly',
-            label: 'Weekly tracker',
-            content: (
-        <SectionStack tabs={false}>
-        <Section id="attendance.weekly" title="Weekly tracker" hint="Regular hours, overtime, working holiday" defaultOpen>
-          {employeeId ? (
-            <WeeklyTracker employeeId={employeeId} reloadToken={reloadToken} />
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Pick an employee above to see their week.</p>
-          )}
-        </Section>
-        </SectionStack>
-            ),
-          },
-          {
-            id: 'late',
-            label: 'Late and absences',
-            badge: absences.length > 0 ? absences.length : undefined,
-            content: (
-        <SectionStack tabs={false}>
-        <Section id="attendance.late" title="Late / undertime records" hint={`${from} to ${to}`}>
-          <LateReport from={from} to={to} employeeId={employeeId} />
-        </Section>
-
-        <Section
-          id="attendance.absences"
-          title="Absences"
-          hint={`${absences.length} in this range`}
-          aside={absences.length > 0 ? <Badge tone="amber">{absences.length}</Badge> : undefined}
-        >
-          {absences.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No absences in this range.</p>
-          ) : (
-            <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
-              {absences.map((r) => (
-                <li key={r.id} className="flex flex-wrap justify-between gap-2 py-2">
-                  <span className="text-gray-900 dark:text-gray-100">{isReviewer ? r.employeeName : 'Absent'}</span>
-                  <span className="text-gray-500 dark:text-gray-400">{formatDateOnly(r.date)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-        </SectionStack>
-            ),
-          },
+          { id: 'weekly', label: 'Weekly tracker', content: <WeeklyTab key={employeeId} employeeId={employeeId} reloadToken={reloadToken} /> },
+          { id: 'issues', label: 'Issues', badge: issues.length > 0 ? issues.length : undefined, content: <IssuesTab rows={issues} range={rangeText} /> },
           ...(isReviewer
             ? [
                 {
-                  id: 'corrections',
+                  id: 'overtime',
                   label: 'Overtime',
                   content: (
-        <SectionStack tabs={false}>
-        <Section id="attendance.allot" title="Allot overtime" hint="They clock in for it in BPO Time" roles={['hr', 'admin']} defaultOpen>
-          <OvertimeAllotments from={from} to={to} employeeId={employeeId} reloadToken={reloadToken} onChanged={() => setReloadToken((t) => t + 1)} />
-        </Section>
-        <Section id="attendance.corrections" title="Enter overtime by hand" hint="HR / Admin" roles={['hr', 'admin']}>
-          <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />
-        </Section>
-        </SectionStack>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Overtime</h2>
+                        <button type="button" onClick={() => setByHand((b) => !b)} aria-expanded={byHand} className="text-xs text-gray-500 underline underline-offset-2 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+                          {byHand ? 'Hide' : 'Enter'} hours by hand
+                        </button>
+                      </div>
+                      {byHand && (
+                        <Card>
+                          <CorrectionForm onCorrected={reload} />
+                        </Card>
+                      )}
+                      <Card>
+                        <OvertimeAllotments from={from} to={to} employeeId={employeeId} reloadToken={reloadToken} onChanged={reload} />
+                      </Card>
+                    </div>
                   ),
                 },
               ]

@@ -16,7 +16,7 @@ import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
 import { handler as auditRetention } from '../lib/handlers/auditRetention.js'
-import { createCode, deviceBreakEnd, deviceOvertimeEnd, deviceOvertimeStart, deviceBreakStart, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
+import { createCode, deviceBreakEnd, deviceBreakStart, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -62,8 +62,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.resource === 'device-counts') return deviceCounts(req, res)
   if (req.query.resource === 'device-break-start') return deviceBreakStart(req, res)
   if (req.query.resource === 'device-break-end') return deviceBreakEnd(req, res)
-  if (req.query.resource === 'device-overtime-start') return deviceOvertimeStart(req, res)
-  if (req.query.resource === 'device-overtime-end') return deviceOvertimeEnd(req, res)
   if (req.query.resource === 'device-feed') return deviceFeed(req, res)
   // An unknown device-* route must say so. Falling through to the login check would
   // answer "Invalid or expired token", which an app reads as "my token was revoked".

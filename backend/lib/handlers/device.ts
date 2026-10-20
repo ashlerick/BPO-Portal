@@ -12,7 +12,6 @@ import { birthdaysToday } from './birthdays.js'
 import { EMERGENCY_CATEGORY, asksAck, instantOf } from './announcements.js'
 import { measure } from './shifts.js'
 import { holidayOn } from '../holidays.js'
-import { endSession, overtimeForDay, settle } from '../overtime.js'
 import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, finalizeBreaks, readBreaks, startBreak } from '../breaks.js'
 
 // Desktop app (BPO Time) sign-in, v1. See desktop_app_plan.md section 5.3.
@@ -23,7 +22,6 @@ import { BREAK_ALLOWANCE_SECONDS, BREAK_SLOTS, OVER_GRACE_SECONDS, endBreak, fin
 //   GET    /hr/device-me       (Bearer device token) -> who this PC is signed in as
 //   GET    /hr/device-today    (Bearer device token) -> today's attendance for this person
 //   POST   /hr/device-clock-in, /hr/device-clock-out (Bearer device token) -> same records as the Attendance page
-//   POST   /hr/device-overtime-start, /hr/device-overtime-end (Bearer device token) -> the overtime HR allotted for today
 //   GET    /hr/device-counts   (Bearer device token) -> { notifications: unread, todos: open and due today or overdue }
 //   GET    /hr/device-feed     (Bearer device token) -> { announcements: latest 3 live, birthdays: today }
 //   GET    /hr/devices         (portal login)   -> my connected PCs
@@ -350,13 +348,7 @@ async function shiftFor(employeeId: string, record: { checkInAt: Date | null } |
 async function attendanceView(employeeId: string, record: Parameters<typeof attendanceBody>[0]) {
   // holiday: the name when today is a holiday (so the panel can say so), otherwise null.
   const holiday = await holidayOn(todayInManila())
-  return {
-    ...attendanceBody(record),
-    shift: await shiftFor(employeeId, record),
-    holiday: holiday ? { name: holiday.name } : null,
-    // The overtime HR allotted for today's shift day, oldest first, each with its status and countdown end (see lib/overtime.ts).
-    overtime: await overtimeForDay(employeeId, todayInManila()),
-  }
+  return { ...attendanceBody(record), shift: await shiftFor(employeeId, record), holiday: holiday ? { name: holiday.name } : null }
 }
 
 async function deviceAttendance(
@@ -446,47 +438,6 @@ export async function deviceBreakEnd(req: VercelRequest, res: VercelResponse) {
     if ('error' in result) return void res.status(400).json({ message: result.error })
     const record = await prisma.attendanceRecord.update({ where: { id: existing.id }, data: { breaks: result.entries } })
     logAudit(device.userId, 'break_end', 'attendance', record.id)
-    res.status(200).json(await attendanceView(employeeId, record))
-  })
-}
-
-const overtimeSchema = z.object({ id: z.string().uuid().optional() })
-
-// POST /hr/device-overtime-start {id?}: start the countdown of an overtime allotment HR made for today. Only after clocking out of
-// the regular shift, and one at a time. Without an id it starts the oldest one not yet started.
-export async function deviceOvertimeStart(req: VercelRequest, res: VercelResponse) {
-  return deviceAttendance(req, res, 'POST', async (employeeId, device) => {
-    const data = parseBody(overtimeSchema, req.body ?? {}, res)
-    if (!data) return
-    const date = todayInManila()
-    const record = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
-    if (!record?.checkOutAt) return void res.status(400).json({ message: 'Clock out of your shift first, then you can clock in for overtime.' })
-    const rows = await settle(await prisma.overtimeAllotment.findMany({ where: { employeeId, date, status: { in: ['not_started', 'running'] } }, orderBy: { createdAt: 'asc' } }))
-    if (rows.some((r) => r.status === 'running')) return void res.status(400).json({ message: 'You already have overtime running.' })
-    const next = data.id ? rows.find((r) => r.id === data.id) : rows.find((r) => r.status === 'not_started')
-    if (!next || next.status !== 'not_started') return void res.status(400).json({ message: 'HR has not allotted you overtime for today.' })
-    // Only one request can win the start of this row.
-    const won = await prisma.overtimeAllotment.updateMany({ where: { id: next.id, status: 'not_started' }, data: { status: 'running', startedAt: new Date() } })
-    if (won.count === 0) return void res.status(409).json({ message: 'That overtime was just changed. Try again.' })
-    logAudit(device.userId, 'overtime_start', 'overtime', next.id)
-    res.status(201).json(await attendanceView(employeeId, record))
-  })
-}
-
-// POST /hr/device-overtime-end: end the running overtime before its countdown is over; it counts the time worked.
-export async function deviceOvertimeEnd(req: VercelRequest, res: VercelResponse) {
-  return deviceAttendance(req, res, 'POST', async (employeeId, device) => {
-    const date = todayInManila()
-    const record = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId, date } } })
-    const running = await prisma.overtimeAllotment.findFirst({ where: { employeeId, date, status: 'running' } })
-    // A countdown that ran out (or an allotment HR cancelled) is a normal answer, not an error.
-    if (running) {
-      const [settled] = await settle([running])
-      if (settled.status === 'running') {
-        await endSession(settled)
-        logAudit(device.userId, 'overtime_end', 'overtime', running.id)
-      }
-    }
     res.status(200).json(await attendanceView(employeeId, record))
   })
 }

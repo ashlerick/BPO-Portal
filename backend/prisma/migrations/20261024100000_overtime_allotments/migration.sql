@@ -1,19 +1,11 @@
--- Overtime HR allots to a person for a shift day; the person clocks in for it on the BPO Time panel.
--- CreateEnum
-CREATE TYPE "OvertimeStatus" AS ENUM ('not_started', 'running', 'done', 'cancelled');
-
+-- Overtime HR gives a person for a shift day (minutes); it counts as given.
 -- CreateTable
 CREATE TABLE "overtime_allotments" (
     "id" TEXT NOT NULL,
     "employeeId" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
-    "allottedMinutes" INTEGER NOT NULL,
+    "minutes" INTEGER NOT NULL,
     "note" TEXT,
-    "startedAt" TIMESTAMP(3),
-    "endedAt" TIMESTAMP(3),
-    "countedMinutes" INTEGER,
-    "countedByHr" BOOLEAN NOT NULL DEFAULT false,
-    "status" "OvertimeStatus" NOT NULL DEFAULT 'not_started',
     "createdBy" TEXT NOT NULL,
     "updatedBy" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

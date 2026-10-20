@@ -6,16 +6,16 @@ import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
 import { notifyUsers } from '../notify.js'
 import { formatDisplayName } from '../names.js'
-import { MAX_OVERTIME_MINUTES, defaultCounted, overtimeView, settle } from '../overtime.js'
+import { MAX_OVERTIME_MINUTES, overtimeView } from '../overtime.js'
 import { dateOnlyPattern, forbid, isHrOrAdmin, myEmployee, notFound, parseBody, queryString, toDate } from './util.js'
 
-// Overtime HR allots, under /hr/overtime (see .samples/plan/overtime.md):
-//   GET    ?from=&to=[&employeeId=]   the allotments in a range of shift days. HR/Admin see everyone; anyone else sees their own.
-//   POST   {employeeIds[], date, minutes, note?}   HR/Admin: allot the same amount to each person, one row each.
-//   PUT    /:id {minutes?, countedMinutes?, note?, cancel?}   HR/Admin: change one row, at any time (before, during or after).
-//   PUT    {ids[], ...same}           HR/Admin: change several rows at once.
-//   DELETE /:id                       HR/Admin: cancel a row (it counts nothing).
-// The person starts and ends their session on the BPO Time panel (device-overtime-start / device-overtime-end in device.ts).
+// Overtime HR gives, under /hr/overtime (see .samples/plan/overtime.md). A row is a number of minutes for a person and a shift
+// day, and that is what counts.
+//   GET    ?from=&to=[&employeeId=]   the rows in a range of shift days. HR/Admin see everyone; anyone else sees their own.
+//   POST   {employeeIds[], date, minutes, note?}   HR/Admin: give the same amount to each person, one row each.
+//   PUT    /:id {minutes?, note?}     HR/Admin: change one row.
+//   PUT    {ids[], minutes?, note?}   HR/Admin: change several rows at once. {ids[], remove: true} takes several away.
+//   DELETE /:id                       HR/Admin: take a row away (the person is told).
 
 const minutes = z.number().int().min(1, 'Give at least 1 minute').max(MAX_OVERTIME_MINUTES, 'No more than 12 hours at a time')
 
@@ -29,10 +29,9 @@ const createSchema = z.object({
 const editSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(200).optional(),
   minutes: minutes.optional(),
-  // A number is what counts from now on; null hands it back to the session (the time worked, or the allotment if it ran out).
-  countedMinutes: z.number().int().min(0).max(MAX_OVERTIME_MINUTES).nullable().optional(),
   note: z.string().trim().max(300).nullable().optional(),
-  cancel: z.literal(true).optional(),
+  // Take the rows away instead of changing them.
+  remove: z.literal(true).optional(),
 })
 
 const WITH_PERSON = { employee: { include: { user: { select: { firstName: true, middleName: true, lastName: true } } } } } as const
@@ -48,31 +47,18 @@ const withName = (row: WithPerson) => ({
 
 async function loadViews(ids: string[]) {
   const rows = (await prisma.overtimeAllotment.findMany({ where: { id: { in: ids } }, include: WITH_PERSON })) as WithPerson[]
-  const settled = await settle(rows)
-  return rows.map((r, i) => withName({ ...settled[i], employee: r.employee }))
+  return rows.map(withName)
 }
 
-// Applies one edit to the given rows (HR only; the caller has checked). Returns the changed rows as the screens show them.
+// Applies one edit to the given rows (HR only; the caller has checked).
 async function applyEdit(req: AuthedRequest, ids: string[], data: z.infer<typeof editSchema>) {
   const found = (await prisma.overtimeAllotment.findMany({ where: { id: { in: ids } }, include: WITH_PERSON })) as WithPerson[]
-  const now = new Date()
-  for (const row of await settle(found, now)) {
-    const before = found.find((f) => f.id === row.id)!
+  for (const row of found) {
     const changes: string[] = []
-    const patch: Record<string, unknown> = { updatedBy: req.auth.sub }
-    if (data.cancel) {
-      patch.status = 'cancelled'
-      changes.push('cancelled')
-    }
-    if (data.minutes !== undefined && data.minutes !== row.allottedMinutes) {
-      patch.allottedMinutes = data.minutes
-      changes.push(`allotted ${hours(row.allottedMinutes)} -> ${hours(data.minutes)}`)
-    }
-    if (data.countedMinutes !== undefined) {
-      const next = data.countedMinutes === null ? (row.status === 'done' ? defaultCounted(row) : null) : data.countedMinutes
-      patch.countedMinutes = next
-      patch.countedByHr = data.countedMinutes !== null
-      changes.push(`counted ${row.countedMinutes ?? 'none'} -> ${next ?? 'none'}`)
+    const patch: { minutes?: number; note?: string | null; updatedBy: string } = { updatedBy: req.auth.sub }
+    if (data.minutes !== undefined && data.minutes !== row.minutes) {
+      patch.minutes = data.minutes
+      changes.push(`${hours(row.minutes)} -> ${hours(data.minutes)}`)
     }
     if (data.note !== undefined && (data.note || null) !== row.note) {
       patch.note = data.note || null
@@ -80,19 +66,28 @@ async function applyEdit(req: AuthedRequest, ids: string[], data: z.infer<typeof
     }
     if (changes.length === 0) continue
     await prisma.overtimeAllotment.update({ where: { id: row.id }, data: patch })
-    // Lowering the amount below the time already worked ends a running session at once.
-    await settle([{ ...row, ...(patch as Partial<OvertimeAllotment>) }], now)
-    await logAudit(req.auth.sub, data.cancel ? 'cancel' : 'update', 'overtime', row.id, 'success', changes.join('; '))
-    if (data.cancel || patch.allottedMinutes) {
-      await notifyUsers([before.employee.userId], {
+    await logAudit(req.auth.sub, 'update', 'overtime', row.id, 'success', changes.join('; '))
+    if (patch.minutes !== undefined) {
+      await notifyUsers([row.employee.userId], {
         type: 'overtime',
-        title: data.cancel ? 'Your overtime was cancelled' : 'Your overtime was changed',
-        body: data.cancel ? dayLabel(row.date) : `${dayLabel(row.date)}: ${hours(data.minutes!)}`,
+        title: 'Your overtime was changed',
+        body: `${dayLabel(row.date)}: ${hours(patch.minutes)}`,
         link: '/my-time',
       })
     }
   }
   return loadViews(ids)
+}
+
+// Takes rows away and tells each person. Returns how many were removed.
+async function removeRows(req: AuthedRequest, ids: string[]) {
+  const found = (await prisma.overtimeAllotment.findMany({ where: { id: { in: ids } }, include: WITH_PERSON })) as WithPerson[]
+  for (const row of found) {
+    await prisma.overtimeAllotment.delete({ where: { id: row.id } })
+    await logAudit(req.auth.sub, 'delete', 'overtime', row.id, 'success', `${hours(row.minutes)} on ${row.date.toISOString().slice(0, 10)}`)
+    await notifyUsers([row.employee.userId], { type: 'overtime', title: 'Your overtime was removed', body: dayLabel(row.date), link: '/my-time' })
+  }
+  return found.length
 }
 
 export async function handler(req: AuthedRequest, res: VercelResponse) {
@@ -119,8 +114,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       orderBy: [{ date: 'desc' }, { createdAt: 'asc' }],
       take: 1000,
     })) as WithPerson[]
-    const settled = await settle(rows)
-    return res.status(200).json(rows.map((r, i) => withName({ ...settled[i], employee: r.employee })))
+    return res.status(200).json(rows.map(withName))
   }
 
   if (!hr) return forbid(res)
@@ -134,15 +128,15 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     const created = await prisma.$transaction(
       people.map((p) =>
         prisma.overtimeAllotment.create({
-          data: { employeeId: p.id, date, allottedMinutes: data.minutes, note: data.note || null, createdBy: req.auth.sub, updatedBy: req.auth.sub },
+          data: { employeeId: p.id, date, minutes: data.minutes, note: data.note || null, createdBy: req.auth.sub, updatedBy: req.auth.sub },
         }),
       ),
     )
-    for (const row of created) await logAudit(req.auth.sub, 'create', 'overtime', row.id, 'success', `${hours(row.allottedMinutes)} on ${data.date}`)
+    for (const row of created) await logAudit(req.auth.sub, 'create', 'overtime', row.id, 'success', `${hours(row.minutes)} on ${data.date}`)
     await notifyUsers(people.map((p) => p.userId), {
       type: 'overtime',
-      title: 'Overtime allotted to you',
-      body: `${dayLabel(date)}: ${hours(data.minutes)}. Clock in for it in BPO Time after your shift.`,
+      title: 'Overtime given to you',
+      body: `${dayLabel(date)}: ${hours(data.minutes)}`,
       link: '/my-time',
     })
     return res.status(201).json(await loadViews(created.map((r) => r.id)))
@@ -153,13 +147,16 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     if (!data) return
     const ids = sub ? [sub] : data.ids
     if (!ids) return res.status(400).json({ message: 'Pick at least one row' })
+    if (data.remove) {
+      await removeRows(req, ids)
+      return res.status(200).json([])
+    }
     if (sub && !(await prisma.overtimeAllotment.findUnique({ where: { id: sub }, select: { id: true } }))) return notFound(res, 'Overtime not found')
     return res.status(200).json(await applyEdit(req, ids, data))
   }
 
   if (req.method === 'DELETE' && sub) {
-    if (!(await prisma.overtimeAllotment.findUnique({ where: { id: sub }, select: { id: true } }))) return notFound(res, 'Overtime not found')
-    await applyEdit(req, [sub], { cancel: true })
+    if ((await removeRows(req, [sub])) === 0) return notFound(res, 'Overtime not found')
     return res.status(204).end()
   }
 

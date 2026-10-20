@@ -7,8 +7,8 @@ export interface AttendanceRecord {
   checkInAt: string | null
   checkOutAt: string | null
   overtimeHours?: number | null
-  // Overtime HR allotted that counts, in hours (on top of overtimeHours, which HR types in).
-  overtimeAllottedHours?: number
+  // Overtime HR gave, in hours (on top of overtimeHours, which HR types in).
+  overtimeGivenHours?: number
   workingHoliday?: boolean
   // Breaks and lunch taken in the BPO Time app.
   breaks?: import('../../utils/breaks').BreakEntry[]

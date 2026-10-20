@@ -14,7 +14,7 @@ import { formatDisplayName } from '../lib/names.js'
 import { isOffSiteIp } from '../lib/request.js'
 import { isNotFoundError } from '../lib/errors.js'
 import { notifyRole, notifyUsers } from '../lib/notify.js'
-import { countedHoursByDay, overtimeKey, roundHours } from '../lib/overtime.js'
+import { givenHoursByDay, overtimeKey, roundHours } from '../lib/overtime.js'
 
 // Consolidated into one function (Vercel Hobby caps at 12 serverless
 // functions per deployment): leave requests + daily attendance
@@ -225,8 +225,8 @@ async function handleListAttendance(req: AuthedRequest, res: VercelResponse) {
   })
 
   const reviewer = isHrOrAdmin(req)
-  // Overtime HR allotted that counts, on top of the hours HR typed in (overtimeHours).
-  const allotted = await countedHoursByDay(where)
+  // Overtime HR gave, on top of the hours HR typed in (overtimeHours).
+  const allotted = await givenHoursByDay(where)
   res.status(200).json(
     records.map((r) => ({
       id: r.id,
@@ -240,7 +240,7 @@ async function handleListAttendance(req: AuthedRequest, res: VercelResponse) {
       checkInAt: r.checkInAt,
       checkOutAt: r.checkOutAt,
       overtimeHours: r.overtimeHours === null ? null : Number(r.overtimeHours.toString()),
-      overtimeAllottedHours: roundHours(allotted.get(overtimeKey(r.employeeId, r.date)) ?? 0),
+      overtimeGivenHours: roundHours(allotted.get(overtimeKey(r.employeeId, r.date)) ?? 0),
       workingHoliday: r.workingHoliday,
       // Breaks taken on the desktop app, with how far over each ran (HR reads these as flags).
       breaks: readBreaks(r.breaks),
@@ -276,8 +276,8 @@ async function handleExportAttendance(req: AuthedRequest, res: VercelResponse) {
     take: 5000,
   })
 
-  // The workbook's Overtime column is what counts: the hours HR typed in plus the allotted overtime that counts.
-  const allotted = await countedHoursByDay({ ...parseEmployeeFilter(req), date: range })
+  // The workbook's Overtime column is the hours HR typed in plus the overtime HR gave.
+  const allotted = await givenHoursByDay({ ...parseEmployeeFilter(req), date: range })
   const rows = records.map((r) => ({
     employeeId: r.employeeId,
     date: r.date,

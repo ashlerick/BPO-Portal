@@ -1,38 +1,23 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { useApiData } from '../../hooks/useApiData'
 import { api, ApiError } from '../../services/api'
 import type { EmployeeRecord } from '../hris/types'
-import { addDaysIso, formatDateOnly, formatManilaTime, todayInManilaIso } from '../../utils/dates'
+import { addDaysIso, formatDateOnly, todayInManilaIso } from '../../utils/dates'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import { Badge } from '../../components/ui/Badge'
 
-// HR allots overtime to people for a shift day; the person clocks in for it on BPO Time after their shift. What counts is the
-// allotted amount if the session ran its full length, the time worked if it ended early, or whatever HR types. See
-// .samples/plan/overtime.md.
+// HR gives overtime to people for a shift day: a number of hours, and that is what counts. HR can change or remove it any time.
+// See .samples/plan/overtime.md.
 
-export interface OvertimeAllotment {
+export interface OvertimeRow {
   id: string
   employeeId: string
   employeeName: string
   date: string
-  allottedMinutes: number
+  minutes: number
   note: string | null
-  status: 'not_started' | 'running' | 'done' | 'not_used' | 'cancelled'
-  startedAt: string | null
-  endedAt: string | null
-  countedMinutes: number
-  countedByHr: boolean
-}
-
-const STATUS: Record<OvertimeAllotment['status'], { label: string; tone: 'gray' | 'green' | 'amber' | 'red' | 'blue' }> = {
-  not_started: { label: 'Not started', tone: 'gray' },
-  running: { label: 'Running', tone: 'blue' },
-  done: { label: 'Done', tone: 'green' },
-  not_used: { label: 'Not used', tone: 'amber' },
-  cancelled: { label: 'Cancelled', tone: 'red' },
 }
 
 // 90 -> "1 h 30 min"
@@ -45,7 +30,7 @@ export function formatMinutes(m: number): string {
 const toMinutes = (hours: string) => Math.round(Number(hours) * 60)
 const msg = (err: unknown, fallback: string) => (err instanceof ApiError ? err.message : fallback)
 
-function AllotForm({ onAllotted }: { onAllotted: () => void }) {
+function GiveForm({ onGiven }: { onGiven: () => void }) {
   const { guardedAction } = useAuth()
   const { data: employees } = useApiData<EmployeeRecord[]>('/employees')
   const [picked, setPicked] = useState<string[]>([])
@@ -72,12 +57,12 @@ function AllotForm({ onAllotted }: { onAllotted: () => void }) {
       setMessage(null)
       try {
         await api.post('/hr/overtime', { employeeIds: picked, date, minutes, note: note.trim() || undefined })
-        setMessage({ ok: true, text: `Allotted ${formatMinutes(minutes)} to ${picked.length} ${picked.length === 1 ? 'person' : 'people'}. They can clock in for it in BPO Time after their shift.` })
+        setMessage({ ok: true, text: `Gave ${formatMinutes(minutes)} to ${picked.length} ${picked.length === 1 ? 'person' : 'people'}. They have been told.` })
         setPicked([])
         setNote('')
-        onAllotted()
+        onGiven()
       } catch (err) {
-        setMessage({ ok: false, text: msg(err, 'Could not allot the overtime') })
+        setMessage({ ok: false, text: msg(err, 'Could not save the overtime') })
       } finally {
         setSaving(false)
       }
@@ -86,9 +71,7 @@ function AllotForm({ onAllotted }: { onAllotted: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        Pick the people, the shift day and how long. They clock in for it in BPO Time after clocking out of their shift, and the time counts as set here.
-      </p>
+      <p className="text-sm text-gray-600 dark:text-gray-400">Pick the people, the shift day and how long. That time counts as overtime for them.</p>
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -135,21 +118,21 @@ function AllotForm({ onAllotted }: { onAllotted: () => void }) {
       </div>
       {message && <p className={`text-sm ${message.ok ? 'text-brand-700 dark:text-brand-400' : 'text-red-600 dark:text-red-400'}`}>{message.text}</p>}
       <Button type="submit" variant="primary" size="sm" disabled={!valid || saving}>
-        {saving ? 'Allotting…' : 'Allot overtime'}
+        {saving ? 'Saving…' : 'Give overtime'}
       </Button>
     </form>
   )
 }
 
-function BulkBar({ rows, onClear, onChanged }: { rows: OvertimeAllotment[]; onClear: () => void; onChanged: () => void }) {
+function BulkBar({ rows, onClear, onChanged }: { rows: OvertimeRow[]; onClear: () => void; onChanged: () => void }) {
   const { guardedAction } = useAuth()
   const [hours, setHours] = useState('')
-  const [counted, setCounted] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const ids = rows.map((r) => r.id)
-  const hasChange = hours !== '' || counted !== '' || note.trim() !== ''
+  const hasChange = hours !== '' || note.trim() !== ''
+  const noun = ids.length === 1 ? 'row' : 'rows'
 
   function run(body: Record<string, unknown>, done: string) {
     guardedAction(['hr', 'admin'], async () => {
@@ -159,7 +142,6 @@ function BulkBar({ rows, onClear, onChanged }: { rows: OvertimeAllotment[]; onCl
         await api.put('/hr/overtime', { ids, ...body })
         setMessage({ ok: true, text: done })
         setHours('')
-        setCounted('')
         setNote('')
         onChanged()
       } catch (err) {
@@ -171,40 +153,29 @@ function BulkBar({ rows, onClear, onChanged }: { rows: OvertimeAllotment[]; onCl
   }
 
   function save() {
-    run(
-      {
-        ...(hours !== '' && { minutes: toMinutes(hours) }),
-        ...(counted !== '' && { countedMinutes: toMinutes(counted) }),
-        ...(note.trim() !== '' && { note: note.trim() }),
-      },
-      `Saved for ${ids.length} ${ids.length === 1 ? 'row' : 'rows'}.`,
-    )
+    run({ ...(hours !== '' && { minutes: toMinutes(hours) }), ...(note.trim() !== '' && { note: note.trim() }) }, `Saved for ${ids.length} ${noun}.`)
   }
 
-  function cancelRows() {
-    if (!window.confirm(`Cancel the overtime for ${ids.length} ${ids.length === 1 ? 'row' : 'rows'}? A cancelled row counts nothing and the people are told.`)) return
-    run({ cancel: true }, `Cancelled ${ids.length} ${ids.length === 1 ? 'row' : 'rows'}.`)
+  function remove() {
+    if (!window.confirm(`Remove the overtime for ${ids.length} ${noun}? The people are told.`)) return
+    run({ remove: true }, `Removed ${ids.length} ${noun}.`)
   }
 
   return (
     <Card className="mb-3 space-y-3 !border-brand-500/40">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          {ids.length} {ids.length === 1 ? 'row' : 'rows'} selected
+          {ids.length} {noun} selected
         </p>
         <Button size="sm" onClick={onClear}>
           Clear selection
         </Button>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">Fill only what you want to change. A row can be changed at any time, before, during or after the session.</p>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <p className="text-xs text-gray-500 dark:text-gray-400">Fill only what you want to change.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          Allotted hours
+          Hours
           <input type="number" min="0.25" max="12" step="0.25" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="Keep as is" className="field mt-1" />
-        </label>
-        <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
-          Counted hours
-          <input type="number" min="0" max="12" step="0.25" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="Keep as is" className="field mt-1" />
         </label>
         <label className="flex flex-col text-sm text-gray-600 dark:text-gray-400">
           Note
@@ -216,8 +187,8 @@ function BulkBar({ rows, onClear, onChanged }: { rows: OvertimeAllotment[]; onCl
         <Button variant="primary" size="sm" onClick={save} disabled={!hasChange || saving}>
           {saving ? 'Saving…' : 'Save changes'}
         </Button>
-        <Button size="sm" onClick={cancelRows} disabled={saving}>
-          Cancel selected overtime
+        <Button variant="danger" size="sm" onClick={remove} disabled={saving}>
+          Remove selected
         </Button>
       </div>
     </Card>
@@ -228,15 +199,15 @@ export function OvertimeAllotments({ from, to, employeeId, reloadToken, onChange
   const [selected, setSelected] = useState<string[]>([])
   const [localReload, setLocalReload] = useState(0)
 
-  // The page's range, stretched to two weeks ahead so a day allotted in advance shows up before it happens.
+  // The page's range, stretched to two weeks ahead so a day given in advance shows up before it happens.
   const end = to > addDaysIso(todayInManilaIso(), 14) ? to : addDaysIso(todayInManilaIso(), 14)
   const params = new URLSearchParams({ from, to: end })
   if (employeeId) params.set('employeeId', employeeId)
   params.set('_r', `${reloadToken}-${localReload}`)
-  const { data, loading, error } = useApiData<OvertimeAllotment[]>(from > end ? '/hr/overtime?from=invalid' : `/hr/overtime?${params.toString()}`)
+  const { data, loading, error } = useApiData<OvertimeRow[]>(`/hr/overtime?${params.toString()}`)
 
   const rows = data ?? []
-  const chosen = useMemo(() => rows.filter((r) => selected.includes(r.id)), [rows, selected])
+  const chosen = rows.filter((r) => selected.includes(r.id))
   const reload = () => {
     setLocalReload((n) => n + 1)
     onChanged()
@@ -245,11 +216,11 @@ export function OvertimeAllotments({ from, to, employeeId, reloadToken, onChange
 
   return (
     <div className="space-y-4">
-      <AllotForm onAllotted={reload} />
+      <GiveForm onGiven={reload} />
 
       <div>
         <h3 className="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100">
-          Allotted overtime <span className="font-normal text-gray-500 dark:text-gray-400">{formatDateOnly(from)} to {formatDateOnly(end)}</span>
+          Overtime given <span className="font-normal text-gray-500 dark:text-gray-400">{formatDateOnly(from)} to {formatDateOnly(end)}</span>
         </h3>
         {loading && <LoadingState />}
         {error && <ErrorState message={error} />}
@@ -264,7 +235,7 @@ export function OvertimeAllotments({ from, to, employeeId, reloadToken, onChange
             }}
           />
         )}
-        {data && rows.length === 0 && <EmptyState label="No overtime allotted in this range." />}
+        {data && rows.length === 0 && <EmptyState label="No overtime given in this range." />}
         {rows.length > 0 && (
           <Card className="overflow-x-auto !p-0">
             <table className="stack-table w-full text-left text-sm">
@@ -272,27 +243,18 @@ export function OvertimeAllotments({ from, to, employeeId, reloadToken, onChange
                 <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
                   <th className="px-4 py-2 font-medium">
                     <label className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={allSelected}
-                        onChange={() => setSelected(allSelected ? [] : rows.map((r) => r.id))}
-                        aria-label="Select all rows"
-                        className="h-4 w-4"
-                      />
+                      <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? [] : rows.map((r) => r.id))} aria-label="Select all rows" className="h-4 w-4" />
                       Person
                     </label>
                   </th>
                   <th className="px-4 py-2 font-medium">Shift day</th>
-                  <th className="px-4 py-2 font-medium">Allotted</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Clocked</th>
-                  <th className="px-4 py-2 font-medium">Counted</th>
+                  <th className="px-4 py-2 font-medium">Hours</th>
                   <th className="px-4 py-2 font-medium">Note</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/5 dark:divide-white/10">
                 {rows.map((r) => (
-                  <tr key={r.id} className={r.status === 'cancelled' ? 'opacity-60' : undefined}>
+                  <tr key={r.id}>
                     <td data-primary className="px-4 py-2">
                       <label className="flex items-center gap-3 font-medium text-gray-900 dark:text-gray-100">
                         <input
@@ -306,17 +268,7 @@ export function OvertimeAllotments({ from, to, employeeId, reloadToken, onChange
                       </label>
                     </td>
                     <td data-label="Shift day" className="px-4 py-2">{formatDateOnly(r.date)}</td>
-                    <td data-label="Allotted" className="px-4 py-2">{formatMinutes(r.allottedMinutes)}</td>
-                    <td data-label="Status" className="px-4 py-2">
-                      <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
-                    </td>
-                    <td data-label="Clocked" className="px-4 py-2">
-                      {r.startedAt ? `${formatManilaTime(r.startedAt)} to ${r.endedAt ? formatManilaTime(r.endedAt) : 'now'}` : '—'}
-                    </td>
-                    <td data-label="Counted" className="px-4 py-2">
-                      {formatMinutes(r.countedMinutes)}
-                      {r.countedByHr && <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">(set by HR)</span>}
-                    </td>
+                    <td data-label="Hours" className="px-4 py-2">{formatMinutes(r.minutes)}</td>
                     <td data-label="Note" className="px-4 py-2">{r.note ?? '—'}</td>
                   </tr>
                 ))}
@@ -324,9 +276,6 @@ export function OvertimeAllotments({ from, to, employeeId, reloadToken, onChange
             </table>
           </Card>
         )}
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          Counted is what goes into totals: the allotted time if the person ran the whole countdown, the time worked if they ended early, or what HR set. Times are Philippine time.
-        </p>
       </div>
     </div>
   )

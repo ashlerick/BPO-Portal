@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { EmptyState, ErrorState } from '../../components/AsyncState'
+import { EmptyState } from '../../components/AsyncState'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
 import { api, ApiError } from '../../services/api'
 import { formatDateOnly, todayInManilaIso } from '../../utils/dates'
-import { SHIFT_ZONES, shiftHours, shiftHoursWithChange, zoneLabel } from '../../utils/shiftTime'
+import { SHIFT_ZONES, shiftHours, shiftHoursWithChange } from '../../utils/shiftTime'
 import type { EmployeeRecord } from '../hris/types'
 
 // Shift schedules (HR-managed) and the late / undertime / overtime report
@@ -29,7 +29,8 @@ interface ScheduleResponse {
   history: { id: string; effectiveFrom: string; shift: Omit<Shift, 'active'> }[]
 }
 
-interface ReportRow {
+// One attendance day measured against the person's shift (GET /hr/shifts?kind=report).
+export interface ReportRow {
   employeeId: string
   employeeName: string
   date: string
@@ -46,8 +47,7 @@ interface ReportRow {
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const dayList = (days: number[]) => [...days].sort((a, b) => a - b).map((d) => DAYS[d]).join(', ')
-const timeFmt = new Intl.DateTimeFormat('en-US', { timeStyle: 'short', timeZone: 'Asia/Manila' })
-const mins = (n: number) => (n === 0 ? '' : n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`)
+export const mins = (n: number) => (n === 0 ? '' : n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`)
 
 // The hours for a given day, in the shift's own zone and the other one (they differ by an hour after California's clocks change).
 function describeShift(s: Pick<Shift, 'name' | 'startTime' | 'endTime' | 'workDays' | 'timezone'>, isoDate = todayInManilaIso()) {
@@ -524,80 +524,5 @@ export function AssignShift() {
         Assign to {selected.length} {selected.length === 1 ? 'person' : 'people'}
       </Button>
     </form>
-  )
-}
-
-// Late / undertime / overtime for the page's date range.
-export function LateReport({ from, to, employeeId }: { from: string; to: string; employeeId: string }) {
-  const [rows, setRows] = useState<ReportRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (to < from) return
-    setError(null)
-    const q = new URLSearchParams({ kind: 'report', from, to })
-    if (employeeId) q.set('employeeId', employeeId)
-    api
-      .get<ReportRow[]>(`/hr/shifts?${q.toString()}`)
-      .then(setRows)
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load the report'))
-  }, [from, to, employeeId])
-
-  if (error) return <ErrorState message={error} />
-  if (!rows) return null
-
-  // Only the days that were late or short; a day that is on time, or has no time out yet, is not a record here.
-  const flagged = rows.filter((r) => r.lateMinutes > 0 || r.undertimeMinutes > 0)
-  const totalLate = flagged.reduce((a, r) => a + r.lateMinutes, 0)
-  const totalUnder = flagged.reduce((a, r) => a + r.undertimeMinutes, 0)
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-600 dark:text-gray-400">
-        Measured against each employee's assigned shift. Employees with no shift are not measured.
-        {flagged.length > 0 && (
-          <>
-            {' '}
-            <span className="font-medium text-gray-900 dark:text-gray-100">
-              {flagged.length} {flagged.length === 1 ? 'day' : 'days'} · {mins(totalLate) || '0m'} late · {mins(totalUnder) || '0m'} undertime
-            </span>
-          </>
-        )}
-      </p>
-      {flagged.length === 0 ? (
-        <EmptyState label={rows.length === 0 ? 'Nothing to measure in this range (no attendance on a scheduled shift).' : 'No one was late or short in this range.'} />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-left text-sm">
-            <thead>
-              <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
-                <th className="py-2 pr-3 font-medium">Date</th>
-                <th className="py-2 pr-3 font-medium">Employee</th>
-                <th className="py-2 pr-3 font-medium">Shift</th>
-                <th className="py-2 pr-3 font-medium">In / Out</th>
-                <th className="py-2 pr-3 text-right font-medium">Late</th>
-                <th className="py-2 text-right font-medium">Undertime</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-800 dark:text-gray-200">
-              {flagged.map((r) => (
-                <tr key={`${r.employeeId}-${r.date}`} className="border-b border-black/5 dark:border-white/5">
-                  <td className="py-2 pr-3">{formatDateOnly(r.date)}</td>
-                  <td className="py-2 pr-3">{r.employeeName}</td>
-                  <td className="py-2 pr-3 text-gray-500 dark:text-gray-400">
-                    {r.shiftName} {r.scheduledStart}–{r.scheduledEnd} {zoneLabel(r.timezone)}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {r.checkInAt ? timeFmt.format(new Date(r.checkInAt)) : '—'} / {r.checkOutAt ? timeFmt.format(new Date(r.checkOutAt)) : '—'}
-                  </td>
-                  <td className="py-2 pr-3 text-right">{r.lateMinutes > 0 ? <Badge tone="amber">{mins(r.lateMinutes)}</Badge> : ''}</td>
-                  <td className="py-2 text-right">{r.undertimeMinutes > 0 ? <Badge tone="red">{mins(r.undertimeMinutes)}</Badge> : ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
   )
 }

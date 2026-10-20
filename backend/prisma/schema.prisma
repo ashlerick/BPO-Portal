@@ -171,33 +171,19 @@ enum AttendanceStatus {
   absent
 }
 
-enum OvertimeStatus {
-  not_started
-  running
-  done
-  cancelled
-}
-
-// Overtime HR allots to a person for a shift day: a fixed amount the person then clocks in for on the BPO Time panel.
-// The session is this same row (startedAt/endedAt). What counts is countedMinutes (null until the session ends, or until HR
-// types it); a cancelled row counts nothing. "Not used" is not stored: it is not_started on a day that has passed.
+// Overtime HR gives a person for a shift day: a number of minutes, and that is what counts. HR can change or delete it any time.
+// (The BPO Time app has nothing to do with it.) Counted everywhere next to the hours HR types by hand (attendance_records.overtimeHours).
 model OvertimeAllotment {
-  id              String         @id @default(uuid())
-  employee        Employee       @relation(fields: [employeeId], references: [id])
-  employeeId      String
-  date            DateTime // the shift day, same key as attendance_records.date
-  allottedMinutes Int
-  note            String?
-  startedAt       DateTime?
-  endedAt         DateTime?
-  countedMinutes  Int?
-  // HR typed countedMinutes, so ending the session does not overwrite it.
-  countedByHr     Boolean        @default(false)
-  status          OvertimeStatus @default(not_started)
-  createdBy       String // userId
-  updatedBy       String // userId
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String
+  date       DateTime // the shift day, same key as attendance_records.date
+  minutes    Int
+  note       String?
+  createdBy  String // userId
+  updatedBy  String // userId
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([employeeId, date])
   @@index([date])

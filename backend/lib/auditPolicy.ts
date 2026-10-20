@@ -5,7 +5,7 @@
 // permission and account changes) is kept for 5 years. The monthly clean-up (auditRetention.ts) deletes only what is past its time.
 // Change a number here and nowhere else.
 
-export const ROUTINE_ACTIONS = ['check_in', 'check_out', 'break_start', 'break_end', 'overtime_start', 'overtime_end', 'connect'] as const
+export const ROUTINE_ACTIONS = ['check_in', 'check_out', 'break_start', 'break_end', 'connect'] as const
 const ROUTINE_VIEW_RESOURCES = ['shift_report'] as const
 
 export const ROUTINE_DAYS = 365
