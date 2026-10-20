@@ -11,11 +11,12 @@ import { handler as kpi } from '../lib/handlers/kpi.js'
 import { handler as freedomWall } from '../lib/handlers/freedomWall.js'
 import { handler as inventory } from '../lib/handlers/inventory.js'
 import { handler as shifts } from '../lib/handlers/shifts.js'
+import { handler as overtime } from '../lib/handlers/overtime.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
 import { handler as auditRetention } from '../lib/handlers/auditRetention.js'
-import { createCode, deviceBreakEnd, deviceBreakStart, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
+import { createCode, deviceBreakEnd, deviceOvertimeEnd, deviceOvertimeStart, deviceBreakStart, deviceClockIn, deviceClockOut, deviceCounts, deviceFeed, deviceMe, deviceToday, exchangeCode, listDevices, revokeDevice } from '../lib/handlers/device.js'
 
 // HR modules in one serverless function (Vercel Hobby caps at 12).
 // vercel.json rewrites /api/hr/:resource[/:sub] here as ?resource=&sub=.
@@ -35,6 +36,7 @@ const authed = requireAuth(async (req, res) => {
   if (resource === 'freedom-wall') return freedomWall(req, res)
   if (resource === 'inventory') return inventory(req, res)
   if (resource === 'shifts') return shifts(req, res)
+  if (resource === 'overtime') return overtime(req, res)
   if (resource === 'new-hire') return newHire(req, res)
   if (resource === 'device-code' && req.method === 'POST') return createCode(req, res)
   if (resource === 'devices' && req.method === 'GET') return listDevices(req, res)
@@ -60,6 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.query.resource === 'device-counts') return deviceCounts(req, res)
   if (req.query.resource === 'device-break-start') return deviceBreakStart(req, res)
   if (req.query.resource === 'device-break-end') return deviceBreakEnd(req, res)
+  if (req.query.resource === 'device-overtime-start') return deviceOvertimeStart(req, res)
+  if (req.query.resource === 'device-overtime-end') return deviceOvertimeEnd(req, res)
   if (req.query.resource === 'device-feed') return deviceFeed(req, res)
   // An unknown device-* route must say so. Falling through to the login check would
   // answer "Invalid or expired token", which an app reads as "my token was revoked".

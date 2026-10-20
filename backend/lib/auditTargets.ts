@@ -43,6 +43,7 @@ const LOOKUP: Record<string, string> = {
   calendar_event: 'calendarEvent',
   announcement: 'announcement',
   attendance: 'attendanceRecord',
+  overtime: 'overtimeAllotment',
 }
 
 const U = { select: { firstName: true, middleName: true, lastName: true } } as const
@@ -99,6 +100,8 @@ const RESOLVERS: Record<string, Resolver> = {
   announcement: async (ids) => toMap(await prisma.announcement.findMany({ where: inIds(ids) }), (r) => r.title),
   attendanceRecord: async (ids) =>
     toMap(await prisma.attendanceRecord.findMany({ where: inIds(ids), include: { employee: EMP } }), (r) => `${person(r.employee.user)}, ${day(r.date)}`),
+  overtimeAllotment: async (ids) =>
+    toMap(await prisma.overtimeAllotment.findMany({ where: inIds(ids), include: { employee: EMP } }), (r) => `${person(r.employee.user)}, ${day(r.date)}`),
 }
 
 /** A short "about" text per entry id, for entries that have no written detail and whose record still exists. */

@@ -137,6 +137,7 @@ model Employee {
   salaryChanges      SalaryChange[]
   payItems           PayItem[]
   payslips           Payslip[]
+  overtimeAllotments OvertimeAllotment[]
 
   @@map("employees")
 }
@@ -168,6 +169,39 @@ model LeaveRequest {
 enum AttendanceStatus {
   present
   absent
+}
+
+enum OvertimeStatus {
+  not_started
+  running
+  done
+  cancelled
+}
+
+// Overtime HR allots to a person for a shift day: a fixed amount the person then clocks in for on the BPO Time panel.
+// The session is this same row (startedAt/endedAt). What counts is countedMinutes (null until the session ends, or until HR
+// types it); a cancelled row counts nothing. "Not used" is not stored: it is not_started on a day that has passed.
+model OvertimeAllotment {
+  id              String         @id @default(uuid())
+  employee        Employee       @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  date            DateTime // the shift day, same key as attendance_records.date
+  allottedMinutes Int
+  note            String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  countedMinutes  Int?
+  // HR typed countedMinutes, so ending the session does not overwrite it.
+  countedByHr     Boolean        @default(false)
+  status          OvertimeStatus @default(not_started)
+  createdBy       String // userId
+  updatedBy       String // userId
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([employeeId, date])
+  @@index([date])
+  @@map("overtime_allotments")
 }
 
 model AttendanceRecord {

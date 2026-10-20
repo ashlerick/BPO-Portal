@@ -12,6 +12,7 @@ export const NOTIFICATION_TYPES = {
   applicant: 'New job applications',
   inventory: 'Company items assigned to you',
   inventory_check: 'Monthly reminder to check your company items',
+  overtime: 'Overtime allotted, changed or cancelled',
 } as const
 
 export type NotificationType = keyof typeof NOTIFICATION_TYPES
