@@ -1,10 +1,11 @@
 import { FormattedText } from '../../components/ui/FormattedText'
 import { ZONE_OPTIONS } from '../../components/ui/zones'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
-import { Card, CardForm } from '../../components/ui/Card'
+import { Card } from '../../components/ui/Card'
+import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -15,7 +16,7 @@ import { ANNOUNCEMENT_CATEGORIES, isExpired, type Announcement, type Announcemen
 const EMERGENCY = 'Emergency announcements'
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'Asia/Manila' })
 
-function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
+function CreateForm({ onCreated, onClose }: { onCreated: (a: Announcement) => void; onClose: () => void }) {
   const { guardedAction } = useAuth()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -69,19 +70,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           ...(expireOn && { expireAt: new Date(`${expireOn}T23:59:59+08:00`).toISOString() }),
         })
         onCreated(created)
-        setTitle('')
-        setContent('')
-        setExpireOn('')
-        setHighlighted(false)
-        setNeedsAction(false)
-        setActionDueOn('')
-        setActionDueTime('')
-        setIsEvent(false)
-        setEventDate('')
-        setEventTime('')
-        setEventPlace('')
-        setEventMandatory(false)
-        setAudience({ mode: 'all', teamIds: [], employeeIds: [] })
+        onClose()
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not create announcement')
       } finally {
@@ -91,192 +80,197 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
   }
 
   return (
-    <CardForm onSubmit={handleSubmit} className="space-y-3">
-      <div className="space-y-1">
-        <label htmlFor="ann-title" className="text-sm text-gray-600 dark:text-gray-400">
-          Title
-        </label>
-        <input id="ann-title" required value={title} onChange={(e) => setTitle(e.target.value)} className="field" />
+    <form onSubmit={handleSubmit} className="flex max-h-[calc(100vh-2rem)] flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-black/10 px-5 py-3 dark:border-white/10">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">New announcement</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-black/10 text-gray-500 hover:border-brand-500 hover:text-gray-900 dark:border-white/15 dark:text-gray-400 dark:hover:text-gray-100"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 pb-4 pt-1">
+        <p className={sectionLabel}>Message</p>
         <div className="space-y-1">
-          <label htmlFor="ann-category" className="text-sm text-gray-600 dark:text-gray-400">
-            Category
+          <label htmlFor="ann-title" className="text-sm text-gray-600 dark:text-gray-400">
+            Title
           </label>
-          <select
-            id="ann-category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as AnnouncementCategory)}
-            className="field"
-          >
-            {ANNOUNCEMENT_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <input id="ann-title" required autoFocus value={title} onChange={(e) => setTitle(e.target.value)} className="field" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <label htmlFor="ann-category" className="text-sm text-gray-600 dark:text-gray-400">
+              Category
+            </label>
+            <select id="ann-category" value={category} onChange={(e) => setCategory(e.target.value as AnnouncementCategory)} className="field">
+              {ANNOUNCEMENT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="ann-expire" className="text-sm text-gray-600 dark:text-gray-400">
+              Expires on (optional)
+            </label>
+            <input id="ann-expire" type="date" value={expireOn} onChange={(e) => setExpireOn(e.target.value)} className="field" />
+          </div>
         </div>
         <div className="space-y-1">
-          <label htmlFor="ann-expire" className="text-sm text-gray-600 dark:text-gray-400">
-            Expires on (optional)
+          <label htmlFor="ann-content" className="text-sm text-gray-600 dark:text-gray-400">
+            Content
           </label>
-          <input
-            id="ann-expire"
-            type="date"
-            value={expireOn}
-            onChange={(e) => setExpireOn(e.target.value)}
-            className="field"
-          />
+          <textarea id="ann-content" required rows={4} value={content} onChange={(e) => setContent(e.target.value)} className="field" />
+          <p className="text-xs text-gray-500 dark:text-gray-400">Line breaks are kept. Use **bold**, _italic_, and start a line with - for a list. Web links become links.</p>
         </div>
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="ann-content" className="text-sm text-gray-600 dark:text-gray-400">
-          Content
-        </label>
-        <textarea
-          id="ann-content"
-          required
-          rows={6}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          className="field"
-        />
+
+        <p className={sectionLabel}>When</p>
+        <div role="group" aria-label="When to post" className="inline-flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
+          {[
+            [true, 'Post now'],
+            [false, 'Save as a draft'],
+          ].map(([value, label]) => (
+            <button
+              key={String(value)}
+              type="button"
+              aria-pressed={published === value}
+              onClick={() => setPublished(value as boolean)}
+              className={`px-3.5 py-2 text-sm font-medium ${published === value ? 'bg-brand-600 text-white' : 'text-gray-600 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10'}`}
+            >
+              {label as string}
+            </button>
+          ))}
+        </div>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Line breaks are kept. Use **bold**, _italic_, and start a line with - for a list. Web links become links.
+          {published ? 'Everyone can see it and is notified.' : 'Only HR and Admin can see it. Nobody is notified until you press Publish now on it.'}
         </p>
-      </div>
-      <fieldset className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
-        <legend className="sr-only">When to post</legend>
-        <label className="flex items-start gap-2">
-          <input type="radio" name="ann-when" className="mt-1" checked={published} onChange={() => setPublished(true)} />
-          <span>
-            <b className="font-medium">Post now</b>
-            <span className="block text-xs text-gray-500 dark:text-gray-400">Everyone can see it and is notified.</span>
-          </span>
-        </label>
-        <label className="flex items-start gap-2">
-          <input type="radio" name="ann-when" className="mt-1" checked={!published} onChange={() => setPublished(false)} />
-          <span>
-            <b className="font-medium">Save as a draft</b>
-            <span className="block text-xs text-gray-500 dark:text-gray-400">Only HR and Admin can see it. Nobody is notified until you press Publish now on it.</span>
-          </span>
-        </label>
-      </fieldset>
-      <div className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-start gap-2">
-          <input type="checkbox" className="mt-1" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
-          <span>
-            <b className="font-medium">Highlight</b>
-            <span className="block text-xs text-gray-500 dark:text-gray-400">
-              Shows it first on this page and on everyone's BPO Time panel. It leaves a person's panel once they react to it, and it ends by itself after the time you choose.
-            </span>
-          </span>
-        </label>
-        {highlighted && (
-          <label className="ml-6 flex items-center gap-2">
+
+        <p className={sectionLabel}>Extras</p>
+        <Extra
+          title="Highlight"
+          text="Shows it first on this page and on everyone's BPO Time panel. It leaves a person's panel once they react to it."
+          on={highlighted}
+          onChange={setHighlighted}
+        >
+          <label className="flex flex-col text-gray-600 dark:text-gray-400">
             Highlight for
-            <select value={highlightDays} onChange={(e) => setHighlightDays(Number(e.target.value))} className="field !w-auto py-1">
+            <select value={highlightDays} onChange={(e) => setHighlightDays(Number(e.target.value))} className="field mt-1 sm:max-w-xs">
               <option value={1}>1 day</option>
               <option value={3}>3 days</option>
               <option value={7}>1 week</option>
               <option value={0}>until I remove it</option>
             </select>
           </label>
-        )}
-      </div>
-      <div className="text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-start gap-2">
-          <input type="checkbox" className="mt-1" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} />
-          <span>
-            <b className="font-medium">This is an event</b>
-            <span className="block text-xs text-gray-500 dark:text-gray-400">
-              Puts it on the Calendar and lets people say whether they are joining. You set the day, time and place below.
-            </span>
-          </span>
-        </label>
-      </div>
-      {isEvent && (
-        <div className="grid gap-3 rounded-md border border-black/10 p-3 text-sm dark:border-white/10 sm:grid-cols-2">
-          <label className="flex flex-col text-gray-600 dark:text-gray-400">
-            Day
-            <input type="date" required value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="field mt-1" />
-          </label>
-          <label className="flex flex-col text-gray-600 dark:text-gray-400">
-            Time (optional)
-            <span className="mt-1 flex gap-2">
-              <input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} className="field min-w-0 flex-1" />
-              <select value={eventZone} onChange={(e) => setEventZone(e.target.value)} className="field !w-auto" aria-label="Zone of the event time">
-                {ZONE_OPTIONS.map((z) => (
-                  <option key={z.value} value={z.value}>
-                    {z.label}
-                  </option>
-                ))}
-              </select>
-            </span>
-          </label>
-          <label className="flex flex-col text-gray-600 dark:text-gray-400 sm:col-span-2">
-            Where (optional)
-            <input value={eventPlace} onChange={(e) => setEventPlace(e.target.value)} placeholder="For example, JAE Philus Office" className="field mt-1" />
-          </label>
-          <label className="flex items-start gap-2 text-gray-700 dark:text-gray-300 sm:col-span-2">
-            <input type="checkbox" className="mt-1" checked={eventMandatory} onChange={(e) => setEventMandatory(e.target.checked)} />
-            <span>
-              Mandatory
-              <span className="block text-xs text-gray-500 dark:text-gray-400">
-                Everyone is expected. Pressing Got it counts as joining, and they can change it to "can't make it". Leave this off to ask
-                "Are you joining?" instead, with no default.
+        </Extra>
+        <Extra title="This is an event" text="Puts it on the Calendar and lets people say whether they are joining." on={isEvent} onChange={setIsEvent}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col text-gray-600 dark:text-gray-400">
+              Day
+              <input type="date" required value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="field mt-1" />
+            </label>
+            <label className="flex flex-col text-gray-600 dark:text-gray-400">
+              Time (optional)
+              <span className="mt-1 flex gap-2">
+                <input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} className="field min-w-0 flex-1" />
+                <select value={eventZone} onChange={(e) => setEventZone(e.target.value)} className="field !w-auto" aria-label="Zone of the event time">
+                  {ZONE_OPTIONS.map((z) => (
+                    <option key={z.value} value={z.value}>
+                      {z.label}
+                    </option>
+                  ))}
+                </select>
               </span>
-            </span>
-          </label>
-          <p className="text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">The event goes on the Calendar when you post, with its time in both Manila and California time.</p>
-        </div>
-      )}
-      <div className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-start gap-2">
-          <input type="checkbox" className="mt-1" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} />
-          <span>
-            <b className="font-medium">Needs action</b>
-            <span className="block text-xs text-gray-500 dark:text-gray-400">
-              Gives each person a to-do for it, due on the date you set, so you can see who has done it.
-            </span>
-          </span>
-        </label>
-        {needsAction && (
-          <label className="ml-6 flex flex-wrap items-center gap-2">
-            Due on
-            <input type="date" required value={actionDueOn} onChange={(e) => setActionDueOn(e.target.value)} className="field !w-auto py-1" />
-            <span>at</span>
-            <input type="time" value={actionDueTime} onChange={(e) => setActionDueTime(e.target.value)} className="field !w-auto py-1" aria-label="Deadline time (optional)" />
-            {actionDueTime && (
-              <select value={actionDueZone} onChange={(e) => setActionDueZone(e.target.value)} className="field !w-auto py-1" aria-label="Zone of the deadline time">
-                {ZONE_OPTIONS.map((z) => (
-                  <option key={z.value} value={z.value}>
-                    {z.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-        )}
-      </div>
-      {needsAction && (
-        <>
+            </label>
+            <label className="flex flex-col text-gray-600 dark:text-gray-400 sm:col-span-2">
+              Where (optional)
+              <input value={eventPlace} onChange={(e) => setEventPlace(e.target.value)} placeholder="For example, JAE Philus Office" className="field mt-1" />
+            </label>
+            <label className="flex items-start gap-2 text-gray-700 dark:text-gray-300 sm:col-span-2">
+              <input type="checkbox" className="mt-1" checked={eventMandatory} onChange={(e) => setEventMandatory(e.target.checked)} />
+              <span>
+                Mandatory
+                <span className="block text-xs text-gray-500 dark:text-gray-400">
+                  Everyone is expected. Pressing Got it counts as joining, and they can change it to "can't make it". Leave this off to ask
+                  "Are you joining?" instead, with no default.
+                </span>
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">The event goes on the Calendar when you post, with its time in both Manila and California time.</p>
+          </div>
+        </Extra>
+        <Extra title="Needs action" text="Gives each person a to-do for it, due on the date you set, so you can see who has done it." on={needsAction} onChange={setNeedsAction}>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col text-gray-600 dark:text-gray-400">
+              Due on
+              <input type="date" required value={actionDueOn} onChange={(e) => setActionDueOn(e.target.value)} className="field mt-1 !w-auto" />
+            </label>
+            <label className="flex flex-col text-gray-600 dark:text-gray-400">
+              Time (optional)
+              <span className="mt-1 flex gap-2">
+                <input type="time" value={actionDueTime} onChange={(e) => setActionDueTime(e.target.value)} className="field !w-auto" aria-label="Deadline time (optional)" />
+                {actionDueTime && (
+                  <select value={actionDueZone} onChange={(e) => setActionDueZone(e.target.value)} className="field !w-auto" aria-label="Zone of the deadline time">
+                    {ZONE_OPTIONS.map((z) => (
+                      <option key={z.value} value={z.value}>
+                        {z.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </span>
+            </label>
+          </div>
           <ActionAudience value={audience} onChange={setAudience} />
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Finishing the to-do also counts as their "Got it". You can see who is done on the announcement, and change the due date there.
           </p>
-        </>
-      )}
-      {category === 'Emergency announcements' && (
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          An emergency stays on everyone's BPO Time panel until they react or press Got it. It ends 24 hours after it is posted unless you set an end date above.
-        </p>
-      )}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <Button type="submit" variant="primary" disabled={submitting}>
-        {submitting ? (published ? 'Posting…' : 'Saving…') : published ? 'Post announcement' : 'Save draft'}
-      </Button>
-    </CardForm>
+        </Extra>
+        {category === 'Emergency announcements' && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            An emergency stays on everyone's BPO Time panel until they react or press Got it. It ends 24 hours after it is posted unless you set an end date above.
+          </p>
+        )}
+      </div>
+
+      <div className="border-t border-black/10 px-5 py-3 dark:border-white/10">
+        {error && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={submitting}>
+            {submitting ? (published ? 'Posting…' : 'Saving…') : published ? 'Post announcement' : 'Save draft'}
+          </Button>
+        </div>
+      </div>
+    </form>
+  )
+}
+
+const sectionLabel = 'pt-3 text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400'
+
+// One extra option: a title, what it does, and a switch. Its settings open underneath only while it is on.
+function Extra({ title, text, on, onChange, children }: { title: string; text: string; on: boolean; onChange: (on: boolean) => void; children?: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-black/[0.03] dark:border-white/10 dark:bg-white/[0.04]">
+      <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex w-full items-start gap-3 px-3.5 py-2.5 text-left">
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">{title}</span>
+          <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">{text}</span>
+        </span>
+        <span aria-hidden className={`relative mt-0.5 h-5 w-9 flex-none rounded-full transition-colors ${on ? 'bg-brand-600' : 'bg-gray-300 dark:bg-white/20'}`}>
+          <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${on ? 'translate-x-4' : ''}`} />
+        </span>
+      </button>
+      {on && children && <div className="space-y-3 border-t border-black/10 px-3.5 py-3 text-sm dark:border-white/10">{children}</div>}
+    </div>
   )
 }
 
@@ -568,6 +562,7 @@ export function AnnouncementsPage() {
   const [data, setData] = useState<Announcement[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     api
@@ -593,12 +588,21 @@ export function AnnouncementsPage() {
 
   return (
     <div>
-      <PageHeader title="Announcements" />
+      <PageHeader
+        title="Announcements"
+        actions={
+          canManage ? (
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              + New announcement
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {canManage && (
-        <div className="mb-4">
-          <CreateForm onCreated={(a) => setData((prev) => (prev ? [a, ...prev] : [a]))} />
-        </div>
+      {canManage && creating && (
+        <Modal label="New announcement" onClose={() => setCreating(false)} className="max-w-2xl overflow-hidden !p-0">
+          <CreateForm onCreated={(a) => setData((prev) => (prev ? [a, ...prev] : [a]))} onClose={() => setCreating(false)} />
+        </Modal>
       )}
 
       {loading && <LoadingState />}
