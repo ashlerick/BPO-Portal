@@ -595,9 +595,22 @@ export function AttendancePage() {
   const { effectiveRoles } = useAuth()
   const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
 
+  // What is shown (from, to, employeeId) changes only when the person presses Show records (or a quick range); the fields
+  // hold a draft until then, so picking a date does not reload the page.
   const [from, setFrom] = useState(todayInManilaIso())
   const [to, setTo] = useState(todayInManilaIso())
   const [employeeId, setEmployeeId] = useState('')
+  const [draftFrom, setDraftFrom] = useState(from)
+  const [draftTo, setDraftTo] = useState(to)
+  const [draftEmployee, setDraftEmployee] = useState('')
+  const draftInvalid = draftTo < draftFrom
+  const unapplied = draftFrom !== from || draftTo !== to || draftEmployee !== employeeId
+  function applyFilters() {
+    if (draftInvalid) return
+    setFrom(draftFrom)
+    setTo(draftTo)
+    setEmployeeId(draftEmployee)
+  }
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
@@ -666,6 +679,9 @@ export function AttendancePage() {
                 onClick={() => {
                   setFrom(p.from)
                   setTo(p.to)
+                  setDraftFrom(p.from)
+                  setDraftTo(p.to)
+                  setEmployeeId(draftEmployee)
                 }}
               >
                 {p.label}
@@ -675,21 +691,30 @@ export function AttendancePage() {
         </div>
         {/* Phones: From/To share a row (stacking below 360px), Employee
             and Export get full-width rows. md+: one wrapping row. */}
-        <div className="grid grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:flex md:flex-wrap md:items-end">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            applyFilters()
+          }}
+          className="grid grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:flex md:flex-wrap md:items-end"
+        >
           <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
             From
-            <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+            <input type="date" value={draftFrom} max={draftTo} onChange={(e) => setDraftFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
           </label>
           <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
             To
-            <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+            <input type="date" value={draftTo} min={draftFrom} onChange={(e) => setDraftTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
           </label>
           {isReviewer && (
-            <EmployeeFilter value={employeeId} onChange={setEmployeeId} className="col-span-full md:col-auto" />
+            <EmployeeFilter value={draftEmployee} onChange={setDraftEmployee} className="col-span-full md:col-auto" />
           )}
+          <Button type="submit" variant="primary" disabled={draftInvalid || !unapplied} className="col-span-full w-full md:col-auto md:w-auto">
+            Show records
+          </Button>
           {isReviewer && (
             <Button
-              variant="primary"
+              type="button"
               onClick={handleExport}
               disabled={exporting || rangeInvalid}
               className="col-span-full w-full md:col-auto md:w-auto"
@@ -697,9 +722,9 @@ export function AttendancePage() {
               {exporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
           )}
-        </div>
+        </form>
       </Card>
-      {rangeInvalid && <p className="mb-2 text-sm text-red-600 dark:text-red-400">"To" can't be before "From".</p>}
+      {draftInvalid && <p className="mb-2 text-sm text-red-600 dark:text-red-400">"To" can't be before "From".</p>}
       {exportError && <p className="mb-2 text-sm text-red-600 dark:text-red-400">{exportError}</p>}
 
       {loading && <LoadingState />}

@@ -546,28 +546,29 @@ export function LateReport({ from, to, employeeId }: { from: string; to: string;
   if (error) return <ErrorState message={error} />
   if (!rows) return null
 
+  // Only the days that were late or short; a day that is on time, or has no time out yet, is not a record here.
   const flagged = rows.filter((r) => r.lateMinutes > 0 || r.undertimeMinutes > 0)
-  const totalLate = rows.reduce((a, r) => a + r.lateMinutes, 0)
-  const totalUnder = rows.reduce((a, r) => a + r.undertimeMinutes, 0)
+  const totalLate = flagged.reduce((a, r) => a + r.lateMinutes, 0)
+  const totalUnder = flagged.reduce((a, r) => a + r.undertimeMinutes, 0)
 
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-600 dark:text-gray-400">
         Measured against each employee's assigned shift. Employees with no shift are not measured.
-        {rows.length > 0 && (
+        {flagged.length > 0 && (
           <>
             {' '}
             <span className="font-medium text-gray-900 dark:text-gray-100">
-              {flagged.length} of {rows.length} days flagged · {mins(totalLate) || '0m'} late · {mins(totalUnder) || '0m'} undertime
+              {flagged.length} {flagged.length === 1 ? 'day' : 'days'} · {mins(totalLate) || '0m'} late · {mins(totalUnder) || '0m'} undertime
             </span>
           </>
         )}
       </p>
-      {rows.length === 0 ? (
-        <EmptyState label="Nothing to measure in this range (no attendance on a scheduled shift)." />
+      {flagged.length === 0 ? (
+        <EmptyState label={rows.length === 0 ? 'Nothing to measure in this range (no attendance on a scheduled shift).' : 'No one was late or short in this range.'} />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-left text-sm">
+          <table className="w-full min-w-[36rem] text-left text-sm">
             <thead>
               <tr className="border-b border-black/10 text-gray-500 dark:border-white/10 dark:text-gray-400">
                 <th className="py-2 pr-3 font-medium">Date</th>
@@ -575,12 +576,11 @@ export function LateReport({ from, to, employeeId }: { from: string; to: string;
                 <th className="py-2 pr-3 font-medium">Shift</th>
                 <th className="py-2 pr-3 font-medium">In / Out</th>
                 <th className="py-2 pr-3 text-right font-medium">Late</th>
-                <th className="py-2 pr-3 text-right font-medium">Undertime</th>
-                <th className="py-2 text-right font-medium">Overtime</th>
+                <th className="py-2 text-right font-medium">Undertime</th>
               </tr>
             </thead>
             <tbody className="text-gray-800 dark:text-gray-200">
-              {rows.map((r) => (
+              {flagged.map((r) => (
                 <tr key={`${r.employeeId}-${r.date}`} className="border-b border-black/5 dark:border-white/5">
                   <td className="py-2 pr-3">{formatDateOnly(r.date)}</td>
                   <td className="py-2 pr-3">{r.employeeName}</td>
@@ -591,8 +591,7 @@ export function LateReport({ from, to, employeeId }: { from: string; to: string;
                     {r.checkInAt ? timeFmt.format(new Date(r.checkInAt)) : '—'} / {r.checkOutAt ? timeFmt.format(new Date(r.checkOutAt)) : '—'}
                   </td>
                   <td className="py-2 pr-3 text-right">{r.lateMinutes > 0 ? <Badge tone="amber">{mins(r.lateMinutes)}</Badge> : ''}</td>
-                  <td className="py-2 pr-3 text-right">{r.undertimeMinutes > 0 ? <Badge tone="red">{mins(r.undertimeMinutes)}</Badge> : ''}</td>
-                  <td className="py-2 text-right">{mins(r.overtimeMinutes)}</td>
+                  <td className="py-2 text-right">{r.undertimeMinutes > 0 ? <Badge tone="red">{mins(r.undertimeMinutes)}</Badge> : ''}</td>
                 </tr>
               ))}
             </tbody>
