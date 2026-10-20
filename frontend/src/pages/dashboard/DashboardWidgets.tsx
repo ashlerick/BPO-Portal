@@ -42,7 +42,14 @@ export function targetHours(shift: ShiftInfo | null): number {
 const grossHours = (r: AttendanceRecord, now: number) =>
   r.checkInAt ? Math.max(0, ((r.checkOutAt ? new Date(r.checkOutAt).getTime() : now) - new Date(r.checkInAt).getTime()) / 3_600_000) : 0
 const workedOf = (r: AttendanceRecord | undefined, now: number) => (r && r.status === 'present' ? netHours(grossHours(r, now), r.breaks) : 0)
-const overtimeOf = (r: AttendanceRecord | undefined) => (r && r.status === 'present' ? (r.overtimeHours ?? 0) + (r.overtimeGivenHours ?? 0) : 0)
+// Overtime for one shift day: the hours HR typed in on the attendance row, plus the overtime HR gave (from the overtime list itself,
+// so a day with overtime counts even if there is no clock-in that day).
+export interface GivenOvertime {
+  date: string
+  minutes: number
+}
+const overtimeOf = (r: AttendanceRecord | undefined, given: GivenOvertime[], date: string) =>
+  (r && r.status === 'present' ? (r.overtimeHours ?? 0) : 0) + given.filter((g) => g.date.slice(0, 10) === date).reduce((n, g) => n + g.minutes, 0) / 60
 
 // The size of an element, kept up to date, so a chart is drawn at its real size instead of being scaled (scaled text gets huge).
 function useSize<T extends HTMLElement>(fallback: { w: number; h: number }): [React.RefObject<T | null>, { w: number; h: number }] {
@@ -200,7 +207,7 @@ export function TodayCard({
 
 // ---- This week: regular hours and overtime for each day, against the shift target
 
-export function WeekChart({ records, today, target, footer }: { records: AttendanceRecord[]; today: string; target: number; footer?: ReactNode }) {
+export function WeekChart({ records, given, today, target, footer }: { records: AttendanceRecord[]; given: GivenOvertime[]; today: string; target: number; footer?: ReactNode }) {
   const now = useNow()
   const [boxRef, size] = useSize<HTMLDivElement>({ w: 560, h: 220 })
   const W = size.w
@@ -208,7 +215,7 @@ export function WeekChart({ records, today, target, footer }: { records: Attenda
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = addDaysIso(weekStart, i)
     const rec = records.find((r) => r.date.slice(0, 10) === date)
-    return { date, name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i], regular: round1(workedOf(rec, now)), overtime: round1(overtimeOf(rec)) }
+    return { date, name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i], regular: round1(workedOf(rec, now)), overtime: round1(overtimeOf(rec, given, date)) }
   })
   const totalRegular = round1(days.reduce((n, d) => n + d.regular, 0))
   const totalOvertime = round1(days.reduce((n, d) => n + d.overtime, 0))

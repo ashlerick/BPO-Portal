@@ -18,7 +18,7 @@ import type { WeeklyReport } from '../reports/types'
 import { HolidayBanner } from '../../components/ui/HolidayBanner'
 import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { AdminWidgets } from './AdminWidgets'
-import { Card as DashCard, TeamToday, TodayCard, WeekChart, WeekStrip, mondayOf, targetHours, type ShiftInfo } from './DashboardWidgets'
+import { Card as DashCard, TeamToday, TodayCard, WeekChart, WeekStrip, mondayOf, targetHours, type GivenOvertime, type ShiftInfo } from './DashboardWidgets'
 import { AssignTodo, TodosPanel } from './Todos'
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
@@ -50,6 +50,7 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
   const [teamCount, setTeamCount] = useState<number | null>(null)
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([])
   const [weekRecords, setWeekRecords] = useState<AttendanceRecord[]>([])
+  const [givenWeek, setGivenWeek] = useState<GivenOvertime[]>([])
   const [todos, setTodos] = useState<TodoCount[]>([])
   const [shift, setShift] = useState<ShiftInfo | null>(null)
 
@@ -78,9 +79,14 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
       .get<AttendanceRecord[]>(`/leave/attendance?from=${monday}&to=${addDaysIso(monday, 6)}&employeeId=${profileId}`)
       .then(setWeekRecords)
       .catch(() => undefined)
+    // The overtime HR gave this person this week (HR is sent everyone's, so keep only this person's).
+    api
+      .get<(GivenOvertime & { employeeId: string })[]>(`/hr/overtime?from=${monday}&to=${addDaysIso(monday, 6)}`)
+      .then((rows) => setGivenWeek(rows.filter((r) => r.employeeId === profileId)))
+      .catch(() => undefined)
   }, [profileId])
 
-  return { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, todos, shift }
+  return { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, givenWeek, todos, shift }
 }
 
 function Tile({
@@ -138,7 +144,7 @@ export function DashboardPage() {
   const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const isElevated = effectiveRoles.some((r) => r === 'team_leader' || r === 'manager' || r === 'hr' || r === 'admin')
   const { data, loading, error } = useApiData<Announcement[]>('/announcements')
-  const { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, todos, shift } = useDashboardData(isReviewer, isElevated)
+  const { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, givenWeek, todos, shift } = useDashboardData(isReviewer, isElevated)
   const [todoReload, setTodoReload] = useState(0)
   const [assigning, setAssigning] = useState(false)
   const holiday = useTodayHoliday()
@@ -223,7 +229,7 @@ export function DashboardPage() {
           />
         </div>
         <div className="lg:col-span-2">
-          <WeekChart records={weekRecords} today={today} target={targetHours(shift)} footer={<WeekStrip today={today} events={events} dueDates={dueDates} />} />
+          <WeekChart records={weekRecords} given={givenWeek} today={today} target={targetHours(shift)} footer={<WeekStrip today={today} events={events} dueDates={dueDates} />} />
         </div>
 
         <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:col-span-2 xl:col-span-3">
