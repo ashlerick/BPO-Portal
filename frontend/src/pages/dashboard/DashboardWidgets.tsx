@@ -181,7 +181,7 @@ export function TodayCard({
 
 // ---- This week: regular hours and overtime for each day, against the shift target
 
-export function WeekChart({ records, today, target }: { records: AttendanceRecord[]; today: string; target: number }) {
+export function WeekChart({ records, today, target, footer }: { records: AttendanceRecord[]; today: string; target: number; footer?: ReactNode }) {
   const now = useNow()
   const weekStart = mondayOf(today)
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -282,6 +282,7 @@ export function WeekChart({ records, today, target }: { records: AttendanceRecor
           </tbody>
         </table>
       </div>
+      {footer && <div className="border-t border-black/5 dark:border-white/10">{footer}</div>}
     </Card>
   )
 }

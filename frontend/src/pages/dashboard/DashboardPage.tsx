@@ -220,7 +220,7 @@ export function DashboardPage() {
           checkInAt={attendanceStatus?.checkInAt ?? null}
           checkOutAt={attendanceStatus?.checkOutAt ?? null}
         />
-        <WeekChart records={weekRecords} today={today} target={targetHours(shift)} />
+        <WeekChart records={weekRecords} today={today} target={targetHours(shift)} footer={<WeekStrip today={today} events={events} dueDates={dueDates} />} />
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
@@ -237,8 +237,8 @@ export function DashboardPage() {
         <Tile label={isReviewer ? 'Pending leave' : 'My pending leave'} value={pendingLeave.length} sub={isReviewer ? 'waiting for review' : 'waiting for approval'} to="/leave" />
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
+      <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="space-y-4 lg:row-span-2 2xl:row-span-1">
           <div id="my-todos" className="scroll-mt-4 space-y-3">
             <MyTodos
               key={todoReload}
@@ -286,28 +286,30 @@ export function DashboardPage() {
 
         <div className="space-y-4">
           <DashCard
-            title="This week"
+            title="Notifications"
             aside={
-              <Link to="/calendar" className={linkClass}>
-                Calendar →
+              <Link to="/notifications" className={linkClass}>
+                All notifications →
               </Link>
             }
           >
-            <WeekStrip today={today} events={events} dueDates={dueDates} />
-            <div className="border-t border-black/5 dark:border-white/10">
-              {reminders.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
-              ) : (
-                reminders.slice(0, 4).map((e) => (
-                  <div key={e.id} className={`${rowClass} justify-between`}>
-                    <span className="text-gray-900 dark:text-gray-100">{e.title}</span>
-                    <span className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDateOnly(e.startDate)}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            {recentNotifications.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No notifications yet.</p>
+            ) : (
+              recentNotifications.map((n) => (
+                <div key={n.id} className={`${rowClass} justify-between`}>
+                  <span className={`flex items-start gap-2 ${n.readAt ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-gray-900 dark:text-gray-100'}`}>
+                    {!n.readAt && <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full bg-brand-500" />}
+                    {n.title}
+                  </span>
+                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{timeFmt.format(new Date(n.createdAt))}</span>
+                </div>
+              ))
+            )}
           </DashCard>
+        </div>
 
+        <div className="space-y-4">
           <DashCard
             title="Announcements"
             aside={
@@ -337,23 +339,20 @@ export function DashboardPage() {
           </DashCard>
 
           <DashCard
-            title="Notifications"
+            title="Coming up"
             aside={
-              <Link to="/notifications" className={linkClass}>
-                All notifications →
+              <Link to="/calendar" className={linkClass}>
+                Calendar →
               </Link>
             }
           >
-            {recentNotifications.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No notifications yet.</p>
+            {reminders.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
             ) : (
-              recentNotifications.map((n) => (
-                <div key={n.id} className={`${rowClass} justify-between`}>
-                  <span className={`flex items-start gap-2 ${n.readAt ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-gray-900 dark:text-gray-100'}`}>
-                    {!n.readAt && <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full bg-brand-500" />}
-                    {n.title}
-                  </span>
-                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{timeFmt.format(new Date(n.createdAt))}</span>
+              reminders.slice(0, 4).map((e) => (
+                <div key={e.id} className={`${rowClass} justify-between`}>
+                  <span className="text-gray-900 dark:text-gray-100">{e.title}</span>
+                  <span className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDateOnly(e.startDate)}</span>
                 </div>
               ))
             )}
