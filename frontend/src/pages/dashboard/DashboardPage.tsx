@@ -5,7 +5,6 @@ import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { useApiData } from '../../hooks/useApiData'
 import { api } from '../../services/api'
 import { Badge } from '../../components/ui/Badge'
-import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { ROLE_LABELS } from '../../auth/types'
 import { addDaysIso, formatDateOnly, todayInManilaIso } from '../../utils/dates'
@@ -20,7 +19,7 @@ import { HolidayBanner } from '../../components/ui/HolidayBanner'
 import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { AdminWidgets } from './AdminWidgets'
 import { Card as DashCard, TeamToday, TodayCard, WeekChart, WeekStrip, mondayOf, targetHours, type ShiftInfo } from './DashboardWidgets'
-import { AssignedByMe, AssignTodo, MyTodos } from './Todos'
+import { AssignTodo, TodosPanel } from './Todos'
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
 
@@ -104,10 +103,10 @@ function Tile({
   dot?: boolean // an unread marker next to the label
 }) {
   const className =
-    'block rounded-xl border border-black/5 bg-white/80 px-3.5 py-3 text-left shadow-sm transition hover:border-brand-500 dark:border-white/10 dark:bg-white/[0.035]'
+    'block min-w-0 rounded-xl border border-black/5 bg-white/80 px-2.5 py-3 text-left shadow-sm transition hover:border-brand-500 dark:border-white/10 dark:bg-white/[0.035] sm:px-3.5'
   const body = (
     <>
-      <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+      <span className="flex items-center gap-1.5 truncate text-[10px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:text-[11px]">
         {label}
         {dot && <span aria-label="has unread" className="h-1.5 w-1.5 rounded-full bg-brand-500" />}
       </span>
@@ -117,7 +116,7 @@ function Tile({
           <span className="block h-full rounded-full bg-[#0f9d63] dark:bg-[#1fa763]" style={{ width: `${Math.round(bar * 100)}%` }} />
         </span>
       )}
-      <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{sub}</span>
+      <span className="mt-1 block truncate text-xs text-gray-500 dark:text-gray-400">{sub}</span>
     </>
   )
   return to ? (
@@ -210,108 +209,66 @@ export function DashboardPage() {
         </ul>
       )}
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
-        <TodayCard
-          today={today}
-          record={todayRecord}
-          shift={shift}
-          checkedIn={!!attendanceStatus?.checkedIn}
-          checkedOut={!!attendanceStatus?.checkedOut}
-          checkInAt={attendanceStatus?.checkInAt ?? null}
-          checkOutAt={attendanceStatus?.checkOutAt ?? null}
-        />
-        <WeekChart records={weekRecords} today={today} target={targetHours(shift)} footer={<WeekStrip today={today} events={events} dueDates={dueDates} />} />
-      </div>
+      {/* One grid for the whole page: three columns on a wide screen, so every row's edges line up; two on a laptop; one on a phone. */}
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="lg:col-span-2 xl:col-span-1">
+          <TodayCard
+            today={today}
+            record={todayRecord}
+            shift={shift}
+            checkedIn={!!attendanceStatus?.checkedIn}
+            checkedOut={!!attendanceStatus?.checkedOut}
+            checkInAt={attendanceStatus?.checkInAt ?? null}
+            checkOutAt={attendanceStatus?.checkOutAt ?? null}
+          />
+        </div>
+        <div className="lg:col-span-2">
+          <WeekChart records={weekRecords} today={today} target={targetHours(shift)} footer={<WeekStrip today={today} events={events} dueDates={dueDates} />} />
+        </div>
 
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-        <Tile
-          label="Open to-dos"
-          value={openTodos.length}
-          sub={overdueTodos.length > 0 ? `${overdueTodos.length} overdue` : todos.length === 0 ? 'none yet' : `${doneTodos} of ${todos.length} done`}
-          tone={overdueTodos.length > 0 ? 'red' : undefined}
-          bar={todos.length > 0 ? doneTodos / todos.length : undefined}
-          onClick={() => document.getElementById('my-todos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-        />
-        <Tile label="Notifications" value={unread} sub="unread" dot={unread > 0} to="/notifications" />
-        <Tile label="SIL balance" value={profile ? profile.silBalance : '—'} sub="days" to="/leave" />
-        <Tile label={isReviewer ? 'Pending leave' : 'My pending leave'} value={pendingLeave.length} sub={isReviewer ? 'waiting for review' : 'waiting for approval'} to="/leave" />
-      </div>
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:col-span-2 xl:col-span-3">
+          <Tile
+            label="Open to-dos"
+            value={openTodos.length}
+            sub={overdueTodos.length > 0 ? `${overdueTodos.length} overdue` : todos.length === 0 ? 'none yet' : `${doneTodos} of ${todos.length} done`}
+            tone={overdueTodos.length > 0 ? 'red' : undefined}
+            bar={todos.length > 0 ? doneTodos / todos.length : undefined}
+            onClick={() => document.getElementById('my-todos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          />
+          <Tile label="Notifications" value={unread} sub="unread" dot={unread > 0} to="/notifications" />
+          <Tile label="Leave" value={profile ? profile.silBalance : '—'} sub={pendingLeave.length > 0 ? `${pendingLeave.length} ${isReviewer ? 'to review' : 'pending'}` : 'SIL days'} to="/leave" />
+        </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-        <div className="space-y-4 lg:row-span-2 2xl:row-span-1">
-          <div id="my-todos" className="scroll-mt-4 space-y-3">
-            <MyTodos
-              key={todoReload}
-              action={
-                isElevated ? (
-                  <Button variant="primary" size="sm" onClick={() => setAssigning(true)}>
-                    + Assign a to-do
-                  </Button>
-                ) : undefined
-              }
-            />
-            {isElevated && <AssignedByMe isHr={isReviewer} reloadKey={todoReload} />}
-          </div>
+        <TodosPanel canAssign={isElevated} isHr={isReviewer} reloadKey={todoReload} onAssign={() => setAssigning(true)} />
 
-          {isReviewer && (
-            <DashCard
-              title="Team today"
-              aside={
-                <Link to="/attendance" className={linkClass}>
-                  Attendance →
-                </Link>
-              }
-            >
-              <TeamToday employees={employees} records={todayRecords} />
-              <div className="grid grid-cols-3 gap-2.5 border-t border-black/5 p-4 dark:border-white/10">
-                {[
-                  ['Employees', employees.length],
-                  ['Active teams', teamCount ?? '—'],
-                  ['Leave to review', pendingLeave.length],
-                ].map(([label, value]) => (
-                  <div key={label as string} className="rounded-lg bg-black/[0.04] px-3 py-2.5 dark:bg-white/[0.06]">
-                    <span className="block text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{value}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
-                  </div>
-                ))}
+        <DashCard
+          title="Notifications"
+          scroll
+          aside={
+            <Link to="/notifications" className={linkClass}>
+              All notifications →
+            </Link>
+          }
+        >
+          {recentNotifications.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No notifications yet.</p>
+          ) : (
+            recentNotifications.map((n) => (
+              <div key={n.id} className={`${rowClass} justify-between`}>
+                <span className={`flex items-start gap-2 ${n.readAt ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-gray-900 dark:text-gray-100'}`}>
+                  {!n.readAt && <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full bg-brand-500" />}
+                  {n.title}
+                </span>
+                <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{timeFmt.format(new Date(n.createdAt))}</span>
               </div>
-              {user?.roles.includes('admin') && (
-                <div className="border-t border-black/5 px-4 pb-4 dark:border-white/10">
-                  <AdminWidgets />
-                </div>
-              )}
-            </DashCard>
+            ))
           )}
-        </div>
+        </DashCard>
 
-        <div className="space-y-4">
-          <DashCard
-            title="Notifications"
-            aside={
-              <Link to="/notifications" className={linkClass}>
-                All notifications →
-              </Link>
-            }
-          >
-            {recentNotifications.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No notifications yet.</p>
-            ) : (
-              recentNotifications.map((n) => (
-                <div key={n.id} className={`${rowClass} justify-between`}>
-                  <span className={`flex items-start gap-2 ${n.readAt ? 'text-gray-500 dark:text-gray-400' : 'font-semibold text-gray-900 dark:text-gray-100'}`}>
-                    {!n.readAt && <span aria-hidden className="mt-1.5 h-2 w-2 flex-none rounded-full bg-brand-500" />}
-                    {n.title}
-                  </span>
-                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{timeFmt.format(new Date(n.createdAt))}</span>
-                </div>
-              ))
-            )}
-          </DashCard>
-        </div>
-
-        <div className="space-y-4">
+        <div className="lg:col-span-2 xl:col-span-1">
           <DashCard
             title="Announcements"
+            scroll
             aside={
               <Link to="/announcements" className={linkClass}>
                 All announcements →
@@ -336,16 +293,12 @@ export function DashboardPage() {
                 </div>
               </div>
             ))}
-          </DashCard>
-
-          <DashCard
-            title="Coming up"
-            aside={
+            <div className="flex items-center justify-between border-y border-black/5 bg-black/[0.03] px-4 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Coming up</h3>
               <Link to="/calendar" className={linkClass}>
                 Calendar →
               </Link>
-            }
-          >
+            </div>
             {reminders.length === 0 ? (
               <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
             ) : (
@@ -358,6 +311,40 @@ export function DashboardPage() {
             )}
           </DashCard>
         </div>
+
+        {isReviewer && (
+          <div className="lg:col-span-2 xl:col-span-3">
+            <DashCard
+              title="Team today"
+              aside={
+                <Link to="/attendance" className={linkClass}>
+                  Attendance →
+                </Link>
+              }
+            >
+              <div className="grid lg:grid-cols-[2fr_1fr]">
+                <TeamToday employees={employees} records={todayRecords} />
+                <div className="grid grid-cols-3 gap-2.5 border-t border-black/5 p-4 dark:border-white/10 lg:border-l lg:border-t-0">
+                  {[
+                    ['Employees', employees.length],
+                    ['Active teams', teamCount ?? '—'],
+                    ['Leave to review', pendingLeave.length],
+                  ].map(([label, value]) => (
+                    <div key={label as string} className="rounded-lg bg-black/[0.04] px-3 py-2.5 dark:bg-white/[0.06]">
+                      <span className="block text-xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">{value}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {user?.roles.includes('admin') && (
+                <div className="border-t border-black/5 px-4 pb-4 dark:border-white/10">
+                  <AdminWidgets />
+                </div>
+              )}
+            </DashCard>
+          </div>
+        )}
       </div>
 
       {assigning && (

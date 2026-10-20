@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
-import { Section } from '../../components/ui/Section'
 import { useToast } from '../../components/ui/Toast'
 import { useAuth } from '../../auth/AuthContext'
 import { api, ApiError } from '../../services/api'
@@ -247,8 +246,7 @@ type Filter = 'open' | 'overdue' | 'done'
 
 // The signed-in employee's own to-dos: open ones by urgency, overdue
 // called out, finished ones tucked under "Completed".
-// `action` is a button shown on the right of the header, next to the count.
-export function MyTodos({ action }: { action?: ReactNode }) {
+function MyTodosBody() {
   const { user } = useAuth()
   const [todos, setTodos] = useState<Todo[]>([])
   const [filter, setFilter] = useState<Filter>('open')
@@ -286,20 +284,7 @@ export function MyTodos({ action }: { action?: ReactNode }) {
   )
 
   return (
-    <Section
-      id="dashboard.todos"
-      title="My to-dos"
-      hint={open.length === 0 ? 'Nothing open' : `${open.length} open${overdue.length ? `, ${overdue.length} overdue` : ''}`}
-      aside={
-        action || open.length > 0 ? (
-          <span className="flex items-center gap-2">
-            {action}
-            {open.length > 0 && <Badge tone={overdue.length ? 'red' : 'amber'}>{open.length}</Badge>}
-          </span>
-        ) : undefined
-      }
-      defaultOpen
-    >
+    <>
       <div className="mb-2 flex flex-wrap gap-2">
         {chip('open', 'Open', open.length)}
         {chip('overdue', 'Overdue', overdue.length)}
@@ -323,13 +308,13 @@ export function MyTodos({ action }: { action?: ReactNode }) {
           ))}
         </ul>
       )}
-    </Section>
+    </>
   )
 }
 
 // To-dos I assigned to other people: who has done them and who has not.
 // HR/Admin can switch to everyone's, to clear out entries made in error.
-export function AssignedByMe({ isHr, reloadKey }: { isHr: boolean; reloadKey: number }) {
+function AssignedBody({ isHr, reloadKey }: { isHr: boolean; reloadKey: number }) {
   const [todos, setTodos] = useState<Todo[]>([])
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [filter, setFilter] = useState<'open' | 'done'>('open')
@@ -348,12 +333,7 @@ export function AssignedByMe({ isHr, reloadKey }: { isHr: boolean; reloadKey: nu
   const shown = filter === 'open' ? open : done
 
   return (
-    <Section
-      id="dashboard.assigned-todos"
-      title="Assigned by me"
-      hint={`${open.length} open, ${done.length} done`}
-      aside={open.length > 0 ? <Badge tone="blue">{open.length}</Badge> : undefined}
-    >
+    <>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-2">
           {(['open', 'done'] as const).map((k) => (
@@ -389,7 +369,43 @@ export function AssignedByMe({ isHr, reloadKey }: { isHr: boolean; reloadKey: nu
           ))}
         </ul>
       )}
-    </Section>
+    </>
+  )
+}
+
+// The to-do panel on the dashboard: My to-dos, and (for people who assign work) Assigned by me, as two tabs of one card, so the
+// panel is the same shape as its neighbours. The list scrolls inside the card.
+export function TodosPanel({ canAssign, isHr, reloadKey, onAssign }: { canAssign: boolean; isHr: boolean; reloadKey: number; onAssign: () => void }) {
+  const [tab, setTab] = useState<'mine' | 'assigned'>('mine')
+  return (
+    <section id="my-todos" className="flex h-full scroll-mt-4 flex-col rounded-xl border border-black/5 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-black/5 px-4 py-3 dark:border-white/10">
+        {canAssign ? (
+          <div role="tablist" aria-label="To-dos" className="inline-flex overflow-hidden rounded-lg border border-black/10 dark:border-white/15">
+            {([['mine', 'My to-dos'], ['assigned', 'Assigned by me']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`px-3 py-1.5 text-xs font-medium ${tab === key ? 'bg-brand-600 text-white' : 'text-gray-600 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h2 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">My to-dos</h2>
+        )}
+        {canAssign && (
+          <Button variant="primary" size="sm" onClick={onAssign}>
+            + Assign a to-do
+          </Button>
+        )}
+      </header>
+      <div className="max-h-[26rem] min-h-0 flex-1 overflow-y-auto px-4 py-3">{tab === 'mine' ? <MyTodosBody key={reloadKey} /> : <AssignedBody isHr={isHr} reloadKey={reloadKey} />}</div>
+    </section>
   )
 }
 

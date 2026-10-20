@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { addDaysIso, formatManilaTime } from '../../utils/dates'
 import { breakSlotText, netHours } from '../../utils/breaks'
 import { shiftHours, zonedInstant } from '../../utils/shiftTime'
@@ -44,6 +44,25 @@ const grossHours = (r: AttendanceRecord, now: number) =>
 const workedOf = (r: AttendanceRecord | undefined, now: number) => (r && r.status === 'present' ? netHours(grossHours(r, now), r.breaks) : 0)
 const overtimeOf = (r: AttendanceRecord | undefined) => (r && r.status === 'present' ? (r.overtimeHours ?? 0) + (r.overtimeGivenHours ?? 0) : 0)
 
+// The size of an element, kept up to date, so a chart is drawn at its real size instead of being scaled (scaled text gets huge).
+function useSize<T extends HTMLElement>(fallback: { w: number; h: number }): [React.RefObject<T | null>, { w: number; h: number }] {
+  const ref = useRef<T | null>(null)
+  const [size, setSize] = useState(fallback)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setSize({ w: Math.max(280, Math.round(r.width)), h: Math.max(150, Math.round(r.height)) })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, size]
+}
+
 // A clock that moves while the page is open, so the ring and the timeline are never stale.
 export function useNow(everyMs = 30_000): number {
   const [now, setNow] = useState(() => Date.now())
@@ -54,14 +73,14 @@ export function useNow(everyMs = 30_000): number {
   return now
 }
 
-export function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
+export function Card({ title, aside, children, className = '', scroll = false }: { title: string; aside?: ReactNode; children: ReactNode; className?: string; scroll?: boolean }) {
   return (
-    <section className="rounded-xl border border-black/5 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
+    <section className={`flex h-full flex-col rounded-xl border border-black/5 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.035] ${className}`}>
       <header className="flex items-center justify-between gap-3 border-b border-black/5 px-4 py-3 dark:border-white/10">
         <h2 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
         {aside}
       </header>
-      {children}
+      <div className={scroll ? 'max-h-[26rem] min-h-0 flex-1 overflow-y-auto' : 'flex min-h-0 flex-1 flex-col'}>{children}</div>
     </section>
   )
 }
@@ -108,7 +127,7 @@ export function TodayCard({
 
   return (
     <Card title="Today" aside={<span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"><span className={`h-2 w-2 rounded-full ${dot}`} />{state}</span>}>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-4 p-4">
+      <div className="flex flex-1 flex-wrap items-center justify-center gap-x-8 gap-y-5 p-5">
         <figure className="m-0 flex-none" aria-label={`Worked ${hm(worked)} of ${target} hours`}>
           <svg viewBox="0 0 140 140" width="140" height="140" role="img">
             <circle cx="70" cy="70" r={R} fill="none" strokeWidth="12" className="stroke-black/10 dark:stroke-white/15" />
@@ -133,7 +152,7 @@ export function TodayCard({
             </text>
           </svg>
         </figure>
-        <div className="min-w-0 flex-1 space-y-3 text-sm">
+        <div className="w-full min-w-[13rem] max-w-sm flex-1 space-y-3 text-sm">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
             <div>
               <dt className="text-xs text-gray-500 dark:text-gray-400">{checkedOut ? 'In / out' : 'Clocked in since'}</dt>
@@ -143,9 +162,9 @@ export function TodayCard({
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-gray-500 dark:text-gray-400">{checkedOut ? 'Hours worked' : 'Still to go'}</dt>
+              <dt className="text-xs text-gray-500 dark:text-gray-400">{checkedOut ? 'Hours worked' : checkedIn ? 'Still to go' : 'Shift target'}</dt>
               <dd className="font-medium tabular-nums text-gray-900 dark:text-gray-100">
-                {checkedOut ? `${round1(worked)} h` : worked >= target ? 'Shift complete' : `${hm(Math.max(0, target - worked))} h`}
+                {checkedOut ? `${round1(worked)} h` : !checkedIn ? `${target} h` : worked >= target ? 'Shift complete' : `${hm(Math.max(0, target - worked))} h`}
               </dd>
             </div>
           </dl>
@@ -183,6 +202,8 @@ export function TodayCard({
 
 export function WeekChart({ records, today, target, footer }: { records: AttendanceRecord[]; today: string; target: number; footer?: ReactNode }) {
   const now = useNow()
+  const [boxRef, size] = useSize<HTMLDivElement>({ w: 560, h: 220 })
+  const W = size.w
   const weekStart = mondayOf(today)
   const days = Array.from({ length: 7 }, (_, i) => {
     const date = addDaysIso(weekStart, i)
@@ -192,13 +213,12 @@ export function WeekChart({ records, today, target, footer }: { records: Attenda
   const totalRegular = round1(days.reduce((n, d) => n + d.regular, 0))
   const totalOvertime = round1(days.reduce((n, d) => n + d.overtime, 0))
   const top = Math.max(target * 1.25, ...days.map((d) => d.regular + d.overtime))
-  const W = 560
-  const H = 190
+  const H = Math.min(360, size.h)
   const L = 8
   const B = 28 // room for the day labels
   const plotH = H - B - 8
   const slot = (W - L) / 7
-  const barW = 30
+  const barW = Math.max(14, Math.min(40, Math.round(slot * 0.42)))
   const y = (v: number) => 8 + plotH - (v / top) * plotH
 
   // A bar with a rounded top, anchored on the baseline.
@@ -221,8 +241,9 @@ export function WeekChart({ records, today, target, footer }: { records: Attenda
         </span>
       }
     >
-      <div className="p-4 pb-3">
-        <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`Hours worked each day this week: ${totalRegular} hours and ${totalOvertime} hours of overtime`}>
+      <div className="flex min-h-0 flex-1 flex-col p-4 pb-3">
+        <div ref={boxRef} className="relative min-h-[13rem] flex-1">
+        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="absolute left-0 top-0 block" role="img" aria-label={`Hours worked each day this week: ${totalRegular} hours and ${totalOvertime} hours of overtime`}>
           <line x1={L} x2={W} y1={y(0)} y2={y(0)} strokeWidth="1" className="stroke-black/15 dark:stroke-white/20" />
           <line x1={L} x2={W} y1={y(target)} y2={y(target)} strokeWidth="1" strokeDasharray="4 4" className="stroke-black/30 dark:stroke-white/35" />
           <text x={W} y={y(target) - 4} textAnchor="end" className="fill-gray-500 text-[10px] dark:fill-gray-400">
@@ -251,6 +272,7 @@ export function WeekChart({ records, today, target, footer }: { records: Attenda
             )
           })}
         </svg>
+        </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
           <span className="flex items-center gap-1.5">
             <span className={`h-2.5 w-2.5 rounded-sm ${GREEN_BG}`} /> Regular hours
