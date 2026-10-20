@@ -23,6 +23,11 @@ export interface ShiftInfo {
 
 const BREAK_HOURS = 50 / 60 // the fixed break and lunch deduction (10 + 30 + 10 minutes)
 const round1 = (n: number) => Math.round(n * 10) / 10
+// "5 min", "1 h 20 min", "2 h": for how long until something happens.
+const spanText = (ms: number) => {
+  const m = Math.max(1, Math.ceil(ms / 60_000))
+  return m < 60 ? `${m} min` : m % 60 === 0 ? `${m / 60} h` : `${Math.floor(m / 60)} h ${m % 60} min`
+}
 const hm = (hours: number) => `${Math.floor(hours)}:${String(Math.floor((hours % 1) * 60)).padStart(2, '0')}`
 
 export function mondayOf(iso: string): string {
@@ -127,7 +132,6 @@ export function TodayCard({
     if (end <= start) end += 24 * 3_600_000
     along = Math.min(1, Math.max(0, (now - start) / (end - start)))
   }
-  const leftHours = Math.max(0, (end - now) / 3_600_000)
   const live = checkedIn && !checkOutAt
   const state = live ? 'Clocked in' : checkedOut ? 'Clocked out' : 'Not clocked in'
   const dot = live ? 'bg-emerald-500' : 'bg-gray-400'
@@ -160,6 +164,7 @@ export function TodayCard({
           </svg>
         </figure>
         <div className="w-full min-w-[13rem] max-w-sm flex-1 space-y-3 text-sm">
+          {(checkedIn || checkedOut) && (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
             <div>
               <dt className="text-xs text-gray-500 dark:text-gray-400">{checkedOut ? 'In / out' : 'Clocked in since'}</dt>
@@ -168,18 +173,19 @@ export function TodayCard({
                 {checkOutAt ? ` – ${formatManilaTime(checkOutAt)}` : ''}
               </dd>
             </div>
-            <div>
-              <dt className="text-xs text-gray-500 dark:text-gray-400">{checkedOut ? 'Hours worked' : checkedIn ? 'Still to go' : 'Shift target'}</dt>
-              <dd className="font-medium tabular-nums text-gray-900 dark:text-gray-100">
-                {checkedOut ? `${round1(worked)} h` : !checkedIn ? `${target} h` : worked >= target ? 'Shift complete' : `${hm(Math.max(0, target - worked))} h`}
-              </dd>
-            </div>
+            {checkedOut && (
+              <div>
+                <dt className="text-xs text-gray-500 dark:text-gray-400">Hours worked</dt>
+                <dd className="font-medium tabular-nums text-gray-900 dark:text-gray-100">{round1(worked)} h</dd>
+              </div>
+            )}
           </dl>
+          )}
           {shift && (
             <div>
               <div className="mb-1 flex justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span>Shift</span>
-                <span>{leftHours > 0 && now >= start ? `${hm(leftHours)} h left` : now < start ? 'not started' : 'ended'}</span>
+                <span>{now < start ? `starts in ${spanText(start - now)}` : now >= end ? 'ended' : `${spanText(end - now)} left`}</span>
               </div>
               <div className="relative h-2 rounded-full bg-black/10 dark:bg-white/15" role="img" aria-label="Where now is in the shift">
                 <div className={`absolute inset-y-0 left-0 rounded-full ${GREEN_BG}`} style={{ width: `${along * 100}%` }} />
