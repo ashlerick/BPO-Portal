@@ -8,8 +8,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { ROLE_LABELS } from '../../auth/types'
-import { formatDateOnly, formatManilaTime, todayInManilaIso } from '../../utils/dates'
-import { shiftHours } from '../../utils/shiftTime'
+import { addDaysIso, formatDateOnly, todayInManilaIso } from '../../utils/dates'
 import { isExpired, type Announcement } from '../announcements/types'
 import type { AttendanceRecord } from '../attendance/types'
 import type { CalendarEventRecord } from '../calendar/types'
@@ -20,6 +19,7 @@ import type { WeeklyReport } from '../reports/types'
 import { HolidayBanner } from '../../components/ui/HolidayBanner'
 import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { AdminWidgets } from './AdminWidgets'
+import { Card as DashCard, TeamToday, TodayCard, WeekChart, WeekStrip, mondayOf, targetHours, type ShiftInfo } from './DashboardWidgets'
 import { AssignedByMe, AssignTodo, MyTodos } from './Todos'
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Manila' })
@@ -36,7 +36,7 @@ interface TodoCount {
 }
 
 interface ScheduleResponse {
-  current: { shift: { name: string; startTime: string; endTime: string; timezone: string } } | null
+  current: { shift: ShiftInfo } | null
 }
 
 // Everything the page needs, loaded once. Each source is best-effort: a role that can't read one (reports for a plain employee,
@@ -49,9 +49,10 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
   const [profile, setProfile] = useState<MyEmployeeProfile | null>(null)
   const [employees, setEmployees] = useState<EmployeeRecord[]>([])
   const [teamCount, setTeamCount] = useState<number | null>(null)
-  const [clockedIn, setClockedIn] = useState<number | null>(null)
+  const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([])
+  const [weekRecords, setWeekRecords] = useState<AttendanceRecord[]>([])
   const [todos, setTodos] = useState<TodoCount[]>([])
-  const [shift, setShift] = useState<ScheduleResponse['current']>(null)
+  const [shift, setShift] = useState<ShiftInfo | null>(null)
 
   useEffect(() => {
     const today = todayInManilaIso()
@@ -61,28 +62,62 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
     api.get<MyEmployeeProfile>('/employees/me').then(setProfile).catch(() => undefined)
     api.get<WeeklyReport[]>('/reports').then(setReports).catch(() => undefined)
     api.get<TodoCount[]>('/hr/todos').then(setTodos).catch(() => undefined)
-    api.get<ScheduleResponse>('/hr/shifts?kind=schedule').then((s) => setShift(s.current)).catch(() => undefined)
+    api.get<ScheduleResponse>('/hr/shifts?kind=schedule').then((s) => setShift(s.current?.shift ?? null)).catch(() => undefined)
     if (isReviewer) {
       api.get<EmployeeRecord[]>('/employees').then(setEmployees).catch(() => undefined)
       api.get<{ teams: { id: string }[] }>('/directory').then((d) => setTeamCount(d.teams.length)).catch(() => undefined)
-      api
-        .get<AttendanceRecord[]>(`/leave/attendance?from=${today}&to=${today}`)
-        .then((rows) => setClockedIn(rows.filter((r) => r.status === 'present' && r.checkInAt && !r.checkOutAt).length))
-        .catch(() => undefined)
+      api.get<AttendanceRecord[]>(`/leave/attendance?from=${today}&to=${today}`).then(setTodayRecords).catch(() => undefined)
     }
   }, [isReviewer, isElevated])
 
-  return { leave, reports, events, notifications, profile, employees, teamCount, clockedIn, todos, shift }
+  // This person's own week (for the ring and the chart): HR is asked for their own rows only, not everyone's.
+  const profileId = profile?.id
+  useEffect(() => {
+    if (!profileId) return
+    const monday = mondayOf(todayInManilaIso())
+    api
+      .get<AttendanceRecord[]>(`/leave/attendance?from=${monday}&to=${addDaysIso(monday, 6)}&employeeId=${profileId}`)
+      .then(setWeekRecords)
+      .catch(() => undefined)
+  }, [profileId])
+
+  return { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, todos, shift }
 }
 
-function Tile({ label, value, sub, tone, to, onClick }: { label: string; value: ReactNode; sub: string; tone?: 'red'; to?: string; onClick?: () => void }) {
+function Tile({
+  label,
+  value,
+  sub,
+  tone,
+  to,
+  onClick,
+  bar,
+  dot,
+}: {
+  label: string
+  value: ReactNode
+  sub: string
+  tone?: 'red'
+  to?: string
+  onClick?: () => void
+  bar?: number // 0 to 1: a progress bar under the number
+  dot?: boolean // an unread marker next to the label
+}) {
   const className =
     'block rounded-xl border border-black/5 bg-white/80 px-3.5 py-3 text-left shadow-sm transition hover:border-brand-500 dark:border-white/10 dark:bg-white/[0.035]'
   const body = (
     <>
-      <span className="block text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        {label}
+        {dot && <span aria-label="has unread" className="h-1.5 w-1.5 rounded-full bg-brand-500" />}
+      </span>
       <span className={`block text-2xl font-semibold tabular-nums ${tone === 'red' ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>{value}</span>
-      <span className="block text-xs text-gray-500 dark:text-gray-400">{sub}</span>
+      {bar !== undefined && (
+        <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+          <span className="block h-full rounded-full bg-[#0f9d63] dark:bg-[#1fa763]" style={{ width: `${Math.round(bar * 100)}%` }} />
+        </span>
+      )}
+      <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{sub}</span>
     </>
   )
   return to ? (
@@ -96,31 +131,15 @@ function Tile({ label, value, sub, tone, to, onClick }: { label: string; value: 
   )
 }
 
-// A card with a title, an optional link to the full page, and rows underneath.
-function Panel({ title, linkTo, linkLabel, children }: { title: string; linkTo?: string; linkLabel?: string; children: ReactNode }) {
-  return (
-    <section className="rounded-xl border border-black/5 bg-white/80 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
-      <header className="flex items-center justify-between gap-3 border-b border-black/5 px-4 py-3 dark:border-white/10">
-        <h2 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">{title}</h2>
-        {linkTo && (
-          <Link to={linkTo} className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">
-            {linkLabel} →
-          </Link>
-        )}
-      </header>
-      <div>{children}</div>
-    </section>
-  )
-}
-
 const rowClass = 'flex items-start gap-3 border-b border-black/5 px-4 py-2.5 last:border-0 dark:border-white/10'
+const linkClass = 'text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400'
 
 export function DashboardPage() {
   const { user, effectiveRoles, attendanceStatus } = useAuth()
   const isReviewer = effectiveRoles.some((r) => r === 'hr' || r === 'admin')
   const isElevated = effectiveRoles.some((r) => r === 'team_leader' || r === 'manager' || r === 'hr' || r === 'admin')
   const { data, loading, error } = useApiData<Announcement[]>('/announcements')
-  const { leave, reports, events, notifications, profile, employees, teamCount, clockedIn, todos, shift } = useDashboardData(isReviewer, isElevated)
+  const { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, todos, shift } = useDashboardData(isReviewer, isElevated)
   const [todoReload, setTodoReload] = useState(0)
   const [assigning, setAssigning] = useState(false)
   const holiday = useTodayHoliday()
@@ -148,9 +167,7 @@ export function DashboardPage() {
   }
 
   // Coming up: calendar items in the next 14 days.
-  const horizon = new Date(`${today}T00:00:00Z`)
-  horizon.setUTCDate(horizon.getUTCDate() + 14)
-  const horizonIso = horizon.toISOString().slice(0, 10)
+  const horizonIso = addDaysIso(today, 14)
   const reminders = events
     .filter((e) => !e.disabled)
     .filter((e) => {
@@ -161,41 +178,18 @@ export function DashboardPage() {
 
   const recentNotifications = notifications?.items.slice(0, 5) ?? []
   const openTodos = todos.filter((t) => t.status === 'open')
+  const doneTodos = todos.length - openTodos.length
   const overdueTodos = openTodos.filter((t) => t.dueDate !== null && t.dueDate.slice(0, 10) < today)
-
-  const clock =
-    attendanceStatus?.checkedIn && !attendanceStatus.checkOutAt
-      ? { dot: 'bg-emerald-500', text: 'Clocked in', sub: `since ${formatManilaTime(attendanceStatus.checkInAt)}` }
-      : attendanceStatus?.checkedOut
-        ? { dot: 'bg-gray-400', text: 'Clocked out', sub: `at ${formatManilaTime(attendanceStatus.checkOutAt)}` }
-        : { dot: 'bg-gray-400', text: 'Not clocked in', sub: 'today' }
+  const dueDates = openTodos.filter((t) => t.dueDate).map((t) => (t.dueDate as string).slice(0, 10))
+  const unread = notifications?.unread ?? 0
   const subtitle = [user?.roles.map((role) => ROLE_LABELS[role]).join(', '), profile?.position, profile?.team].filter(Boolean).join(' · ')
+  const todayRecord = weekRecords.find((r) => r.date.slice(0, 10) === today)
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-gold-600 dark:text-gold-400">Welcome{user?.firstName ? `, ${user.firstName}` : ''}</h1>
-          {subtitle && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-black/5 bg-white/80 px-4 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
-          <div>
-            <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              <span className={`h-2 w-2 rounded-full ${clock.dot}`} />
-              {clock.text}
-            </span>
-            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{clock.sub}</span>
-          </div>
-          {shift && (
-            <div>
-              <span className="block text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">Shift</span>
-              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{shiftHours(shift.shift, today)}</span>
-            </div>
-          )}
-          <Link to="/my-time" className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">
-            My Time →
-          </Link>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-gold-600 dark:text-gold-400">Welcome{user?.firstName ? `, ${user.firstName}` : ''}</h1>
+        {subtitle && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
       </div>
 
       {holiday && <HolidayBanner name={holiday} />}
@@ -216,15 +210,29 @@ export function DashboardPage() {
         </ul>
       )}
 
+      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+        <TodayCard
+          today={today}
+          record={todayRecord}
+          shift={shift}
+          checkedIn={!!attendanceStatus?.checkedIn}
+          checkedOut={!!attendanceStatus?.checkedOut}
+          checkInAt={attendanceStatus?.checkInAt ?? null}
+          checkOutAt={attendanceStatus?.checkOutAt ?? null}
+        />
+        <WeekChart records={weekRecords} today={today} target={targetHours(shift)} />
+      </div>
+
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         <Tile
           label="Open to-dos"
           value={openTodos.length}
-          sub={overdueTodos.length > 0 ? `${overdueTodos.length} overdue` : openTodos.length === 0 ? 'all done' : 'none overdue'}
+          sub={overdueTodos.length > 0 ? `${overdueTodos.length} overdue` : todos.length === 0 ? 'none yet' : `${doneTodos} of ${todos.length} done`}
           tone={overdueTodos.length > 0 ? 'red' : undefined}
+          bar={todos.length > 0 ? doneTodos / todos.length : undefined}
           onClick={() => document.getElementById('my-todos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
         />
-        <Tile label="Notifications" value={notifications?.unread ?? 0} sub="unread" to="/notifications" />
+        <Tile label="Notifications" value={unread} sub="unread" dot={unread > 0} to="/notifications" />
         <Tile label="SIL balance" value={profile ? profile.silBalance : '—'} sub="days" to="/leave" />
         <Tile label={isReviewer ? 'Pending leave' : 'My pending leave'} value={pendingLeave.length} sub={isReviewer ? 'waiting for review' : 'waiting for approval'} to="/leave" />
       </div>
@@ -246,12 +254,19 @@ export function DashboardPage() {
           </div>
 
           {isReviewer && (
-            <Panel title="Team">
-              <div className="grid grid-cols-2 gap-2.5 p-4 sm:grid-cols-4">
+            <DashCard
+              title="Team today"
+              aside={
+                <Link to="/attendance" className={linkClass}>
+                  Attendance →
+                </Link>
+              }
+            >
+              <TeamToday employees={employees} records={todayRecords} />
+              <div className="grid grid-cols-3 gap-2.5 border-t border-black/5 p-4 dark:border-white/10">
                 {[
                   ['Employees', employees.length],
                   ['Active teams', teamCount ?? '—'],
-                  ['Clocked in now', clockedIn ?? '—'],
                   ['Leave to review', pendingLeave.length],
                 ].map(([label, value]) => (
                   <div key={label as string} className="rounded-lg bg-black/[0.04] px-3 py-2.5 dark:bg-white/[0.06]">
@@ -265,25 +280,42 @@ export function DashboardPage() {
                   <AdminWidgets />
                 </div>
               )}
-            </Panel>
+            </DashCard>
           )}
-
-          <Panel title="Coming up">
-            {reminders.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
-            ) : (
-              reminders.map((e) => (
-                <div key={e.id} className={`${rowClass} justify-between`}>
-                  <span className="text-gray-900 dark:text-gray-100">{e.title}</span>
-                  <span className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDateOnly(e.startDate)}</span>
-                </div>
-              ))
-            )}
-          </Panel>
         </div>
 
         <div className="space-y-4">
-          <Panel title="Announcements" linkTo="/announcements" linkLabel="All announcements">
+          <DashCard
+            title="This week"
+            aside={
+              <Link to="/calendar" className={linkClass}>
+                Calendar →
+              </Link>
+            }
+          >
+            <WeekStrip today={today} events={events} dueDates={dueDates} />
+            <div className="border-t border-black/5 dark:border-white/10">
+              {reminders.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
+              ) : (
+                reminders.slice(0, 4).map((e) => (
+                  <div key={e.id} className={`${rowClass} justify-between`}>
+                    <span className="text-gray-900 dark:text-gray-100">{e.title}</span>
+                    <span className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDateOnly(e.startDate)}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </DashCard>
+
+          <DashCard
+            title="Announcements"
+            aside={
+              <Link to="/announcements" className={linkClass}>
+                All announcements →
+              </Link>
+            }
+          >
             {loading && <LoadingState />}
             {error && <ErrorState message={error} />}
             {data && latest.length === 0 && <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Nothing posted yet.</p>}
@@ -298,13 +330,20 @@ export function DashboardPage() {
                       </span>
                     )}
                   </p>
-                  <p className="line-clamp-2 text-sm text-gray-600 dark:text-gray-400">{a.content}</p>
+                  <p className="line-clamp-1 text-sm text-gray-600 dark:text-gray-400">{a.content}</p>
                 </div>
               </div>
             ))}
-          </Panel>
+          </DashCard>
 
-          <Panel title="Notifications" linkTo="/notifications" linkLabel="All notifications">
+          <DashCard
+            title="Notifications"
+            aside={
+              <Link to="/notifications" className={linkClass}>
+                All notifications →
+              </Link>
+            }
+          >
             {recentNotifications.length === 0 ? (
               <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No notifications yet.</p>
             ) : (
@@ -318,7 +357,7 @@ export function DashboardPage() {
                 </div>
               ))
             )}
-          </Panel>
+          </DashCard>
         </div>
       </div>
 
