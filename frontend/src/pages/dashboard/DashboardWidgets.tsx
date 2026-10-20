@@ -219,7 +219,10 @@ export function WeekChart({ records, given, today, target, footer }: { records: 
   })
   const totalRegular = round1(days.reduce((n, d) => n + d.regular, 0))
   const totalOvertime = round1(days.reduce((n, d) => n + d.overtime, 0))
-  const top = Math.max(target * 1.25, ...days.map((d) => d.regular + d.overtime))
+  // The green bar stops at the shift target: time past it is not drawn as a claim of overtime. Only overtime HR gave (blue) goes above
+  // the line. The real hours are still in the ring above and on My Time.
+  const shown = (d: { regular: number }) => Math.min(d.regular, target)
+  const top = Math.max(target * 1.25, ...days.map((d) => shown(d) + d.overtime))
   const H = Math.min(360, size.h)
   const L = 8
   const B = 28 // room for the day labels
@@ -262,13 +265,13 @@ export function WeekChart({ records, given, today, target, footer }: { records: 
             return (
               <g key={d.date}>
                 {isToday && <rect x={L + i * slot + 2} y={4} width={slot - 4} height={H - 8} rx="8" className="fill-black/[0.04] dark:fill-white/[0.06]" />}
-                <path d={bar(x, 0, d.regular, d.overtime === 0)} className={GREEN} />
-                <path d={bar(x, d.regular, d.regular + d.overtime, true)} className={BLUE} />
+                <path d={bar(x, 0, shown(d), d.overtime === 0)} className={GREEN} />
+                <path d={bar(x, shown(d), shown(d) + d.overtime, true)} className={BLUE} />
                 <title>
                   {`${d.name} ${d.date.slice(5)}: ${d.regular} h${d.overtime ? ` + ${d.overtime} h overtime` : ''}`}
                 </title>
                 {isToday && d.regular + d.overtime > 0 && (
-                  <text x={x + barW / 2} y={y(d.regular + d.overtime) - 5} textAnchor="middle" className="fill-gray-900 text-[11px] font-semibold tabular-nums dark:fill-gray-100">
+                  <text x={x + barW / 2} y={y(shown(d) + d.overtime) - 5} textAnchor="middle" className="fill-gray-900 text-[11px] font-semibold tabular-nums dark:fill-gray-100">
                     {round1(d.regular + d.overtime)}
                   </text>
                 )}
