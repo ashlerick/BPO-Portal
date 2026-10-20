@@ -267,6 +267,19 @@ export function DashboardPage() {
               )}
             </Panel>
           )}
+
+          <Panel title="Coming up">
+            {reminders.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
+            ) : (
+              reminders.map((e) => (
+                <div key={e.id} className={`${rowClass} justify-between`}>
+                  <span className="text-gray-900 dark:text-gray-100">{e.title}</span>
+                  <span className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDateOnly(e.startDate)}</span>
+                </div>
+              ))
+            )}
+          </Panel>
         </div>
 
         <div className="space-y-4">
@@ -289,19 +302,6 @@ export function DashboardPage() {
                 </div>
               </div>
             ))}
-          </Panel>
-
-          <Panel title="Coming up">
-            {reminders.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">No holidays, events or deadlines in the next 14 days.</p>
-            ) : (
-              reminders.map((e) => (
-                <div key={e.id} className={`${rowClass} justify-between`}>
-                  <span className="text-gray-900 dark:text-gray-100">{e.title}</span>
-                  <span className="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{formatDateOnly(e.startDate)}</span>
-                </div>
-              ))
-            )}
           </Panel>
 
           <Panel title="Notifications" linkTo="/notifications" linkLabel="All notifications">
