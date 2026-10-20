@@ -387,8 +387,8 @@ export function AssignedByMe({ isHr, reloadKey }: { isHr: boolean; reloadKey: nu
 
 // HR/Admin assign to anyone (or everyone); a supervisor assigns to their
 // direct reports. The API enforces this, the form just offers who it can.
-export function AssignTodo({ isHr, onAssigned }: { isHr: boolean; onAssigned?: () => void }) {
-  const [people, setPeople] = useState<Person[]>([])
+export function AssignTodo({ isHr, onAssigned, onClose }: { isHr: boolean; onAssigned?: () => void; onClose: () => void }) {
+  const [people, setPeople] = useState<Person[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -406,8 +406,6 @@ export function AssignTodo({ isHr, onAssigned }: { isHr: boolean; onAssigned?: (
       .then((rows) => setPeople(rows.map((r) => ({ id: r.id, name: r.name }))))
       .catch(() => setPeople([]))
   }, [isHr])
-
-  if (people.length === 0) return null
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -439,17 +437,34 @@ export function AssignTodo({ isHr, onAssigned }: { isHr: boolean; onAssigned?: (
     }
   }
 
-  const allSelected = selected.length === people.length
+  const list = people ?? []
+  const allSelected = list.length > 0 && selected.length === list.length
 
   return (
-    <Section id="dashboard.assign-todo" title="Assign a to-do" hint={isHr ? 'To anyone' : 'To your direct reports'}>
-      <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={submit} className="flex max-h-[calc(100vh-2rem)] flex-col">
+      <div className="flex items-center justify-between gap-3 border-b border-black/10 px-5 py-3 dark:border-white/10">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Assign a to-do</h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{isHr ? 'To anyone' : 'To your direct reports'}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="grid h-8 w-8 place-items-center rounded-lg border border-black/10 text-gray-500 hover:border-brand-500 hover:text-gray-900 dark:border-white/15 dark:text-gray-400 dark:hover:text-gray-100"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         <Field label="Task">
-          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="field" placeholder="e.g. Sign employee handbook" />
+          <input required autoFocus value={title} onChange={(e) => setTitle(e.target.value)} className="field" placeholder="e.g. Sign employee handbook" />
         </Field>
         <Field label="Description (optional)">
           <textarea
-            rows={3}
+            rows={2}
             maxLength={2000}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -476,12 +491,14 @@ export function AssignTodo({ isHr, onAssigned }: { isHr: boolean; onAssigned?: (
           <div className="mb-1 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
             <span>Assign to</span>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? people.map((p) => p.id) : [])} />
-              Everyone ({people.length})
+              <input type="checkbox" disabled={list.length === 0} checked={allSelected} onChange={(e) => setSelected(e.target.checked ? list.map((p) => p.id) : [])} />
+              Everyone ({list.length})
             </label>
           </div>
-          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-black/10 p-2 text-sm dark:border-white/10">
-            {people.map((p) => (
+          <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-black/10 p-2 text-sm dark:border-white/10">
+            {people === null && <li className="text-gray-500 dark:text-gray-400">Loading…</li>}
+            {people !== null && list.length === 0 && <li className="text-gray-500 dark:text-gray-400">You have no one to assign to yet.</li>}
+            {list.map((p) => (
               <li key={p.id}>
                 <label className="flex items-center gap-2">
                   <input
@@ -495,11 +512,18 @@ export function AssignTodo({ isHr, onAssigned }: { isHr: boolean; onAssigned?: (
             ))}
           </ul>
         </div>
+      </div>
+      <div className="border-t border-black/10 px-5 py-3 dark:border-white/10">
         <FormError message={error} />
-        <Button type="submit" variant="primary" size="sm" disabled={busy || selected.length === 0}>
-          {busy ? 'Assigning…' : 'Assign'}
-        </Button>
-      </form>
-    </Section>
+        <div className="flex justify-end gap-2">
+          <Button type="button" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={busy || selected.length === 0}>
+            {busy ? 'Assigning…' : 'Assign'}
+          </Button>
+        </div>
+      </div>
+    </form>
   )
 }
