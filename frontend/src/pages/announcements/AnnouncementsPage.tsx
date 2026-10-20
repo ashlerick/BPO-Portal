@@ -162,14 +162,19 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           </span>
         </label>
       </fieldset>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-center gap-2" title="Highlighted announcements are shown first here and on the BPO Time app">
-          <input type="checkbox" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
-          Highlight
+      <div className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-1" checked={highlighted} onChange={(e) => setHighlighted(e.target.checked)} />
+          <span>
+            <b className="font-medium">Highlight</b>
+            <span className="block text-xs text-gray-500 dark:text-gray-400">
+              Shows it first on this page and on everyone's BPO Time panel. It leaves a person's panel once they react to it, and it ends by itself after the time you choose.
+            </span>
+          </span>
         </label>
         {highlighted && (
-          <label className="flex items-center gap-2">
-            <span className="sr-only">Highlight for how long</span>
+          <label className="ml-6 flex items-center gap-2">
+            Highlight for
             <select value={highlightDays} onChange={(e) => setHighlightDays(Number(e.target.value))} className="field !w-auto py-1">
               <option value={1}>1 day</option>
               <option value={3}>3 days</option>
@@ -179,10 +184,15 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           </label>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-center gap-2" title="Goes on the Calendar, and people say whether they are joining">
-          <input type="checkbox" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} />
-          This is an event
+      <div className="text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-1" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} />
+          <span>
+            <b className="font-medium">This is an event</b>
+            <span className="block text-xs text-gray-500 dark:text-gray-400">
+              Puts it on the Calendar and lets people say whether they are joining. You set the day, time and place below.
+            </span>
+          </span>
         </label>
       </div>
       {isEvent && (
@@ -221,14 +231,19 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
           <p className="text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">The event goes on the Calendar when you post, with its time in both Manila and California time.</p>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700 dark:text-gray-300">
-        <label className="flex items-center gap-2" title="Everyone gets a to-do for it">
-          <input type="checkbox" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} />
-          Needs action
+      <div className="space-y-1.5 text-sm text-gray-700 dark:text-gray-300">
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-1" checked={needsAction} onChange={(e) => setNeedsAction(e.target.checked)} />
+          <span>
+            <b className="font-medium">Needs action</b>
+            <span className="block text-xs text-gray-500 dark:text-gray-400">
+              Gives each person a to-do for it, due on the date you set, so you can see who has done it.
+            </span>
+          </span>
         </label>
         {needsAction && (
-          <label className="flex items-center gap-2">
-            due on
+          <label className="ml-6 flex flex-wrap items-center gap-2">
+            Due on
             <input type="date" required value={actionDueOn} onChange={(e) => setActionDueOn(e.target.value)} className="field !w-auto py-1" />
             <span>at</span>
             <input type="time" value={actionDueTime} onChange={(e) => setActionDueTime(e.target.value)} className="field !w-auto py-1" aria-label="Deadline time (optional)" />
@@ -248,8 +263,7 @@ function CreateForm({ onCreated }: { onCreated: (a: Announcement) => void }) {
         <>
           <ActionAudience value={audience} onChange={setAudience} />
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Each person gets a to-do for this, due on that date. Finishing the to-do also counts as their "Got it". You can see who is done on
-            the announcement, and change the due date there.
+            Finishing the to-do also counts as their "Got it". You can see who is done on the announcement, and change the due date there.
           </p>
         </>
       )}
