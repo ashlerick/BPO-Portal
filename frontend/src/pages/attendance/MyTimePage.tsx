@@ -10,6 +10,7 @@ import { useTodayHoliday } from '../../hooks/useTodayHoliday'
 import { addDaysIso, formatDateOnly, formatManilaTime, todayInManilaIso } from '../../utils/dates'
 import type { AttendanceRecord } from './types'
 import { MySchedule } from './Shifts'
+import { formatMinutes, type OvertimeAllotment } from './OvertimeAllotments'
 import { BreakSlotCell } from '../../components/ui/BreaksCell'
 import { netHours } from '../../utils/breaks'
 
@@ -51,6 +52,19 @@ export function MyTimePage() {
   const range = mode === 'week' ? { from: mondayOf(anchor), to: addDaysIso(mondayOf(anchor), 6) } : monthBounds(anchor)
   const { data, loading, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?from=${range.from}&to=${range.to}`)
 
+  // Overtime HR allotted, by shift day. A day with an allotment is listed even if there is no attendance record yet.
+  const { data: allotments } = useApiData<OvertimeAllotment[]>(`/hr/overtime?from=${range.from}&to=${range.to}`)
+  const overtimeByDate = new Map<string, OvertimeAllotment[]>()
+  for (const a of allotments ?? []) {
+    if (a.status === 'cancelled') continue
+    overtimeByDate.set(a.date.slice(0, 10), [...(overtimeByDate.get(a.date.slice(0, 10)) ?? []), a])
+  }
+  const overtimeText = (a: OvertimeAllotment) =>
+    a.status === 'done' ? formatMinutes(a.countedMinutes)
+    : a.status === 'running' ? 'Running now'
+    : a.status === 'not_used' ? `${formatMinutes(a.allottedMinutes)} allotted, not used`
+    : `${formatMinutes(a.allottedMinutes)} allotted`
+
   // Which days this person works comes from the schedule HR assigned them, and it follows the schedule that was in
   // effect on each date, so a change of shift does not rewrite the past. With no schedule on a date it is Monday to
   // Friday. 0 is Sunday, as in the shift's work days.
@@ -70,13 +84,16 @@ export function MyTimePage() {
   // day they did clock in. A day off with no record is left out, and a month does not list days that have not come yet.
   const periodDays: string[] = []
   for (let d = range.from; d <= range.to; d = addDaysIso(d, 1)) periodDays.push(d)
-  const days = periodDays.filter((d) => byDate.has(d) || (isWorkDay(d) && (mode === 'week' || d <= today)))
+  const days = periodDays.filter((d) => byDate.has(d) || overtimeByDate.has(d) || (isWorkDay(d) && (mode === 'week' || d <= today)))
 
   const records = data ?? []
   const present = records.filter((r) => r.status === 'present')
   const absent = records.filter((r) => r.status === 'absent').length
   const totalHours = present.reduce((sum, r) => sum + (hoursBetween(r.checkInAt, r.checkOutAt) ?? 0), 0)
-  const overtime = records.reduce((sum, r) => sum + (r.overtimeHours ?? 0), 0)
+  // Hours HR typed in, plus the allotted overtime that counts.
+  const overtime =
+    records.reduce((sum, r) => sum + (r.overtimeHours ?? 0), 0) +
+    (allotments ?? []).reduce((sum, a) => sum + (a.status === 'cancelled' ? 0 : a.countedMinutes), 0) / 60
   // Hours less the fixed break deduction, for each finished day.
   const totalWorked = present.reduce((sum, r) => {
     const h = hoursBetween(r.checkInAt, r.checkOutAt)
@@ -176,6 +193,7 @@ export function MyTimePage() {
                   <th className="py-2 pr-4 font-medium">Break 2</th>
                   <th className="py-2 pr-4 font-medium" title="Time in to time out">In to out</th>
                   <th className="py-2 pr-4 font-medium" title="Time in to time out less your recorded breaks and lunch">Hours worked</th>
+                  <th className="py-2 pr-4 font-medium" title="Overtime HR allotted you, clocked in BPO Time after your shift">Overtime</th>
                   <th className="py-2 font-medium">Notes</th>
                 </tr>
               </thead>
@@ -199,7 +217,7 @@ export function MyTimePage() {
                         {isToday && <span className="ml-2 text-xs text-brand-700 dark:text-brand-400">Today</span>}
                       </td>
                       {r?.status === 'absent' ? (
-                        <td data-label="Status" colSpan={8} className="py-2 text-amber-700 dark:text-amber-500">
+                        <td data-label="Status" colSpan={9} className="py-2 text-amber-700 dark:text-amber-500">
                           Absent
                         </td>
                       ) : (
@@ -224,6 +242,9 @@ export function MyTimePage() {
                           </td>
                           <td data-label="Worked" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
                             {hours === null ? '—' : netHours(hours, r?.breaks).toFixed(2)}
+                          </td>
+                          <td data-label="Overtime" className="py-2 pr-4 text-gray-700 dark:text-gray-300">
+                            {overtimeByDate.get(date)?.map((a) => <div key={a.id}>{overtimeText(a)}</div>) ?? '—'}
                           </td>
                           <td data-label="Notes" className="py-2 text-gray-500 dark:text-gray-400">
                             {notes.join(' · ') || (r ? '' : '')}
@@ -264,7 +285,7 @@ export function MyTimePage() {
             </div>
             <div>
               <dt className="text-gray-500 dark:text-gray-400">Overtime</dt>
-              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{overtime ? `${overtime} h` : '—'}</dd>
+              <dd className="text-xl font-semibold text-gray-900 dark:text-gray-100">{overtime ? `${Math.round(overtime * 100) / 100} h` : '—'}</dd>
             </div>
           </dl>
         )}

@@ -14,6 +14,7 @@ import { Tabs } from '../../components/ui/Tabs'
 import { Badge } from '../../components/ui/Badge'
 import type { AttendanceRecord } from './types'
 import { LateReport } from './Shifts'
+import { OvertimeAllotments } from './OvertimeAllotments'
 import { BreakSlotCell } from '../../components/ui/BreaksCell'
 import { netHours } from '../../utils/breaks'
 
@@ -524,7 +525,9 @@ function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reload
   // Hours worked: time in to out, less the breaks and lunch that were recorded (as in the BPO Time app).
   const hours = (r?: AttendanceRecord) => (r ? Math.round(netHours(hoursBetween(r.checkInAt, r.checkOutAt), r.breaks) * 100) / 100 : 0)
   const totalRegular = days.reduce((a, d) => a + hours(d.rec), 0)
-  const totalOt = days.reduce((a, d) => a + (d.rec?.overtimeHours ?? 0), 0)
+  // Overtime that counts: the hours HR typed in plus the allotted overtime.
+  const otOf = (r?: AttendanceRecord) => Math.round(((r?.overtimeHours ?? 0) + (r?.overtimeAllottedHours ?? 0)) * 100) / 100
+  const totalOt = Math.round(days.reduce((a, d) => a + otOf(d.rec), 0) * 100) / 100
 
   return (
     <div className="space-y-3">
@@ -567,7 +570,7 @@ function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reload
             <tr className="border-b border-black/5 dark:border-white/5">
               <td className="py-2 pr-3 text-left font-medium">Overtime</td>
               {days.map((d) => (
-                <td key={d.date}>{d.rec?.overtimeHours ?? ''}</td>
+                <td key={d.date}>{otOf(d.rec) || ''}</td>
               ))}
               <td className="font-medium">{totalOt}</td>
             </tr>
@@ -582,7 +585,7 @@ function WeeklyTracker({ employeeId, reloadToken }: { employeeId: string; reload
         </table>
       </div>
       {employeeId === '' && (
-        <p className="text-xs text-gray-500 dark:text-gray-400">Hours are time in to time out less the recorded breaks and lunch. Overtime and working holiday are entered by HR.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">Hours are time in to time out less the recorded breaks and lunch. Overtime is what HR allotted and the person clocked, plus any hours HR typed in. Working holiday is entered by HR.</p>
       )}
     </div>
   )
@@ -930,7 +933,10 @@ export function AttendancePage() {
                   label: 'Overtime',
                   content: (
         <SectionStack tabs={false}>
-        <Section id="attendance.corrections" title="Overtime" hint="HR / Admin" roles={['hr', 'admin']}>
+        <Section id="attendance.allot" title="Allot overtime" hint="They clock in for it in BPO Time" roles={['hr', 'admin']} defaultOpen>
+          <OvertimeAllotments from={from} to={to} employeeId={employeeId} reloadToken={reloadToken} onChanged={() => setReloadToken((t) => t + 1)} />
+        </Section>
+        <Section id="attendance.corrections" title="Enter overtime by hand" hint="HR / Admin" roles={['hr', 'admin']}>
           <CorrectionForm onCorrected={() => setReloadToken((t) => t + 1)} />
         </Section>
         </SectionStack>

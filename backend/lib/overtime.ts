@@ -1,4 +1,4 @@
-import type { OvertimeAllotment } from '@prisma/client'
+import type { OvertimeAllotment, Prisma } from '@prisma/client'
 import { prisma } from './prisma.js'
 import { todayInManila } from './dates.js'
 
@@ -73,3 +73,18 @@ export async function overtimeForDay(employeeId: string, date: Date) {
   })
   return (await settle(rows)).map(overtimeView)
 }
+
+// Hours of allotted overtime that count, per person and shift day ("employeeId|YYYY-MM-DD"), for the attendance list and the Excel
+// export. `where` is the same filter the caller uses for attendance (a date range, a person, or the signed-in employee).
+export async function countedHoursByDay(where: Prisma.OvertimeAllotmentWhereInput): Promise<Map<string, number>> {
+  const rows = await settle(await prisma.overtimeAllotment.findMany({ where: { ...where, status: { not: 'cancelled' } }, take: 5000 }))
+  const hours = new Map<string, number>()
+  for (const r of rows) {
+    const key = `${r.employeeId}|${r.date.toISOString().slice(0, 10)}`
+    hours.set(key, (hours.get(key) ?? 0) + (r.countedMinutes ?? 0) / 60)
+  }
+  return hours
+}
+
+export const overtimeKey = (employeeId: string, date: Date) => `${employeeId}|${date.toISOString().slice(0, 10)}`
+export const roundHours = (h: number) => Math.round(h * 100) / 100
