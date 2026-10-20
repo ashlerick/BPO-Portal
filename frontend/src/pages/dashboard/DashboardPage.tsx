@@ -232,14 +232,16 @@ export function DashboardPage() {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           <div id="my-todos" className="scroll-mt-4 space-y-3">
-            {isElevated && (
-              <div className="flex justify-end">
-                <Button variant="primary" size="sm" onClick={() => setAssigning(true)}>
-                  + Assign a to-do
-                </Button>
-              </div>
-            )}
-            <MyTodos key={todoReload} />
+            <MyTodos
+              key={todoReload}
+              action={
+                isElevated ? (
+                  <Button variant="primary" size="sm" onClick={() => setAssigning(true)}>
+                    + Assign a to-do
+                  </Button>
+                ) : undefined
+              }
+            />
             {isElevated && <AssignedByMe isHr={isReviewer} reloadKey={todoReload} />}
           </div>
 

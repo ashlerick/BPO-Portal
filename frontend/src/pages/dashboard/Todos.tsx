@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
@@ -247,7 +247,8 @@ type Filter = 'open' | 'overdue' | 'done'
 
 // The signed-in employee's own to-dos: open ones by urgency, overdue
 // called out, finished ones tucked under "Completed".
-export function MyTodos() {
+// `action` is a button shown on the right of the header, next to the count.
+export function MyTodos({ action }: { action?: ReactNode }) {
   const { user } = useAuth()
   const [todos, setTodos] = useState<Todo[]>([])
   const [filter, setFilter] = useState<Filter>('open')
@@ -289,7 +290,14 @@ export function MyTodos() {
       id="dashboard.todos"
       title="My to-dos"
       hint={open.length === 0 ? 'Nothing open' : `${open.length} open${overdue.length ? `, ${overdue.length} overdue` : ''}`}
-      aside={open.length > 0 ? <Badge tone={overdue.length ? 'red' : 'amber'}>{open.length}</Badge> : undefined}
+      aside={
+        action || open.length > 0 ? (
+          <span className="flex items-center gap-2">
+            {action}
+            {open.length > 0 && <Badge tone={overdue.length ? 'red' : 'amber'}>{open.length}</Badge>}
+          </span>
+        ) : undefined
+      }
       defaultOpen
     >
       <div className="mb-2 flex flex-wrap gap-2">
