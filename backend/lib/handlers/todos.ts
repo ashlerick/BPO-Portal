@@ -73,7 +73,9 @@ async function nameMap(rows: TodoRow[]): Promise<Map<string, string>> {
     t.comments.forEach((c) => ids.add(c.authorId))
   }
   const users = await prisma.user.findMany({ where: { id: { in: [...ids] } } })
-  return new Map(users.map((u) => [u.id, formatDisplayName(u.firstName, u.middleName, u.lastName)]))
+  const names = new Map(users.map((u) => [u.id, formatDisplayName(u.firstName, u.middleName, u.lastName)]))
+  names.set('system', 'BPO Portal') // to-dos the portal makes by itself (the weekly report one)
+  return names
 }
 
 function serialize(t: TodoRow, names: Map<string, string>) {

@@ -8,7 +8,8 @@
   },
   "crons": [
     { "path": "/api/hr/inventory-reminders", "schedule": "0 1 1 * *" },
-    { "path": "/api/hr/audit-retention", "schedule": "30 1 1 * *" }
+    { "path": "/api/hr/audit-retention", "schedule": "30 1 1 * *" },
+    { "path": "/api/hr/weekly-report-todos", "schedule": "0 0 * * 5" }
   ],
   "rewrites": [
     { "source": "/api/auth/forgot-password", "destination": "/api/auth/set-password?action=forgot" },

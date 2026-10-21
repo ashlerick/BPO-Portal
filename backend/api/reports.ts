@@ -9,6 +9,7 @@ import { buildCsv, buildPdf, buildXlsx, type ReportData } from '../lib/reports.j
 import { foaReportDataSchema, resolveSchemaKey, type FoaReportData } from '../lib/foaReport.js'
 import { formatDisplayName } from '../lib/names.js'
 import { notifyUsers } from '../lib/notify.js'
+import { completeWeeklyReportTodos } from '../lib/handlers/weeklyReportTodos.js'
 
 // GET /reports (list, role-scoped), POST /reports (create draft),
 // PUT /reports/:id (lifecycle transitions, via a vercel.json rewrite
@@ -282,6 +283,9 @@ async function handleTransition(req: AuthedRequest, res: VercelResponse, id: str
   })
 
   logAudit(req.auth.sub, action, 'weekly_report', id)
+
+  // Handing in the report completes the "Submit weekly report" to-do for that week.
+  if (action === 'submit') await completeWeeklyReportTodos(req.auth.sub, updated.periodEnd)
 
   if (action === 'approve' || action === 'reject') {
     const owner = report.submittedBy ?? report.authorId

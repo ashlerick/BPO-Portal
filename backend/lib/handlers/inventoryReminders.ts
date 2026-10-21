@@ -11,7 +11,7 @@ import { inventoryMonthStart } from './inventory.js'
 //   - HR/Admin get one summary of everything still unchecked
 // Safe to run twice: anyone already reminded this month is skipped.
 
-function authorized(req: VercelRequest): boolean {
+export function cronAuthorized(req: VercelRequest): boolean {
   const secret = process.env.CRON_SECRET
   const header = req.headers.authorization
   if (!secret || !header) return false
@@ -21,7 +21,7 @@ function authorized(req: VercelRequest): boolean {
 }
 
 export async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!authorized(req)) return res.status(401).json({ message: 'Unauthorized' })
+  if (!cronAuthorized(req)) return res.status(401).json({ message: 'Unauthorized' })
 
   const since = new Date(inventoryMonthStart())
   const items = await prisma.inventoryItem.findMany({
