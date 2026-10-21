@@ -63,6 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // A clock-in made in the BPO Time app shows up here without a reload: check again every minute and whenever the tab is
+  // looked at again. A failed check keeps what is already shown rather than flashing "not clocked in".
+  useEffect(() => {
+    if (!user) return
+    const check = () => {
+      if (document.visibilityState !== 'visible') return
+      api.get<AttendanceStatus>('/leave/attendance/today').then(setAttendanceStatus).catch(() => undefined)
+    }
+    const timer = setInterval(check, 60_000)
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('focus', check)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('focus', check)
+    }
+  }, [user])
+
   useEffect(() => {
     const token = localStorage.getItem('bpo_token')
     if (!token) {
