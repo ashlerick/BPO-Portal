@@ -1,5 +1,6 @@
 import type { VercelResponse } from '@vercel/node'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import type { AuthedRequest } from '../middleware.js'
 import { logAudit } from '../audit.js'
@@ -16,6 +17,7 @@ import { dateOnlyPattern, forbid, isHrOrAdmin, isSupervisorOf, myEmployee, notFo
 //   DELETE /:id    soft delete: whoever assigned it, or HR/Admin
 //   POST /:id?action=comment   {body}
 //   GET ?assigned=1            to-dos I assigned (HR/Admin: =all for everyone's)
+//   GET ...&summary=1 or &status=&limit=&offset=   counts only, or one page (see respondWithTodos)
 
 const link = z
   .string()
@@ -114,6 +116,42 @@ async function actorName(userId: string): Promise<string> {
   return u ? formatDisplayName(u.firstName, u.middleName, u.lastName) : 'Someone'
 }
 
+const DEFAULT_ORDER = [{ status: 'desc' }, { dueDate: 'asc' }, { createdAt: 'desc' }] as const
+const MAX_PAGE = 200
+
+// One answer for every way of listing to-dos, so a list that has grown over a year never has to be sent whole:
+//   ?summary=1                  just the counts (open, done) and the due dates of the open ones
+//   ?status=open|done&limit=N   a page of N (and whether there are more); &offset= continues it. Finished ones come newest first.
+//   (neither)                   the whole list, as before
+async function respondWithTodos(req: AuthedRequest, res: VercelResponse, where: Prisma.TodoWhereInput) {
+  if (queryString(req, 'summary')) {
+    const [open, done, dated] = await Promise.all([
+      prisma.todo.count({ where: { ...where, status: 'open' } }),
+      prisma.todo.count({ where: { ...where, status: 'done' } }),
+      prisma.todo.findMany({ where: { ...where, status: 'open', dueDate: { not: null } }, select: { dueDate: true }, take: MAX_PAGE }),
+    ])
+    return res.status(200).json({ open, done, dueDates: dated.map((t) => t.dueDate) })
+  }
+
+  const status = queryString(req, 'status')
+  const statusWhere = status === 'open' || status === 'done' ? { status } : {}
+  const limit = Number(queryString(req, 'limit'))
+  if (!Number.isInteger(limit) || limit < 1) {
+    const rows = await prisma.todo.findMany({ where: { ...where, ...statusWhere }, include, orderBy: [...DEFAULT_ORDER] })
+    return res.status(200).json(await present(rows))
+  }
+  const take = Math.min(limit, MAX_PAGE)
+  const skip = Math.max(0, Math.floor(Number(queryString(req, 'offset')) || 0))
+  const rows = await prisma.todo.findMany({
+    where: { ...where, ...statusWhere },
+    include,
+    orderBy: status === 'done' ? [{ completedAt: 'desc' }, { createdAt: 'desc' }] : [...DEFAULT_ORDER],
+    take: take + 1, // one extra row says whether there is another page
+    skip,
+  })
+  return res.status(200).json({ items: await present(rows.slice(0, take)), hasMore: rows.length > take })
+}
+
 export async function handler(req: AuthedRequest, res: VercelResponse) {
   const sub = queryString(req, 'sub')
   const action = queryString(req, 'action')
@@ -121,16 +159,9 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   if (!sub && req.method === 'GET') {
     // The to-dos I assigned to other people.
     if (queryString(req, 'assigned')) {
-      const rows = await prisma.todo.findMany({
-        // HR/Admin can ask for every to-do (?assigned=all) to clean up mistakes.
-        where: {
-          deletedAt: null,
-          ...(queryString(req, 'assigned') === 'all' && isHrOrAdmin(req) ? {} : { createdBy: req.auth.sub }),
-        },
-        include,
-        orderBy: [{ status: 'desc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
-      })
-      return res.status(200).json(await present(rows))
+      // HR/Admin can ask for every to-do (?assigned=all) to clean up mistakes.
+      const where = { deletedAt: null, ...(queryString(req, 'assigned') === 'all' && isHrOrAdmin(req) ? {} : { createdBy: req.auth.sub }) }
+      return respondWithTodos(req, res, where)
     }
     const requested = queryString(req, 'employeeId')
     const me = await myEmployee(req)
@@ -140,12 +171,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
       employeeId = requested
     }
     if (!employeeId) return res.status(200).json([])
-    const rows = await prisma.todo.findMany({
-      where: { employeeId, deletedAt: null },
-      include,
-      orderBy: [{ status: 'desc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
-    })
-    return res.status(200).json(await present(rows))
+    return respondWithTodos(req, res, { employeeId, deletedAt: null })
   }
 
   if (!sub && req.method === 'POST') {

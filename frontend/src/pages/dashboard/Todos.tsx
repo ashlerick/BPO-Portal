@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Field, FormError } from '../../components/ui/Field'
@@ -60,13 +60,43 @@ function PriorityBadge({ priority }: { priority: Priority }) {
   return <Badge tone={priority === 'urgent' ? 'red' : 'gray'}>{PRIORITY_LABEL[priority]}</Badge>
 }
 
-// The comment thread under a to-do: read, and add a line.
-function Comments({ todo, onChanged }: { todo: Todo; onChanged: () => void }) {
-  const [open, setOpen] = useState(false)
+function isOverdue(t: Todo, today: string): boolean {
+  return t.status === 'open' && t.dueDate !== null && t.dueDate.slice(0, 10) < today
+}
+
+function daysBetween(fromIso: string, toIso: string): number {
+  return Math.round((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / 86_400_000)
+}
+
+// Overdue ones first, then by priority and due date.
+function byOverdueThenUrgency(today: string) {
+  return (a: Todo, b: Todo) => Number(isOverdue(b, today)) - Number(isOverdue(a, today)) || byUrgency(a, b)
+}
+
+// The one filter both tabs share: what is still to do, or what is finished.
+function StatusToggle({ value, onChange, openCount, doneCount }: { value: 'open' | 'done'; onChange: (v: 'open' | 'done') => void; openCount: number; doneCount: number }) {
+  return (
+    <div role="group" aria-label="Show" className="inline-flex overflow-hidden rounded-lg border border-black/10 text-xs font-medium dark:border-white/15">
+      {([['open', `Open (${openCount})`], ['done', `Completed (${doneCount})`]] as const).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={value === key}
+          onClick={() => onChange(key)}
+          className={`px-3 py-1.5 ${value === key ? 'bg-brand-500/15 text-gray-900 dark:text-gray-100' : 'text-gray-600 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// The comment thread under a to-do: read, and add a line. Whether it is open is up to the list, so only one thread is open at a time.
+function CommentThread({ todo, onChanged }: { todo: Todo; onChanged: () => void }) {
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const toast = useToast()
-  const count = todo.comments.length
 
   async function send(e: FormEvent) {
     e.preventDefault()
@@ -84,35 +114,69 @@ function Comments({ todo, onChanged }: { todo: Todo; onChanged: () => void }) {
   }
 
   return (
-    <div className="mt-1 pl-6">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
-      >
-        {open ? 'Hide comments' : count > 0 ? `Comments (${count})` : 'Add a comment'}
+    <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pl-8">
+      {todo.comments.map((c) => (
+        <p key={c.id} className="rounded-md bg-black/[0.04] px-3 py-1.5 text-xs text-gray-700 dark:bg-white/[0.06] dark:text-gray-300">
+          <span className="font-semibold text-gray-900 dark:text-gray-100">{c.authorName}</span>
+          <span className="text-gray-500 dark:text-gray-400"> · {whenFmt.format(new Date(c.createdAt))}</span>
+          <span className="block whitespace-pre-line">{c.body}</span>
+        </p>
+      ))}
+      <form onSubmit={send} className="flex gap-2">
+        <input value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} placeholder="Write an update…" className="field !py-1.5 text-xs" />
+        <Button type="submit" size="sm" disabled={busy || !body.trim()}>
+          Send
+        </Button>
+      </form>
+    </div>
+  )
+}
+
+const iconBtn =
+  'grid h-8 w-8 shrink-0 place-items-center rounded-lg text-gray-500 hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100'
+
+// The "⋯" menu: the things a row offers that you rarely need (open its link, delete it).
+function RowMenu({ title, link, onDelete }: { title: string; link: string | null; onDelete: (() => void) | null }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [open])
+  if (!link && !onDelete) return null
+  const item = 'block w-full px-3 py-2 text-left text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10'
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button type="button" aria-label={`More for ${title}`} aria-expanded={open} onClick={() => setOpen((o) => !o)} className={iconBtn}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="19" cy="12" r="1.8" />
+        </svg>
       </button>
       {open && (
-        <div className="mt-2 space-y-2">
-          {todo.comments.map((c) => (
-            <p key={c.id} className="rounded-md bg-black/[0.04] px-3 py-1.5 text-xs text-gray-700 dark:bg-white/[0.06] dark:text-gray-300">
-              <span className="font-semibold text-gray-900 dark:text-gray-100">{c.authorName}</span>
-              <span className="text-gray-500 dark:text-gray-400"> · {whenFmt.format(new Date(c.createdAt))}</span>
-              <span className="block whitespace-pre-line">{c.body}</span>
-            </p>
-          ))}
-          <form onSubmit={send} className="flex gap-2">
-            <input
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              maxLength={1000}
-              placeholder="Write an update…"
-              className="field !py-1.5 text-xs"
-            />
-            <Button type="submit" size="sm" disabled={busy || !body.trim()}>
-              Send
-            </Button>
-          </form>
+        <div className="absolute right-0 z-10 mt-1 w-32 overflow-hidden rounded-lg border border-black/10 bg-white py-1 shadow-lg dark:border-white/15 dark:bg-[#10281c]">
+          {link && (
+            <a href={link} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} className={`${item} text-brand-600 dark:text-brand-400`}>
+              Open link ↗
+            </a>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onDelete()
+              }}
+              className={`${item} text-red-600 dark:text-red-400`}
+            >
+              Delete
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -124,17 +188,23 @@ function TodoRow({
   today,
   canDelete,
   showAssignee,
+  commentsOpen,
+  onToggleComments,
   onChanged,
 }: {
   todo: Todo
   today: string
   canDelete: boolean
   showAssignee: boolean
+  commentsOpen: boolean
+  onToggleComments: () => void
   onChanged: () => void
 }) {
   const toast = useToast()
+  const [expanded, setExpanded] = useState(false)
   const done = todo.status === 'done'
-  const overdue = !done && todo.dueDate !== null && todo.dueDate.slice(0, 10) < today
+  const overdue = isOverdue(todo, today)
+  const count = todo.comments.length
 
   async function setStatus(status: 'open' | 'done') {
     try {
@@ -170,132 +240,166 @@ function TodoRow({
     }
   }
 
+  const lateDays = overdue && todo.dueDate ? daysBetween(todo.dueDate.slice(0, 10), today) : 0
+
   return (
     <li className="py-2.5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex min-w-0 items-start gap-2">
-          {done ? (
-            <button
-              type="button"
-              onClick={() => setStatus('open')}
-              className="mt-0.5 shrink-0 rounded border border-black/15 px-1.5 py-0.5 text-[11px] font-medium text-gray-600 hover:bg-black/5 dark:border-white/20 dark:text-gray-300 dark:hover:bg-white/10"
-            >
-              Reopen
-            </button>
-          ) : (
-            <input
-              type="checkbox"
-              aria-label={`Mark "${todo.title}" as done`}
-              checked={false}
-              onChange={() => setStatus('done')}
-              className="mt-1"
-            />
-          )}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={done ? 'text-gray-400 line-through' : 'font-medium text-gray-900 dark:text-gray-100'}>{todo.title}</span>
-              <PriorityBadge priority={todo.priority} />
+      <div className="flex items-start gap-1">
+        {/* A padded label so the checkbox is an easy target on a phone. */}
+        <label className="-m-0.5 grid h-9 w-9 shrink-0 cursor-pointer place-items-center">
+          <input
+            type="checkbox"
+            aria-label={done ? `Reopen "${todo.title}"` : `Mark "${todo.title}" as done`}
+            checked={done}
+            onChange={() => setStatus(done ? 'open' : 'done')}
+            className="h-4 w-4"
+          />
+        </label>
+        <div className="min-w-0 flex-1 pt-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <span className={`min-w-0 break-words text-sm ${done ? 'text-gray-400 line-through' : 'font-medium text-gray-900 dark:text-gray-100'}`}>{todo.title}</span>
+            <span className="flex shrink-0 items-center gap-1.5">
               {showAssignee && <Badge tone="blue">{todo.employeeName}</Badge>}
-            </div>
-            {todo.description && (
-              <p className={`mt-0.5 whitespace-pre-line text-xs ${done ? 'text-gray-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                {todo.description}
-              </p>
-            )}
-            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {todo.assignedByName && !showAssignee && <>Assigned by {todo.assignedByName} · </>}
-              {done && todo.completedAt && (
-                <>
-                  Done {whenFmt.format(new Date(todo.completedAt))}
-                  {todo.completedByName ? ` by ${todo.completedByName}` : ''}
-                </>
-              )}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-          {todo.dueDate && (
-            <span className={overdue ? 'font-semibold text-red-600 dark:text-red-400' : undefined}>
-              {overdue ? 'Overdue · ' : 'Due '}
-              {formatDateOnly(todo.dueDate)}
+              <PriorityBadge priority={todo.priority} />
             </span>
-          )}
-          {todo.link && (
-            <a href={todo.link} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 dark:text-brand-400">
-              Open ↗
-            </a>
-          )}
-          {canDelete && (
+          </div>
+          {todo.description && (
             <button
               type="button"
-              onClick={remove}
-              className="font-medium text-red-600 hover:underline dark:text-red-400"
-              aria-label={`Delete ${todo.title}`}
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              className={`mt-0.5 block w-full text-left text-xs ${expanded ? 'whitespace-pre-line' : 'line-clamp-1'} ${done ? 'text-gray-400' : 'text-gray-600 dark:text-gray-400'}`}
             >
-              Delete
+              {todo.description}
             </button>
           )}
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            {[
+              !showAssignee && todo.assignedByName ? `from ${todo.assignedByName}` : null,
+              done && todo.completedAt ? `Done ${whenFmt.format(new Date(todo.completedAt))}${todo.completedByName ? ` by ${todo.completedByName}` : ''}` : null,
+              todo.dueDate && !overdue ? `Due ${formatDateOnly(todo.dueDate)}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            {overdue && todo.dueDate && (
+              <span className="font-semibold text-red-600 dark:text-red-400">
+                {todo.assignedByName && !showAssignee ? ' · ' : ''}
+                {formatDateOnly(todo.dueDate)} · {lateDays === 1 ? '1 day late' : `${lateDays} days late`}
+              </span>
+            )}
+          </p>
         </div>
+        <button
+          type="button"
+          onClick={onToggleComments}
+          aria-expanded={commentsOpen}
+          aria-label={count > 0 ? `Comments (${count})` : 'Add a comment'}
+          className={`${iconBtn} w-auto gap-1 px-1.5 text-xs ${commentsOpen ? 'bg-black/5 dark:bg-white/10' : ''}`}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+          </svg>
+          {count > 0 && <span className="tabular-nums">{count}</span>}
+        </button>
+        <RowMenu title={todo.title} link={todo.link} onDelete={canDelete ? remove : null} />
       </div>
-      <Comments todo={todo} onChanged={onChanged} />
+      {commentsOpen && <CommentThread todo={todo} onChanged={onChanged} />}
     </li>
   )
 }
 
-type Filter = 'open' | 'overdue' | 'done'
+function EmptyNote({ children }: { children: string }) {
+  return <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">{children}</p>
+}
 
-// The signed-in employee's own to-dos: open ones by urgency, overdue
-// called out, finished ones tucked under "Completed".
-function MyTodosBody() {
-  const { user } = useAuth()
-  const [todos, setTodos] = useState<Todo[]>([])
-  const [filter, setFilter] = useState<Filter>('open')
+interface TodoPage {
+  items: Todo[]
+  hasMore: boolean
+}
+
+interface TodoSummary {
+  open: number
+  done: number
+}
+
+const OPEN_PAGE = 100
+const DONE_PAGE = 20
+
+// One list of to-dos (mine, or the ones I assigned) as the server hands it over: the counts, plus one page of the chosen status.
+// Finished ones come 20 at a time ("Show older") so a list that has grown over a year never has to be loaded whole.
+function useTodoList(path: string, status: 'open' | 'done', reloadKey = 0) {
+  const [items, setItems] = useState<Todo[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [counts, setCounts] = useState<TodoSummary>({ open: 0, done: 0 })
+  const [loadingMore, setLoadingMore] = useState(false)
+  const join = path.includes('?') ? '&' : '?'
+  const pageSize = status === 'open' ? OPEN_PAGE : DONE_PAGE
 
   const load = useCallback(() => {
     api
-      .get<Todo[]>('/hr/todos')
-      .then(setTodos)
-      .catch(() => setTodos([]))
-  }, [])
-  useEffect(load, [load])
+      .get<TodoSummary>(`${path}${join}summary=1`)
+      .then(setCounts)
+      .catch(() => undefined)
+    api
+      .get<TodoPage>(`${path}${join}status=${status}&limit=${pageSize}`)
+      .then((p) => {
+        setItems(p.items)
+        setHasMore(p.hasMore)
+      })
+      .catch(() => setItems([]))
+  }, [path, join, status, pageSize])
+  // Switching list or status starts from an empty page rather than showing the other one's rows while the new ones load.
+  useEffect(() => {
+    setItems([])
+    setHasMore(false)
+  }, [path, status])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [load, reloadKey])
+
+  function loadMore() {
+    setLoadingMore(true)
+    api
+      .get<TodoPage>(`${path}${join}status=${status}&limit=${pageSize}&offset=${items.length}`)
+      .then((p) => {
+        setItems((prev) => [...prev, ...p.items])
+        setHasMore(p.hasMore)
+      })
+      .catch(() => undefined)
+      .finally(() => setLoadingMore(false))
+  }
+
+  return { items, hasMore, counts, load, loadMore, loadingMore }
+}
+
+function ShowMore({ onClick, busy }: { onClick: () => void; busy: boolean }) {
+  return (
+    <div className="pt-2 text-center">
+      <button type="button" onClick={onClick} disabled={busy} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-60 dark:text-brand-400">
+        {busy ? 'Loading…' : 'Show older'}
+      </button>
+    </div>
+  )
+}
+
+// The signed-in employee's own to-dos: late ones first, then by urgency; finished ones under "Completed".
+function MyTodosBody() {
+  const { user } = useAuth()
+  const [filter, setFilter] = useState<'open' | 'done'>('open')
+  const [commentsOn, setCommentsOn] = useState<string | null>(null)
+  const { items, hasMore, counts, load, loadMore, loadingMore } = useTodoList('/hr/todos', filter)
 
   const today = todayInManilaIso()
-  const open = useMemo(() => todos.filter((t) => t.status === 'open').sort(byUrgency), [todos])
-  const overdue = open.filter((t) => t.dueDate !== null && t.dueDate.slice(0, 10) < today)
-  const completed = useMemo(
-    () => todos.filter((t) => t.status === 'done').sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')),
-    [todos],
-  )
-  const shown = filter === 'open' ? open : filter === 'overdue' ? overdue : completed
-
-  const chip = (key: Filter, label: string, count: number) => (
-    <button
-      key={key}
-      type="button"
-      onClick={() => setFilter(key)}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-        filter === key
-          ? 'border-brand-500 bg-brand-500/15 text-gray-900 dark:text-gray-100'
-          : 'border-black/10 text-gray-600 hover:bg-black/5 dark:border-white/15 dark:text-gray-400 dark:hover:bg-white/10'
-      }`}
-    >
-      {label} <span className={key === 'overdue' && count > 0 ? 'text-red-600 dark:text-red-400' : undefined}>({count})</span>
-    </button>
-  )
+  const shown = useMemo(() => (filter === 'open' ? [...items].sort(byOverdueThenUrgency(today)) : items), [items, filter, today])
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap gap-2">
-        {chip('open', 'Open', open.length)}
-        {chip('overdue', 'Overdue', overdue.length)}
-        {chip('done', 'Completed', completed.length)}
+      <div className="mb-1">
+        <StatusToggle value={filter} onChange={setFilter} openCount={counts.open} doneCount={counts.done} />
       </div>
       {shown.length === 0 ? (
-        <p className="py-2 text-sm text-gray-500 dark:text-gray-400">
-          {filter === 'open' ? 'No open to-dos. You are all caught up.' : filter === 'overdue' ? 'Nothing overdue.' : 'Nothing completed yet.'}
-        </p>
+        <EmptyNote>{filter === 'open' ? 'No open to-dos. You are all caught up.' : 'Nothing completed yet.'}</EmptyNote>
       ) : (
-        <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+        <ul className="divide-y divide-black/5 dark:divide-white/10">
           {shown.map((t) => (
             <TodoRow
               key={t.id}
@@ -303,11 +407,14 @@ function MyTodosBody() {
               today={today}
               canDelete={t.assignedById === user?.id}
               showAssignee={false}
+              commentsOpen={commentsOn === t.id}
+              onToggleComments={() => setCommentsOn((c) => (c === t.id ? null : t.id))}
               onChanged={load}
             />
           ))}
         </ul>
       )}
+      {hasMore && <ShowMore onClick={loadMore} busy={loadingMore} />}
     </>
   )
 }
@@ -315,60 +422,44 @@ function MyTodosBody() {
 // To-dos I assigned to other people: who has done them and who has not.
 // HR/Admin can switch to everyone's, to clear out entries made in error.
 function AssignedBody({ isHr, reloadKey }: { isHr: boolean; reloadKey: number }) {
-  const [todos, setTodos] = useState<Todo[]>([])
   const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const [filter, setFilter] = useState<'open' | 'done'>('open')
-
-  const load = useCallback(() => {
-    api
-      .get<Todo[]>(`/hr/todos?assigned=${scope === 'all' ? 'all' : '1'}`)
-      .then(setTodos)
-      .catch(() => setTodos([]))
-  }, [scope])
-  useEffect(load, [load, reloadKey])
+  const [commentsOn, setCommentsOn] = useState<string | null>(null)
+  const { items, hasMore, counts, load, loadMore, loadingMore } = useTodoList(`/hr/todos?assigned=${scope === 'all' ? 'all' : '1'}`, filter, reloadKey)
 
   const today = todayInManilaIso()
-  const open = todos.filter((t) => t.status === 'open').sort(byUrgency)
-  const done = todos.filter((t) => t.status === 'done')
-  const shown = filter === 'open' ? open : done
+  const shown = useMemo(() => (filter === 'open' ? [...items].sort(byOverdueThenUrgency(today)) : items), [items, filter, today])
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
-          {(['open', 'done'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setFilter(k)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                filter === k
-                  ? 'border-brand-500 bg-brand-500/15 text-gray-900 dark:text-gray-100'
-                  : 'border-black/10 text-gray-600 dark:border-white/15 dark:text-gray-400'
-              }`}
-            >
-              {k === 'open' ? `Open (${open.length})` : `Done (${done.length})`}
-            </button>
-          ))}
-        </div>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <StatusToggle value={filter} onChange={setFilter} openCount={counts.open} doneCount={counts.done} />
         {isHr && (
           <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
             <input type="checkbox" checked={scope === 'all'} onChange={(e) => setScope(e.target.checked ? 'all' : 'mine')} />
-            Show everyone's to-dos
+            Show everyone's
           </label>
         )}
       </div>
       {shown.length === 0 ? (
-        <p className="py-2 text-sm text-gray-500 dark:text-gray-400">
-          {filter === 'open' ? 'Nothing you assigned is waiting.' : 'Nothing you assigned has been completed yet.'}
-        </p>
+        <EmptyNote>{filter === 'open' ? 'Nothing you assigned is waiting.' : 'Nothing you assigned has been completed yet.'}</EmptyNote>
       ) : (
-        <ul className="divide-y divide-black/5 text-sm dark:divide-white/10">
+        <ul className="divide-y divide-black/5 dark:divide-white/10">
           {shown.map((t) => (
-            <TodoRow key={t.id} todo={t} today={today} canDelete showAssignee onChanged={load} />
+            <TodoRow
+              key={t.id}
+              todo={t}
+              today={today}
+              canDelete
+              showAssignee
+              commentsOpen={commentsOn === t.id}
+              onToggleComments={() => setCommentsOn((c) => (c === t.id ? null : t.id))}
+              onChanged={load}
+            />
           ))}
         </ul>
       )}
+      {hasMore && <ShowMore onClick={loadMore} busy={loadingMore} />}
     </>
   )
 }
@@ -400,7 +491,7 @@ export function TodosPanel({ canAssign, isHr, reloadKey, onAssign }: { canAssign
         )}
         {canAssign && (
           <Button variant="primary" size="sm" onClick={onAssign}>
-            + Assign a to-do
+            + Assign
           </Button>
         )}
       </header>

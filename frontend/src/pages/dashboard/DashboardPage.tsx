@@ -29,9 +29,10 @@ interface PendingTask {
   to: string
 }
 
-interface TodoCount {
-  status: 'open' | 'done'
-  dueDate: string | null
+interface TodoSummary {
+  open: number
+  done: number
+  dueDates: string[]
 }
 
 interface ScheduleResponse {
@@ -51,7 +52,7 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([])
   const [weekRecords, setWeekRecords] = useState<AttendanceRecord[]>([])
   const [givenWeek, setGivenWeek] = useState<GivenOvertime[]>([])
-  const [todos, setTodos] = useState<TodoCount[]>([])
+  const [todos, setTodos] = useState<TodoSummary>({ open: 0, done: 0, dueDates: [] })
   const [shift, setShift] = useState<ShiftInfo | null>(null)
 
   useEffect(() => {
@@ -61,7 +62,7 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
     api.get<NotificationsResponse>('/notifications').then(setNotifications).catch(() => undefined)
     api.get<MyEmployeeProfile>('/employees/me').then(setProfile).catch(() => undefined)
     api.get<WeeklyReport[]>('/reports').then(setReports).catch(() => undefined)
-    api.get<TodoCount[]>('/hr/todos').then(setTodos).catch(() => undefined)
+    api.get<TodoSummary>('/hr/todos?summary=1').then(setTodos).catch(() => undefined)
     api.get<ScheduleResponse>('/hr/shifts?kind=schedule').then((s) => setShift(s.current?.shift ?? null)).catch(() => undefined)
     if (isReviewer) {
       api.get<EmployeeRecord[]>('/employees').then(setEmployees).catch(() => undefined)
@@ -72,6 +73,21 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
 
   // This person's own week (for the ring and the chart): HR is asked for their own rows only, not everyone's.
   const profileId = profile?.id
+  // Bumped every minute and when the tab is looked at again, so the week chart follows a clock-in made elsewhere.
+  const [liveTick, setLiveTick] = useState(0)
+  useEffect(() => {
+    const bump = () => {
+      if (document.visibilityState === 'visible') setLiveTick((n) => n + 1)
+    }
+    const timer = setInterval(bump, 60_000)
+    document.addEventListener('visibilitychange', bump)
+    window.addEventListener('focus', bump)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', bump)
+      window.removeEventListener('focus', bump)
+    }
+  }, [])
   useEffect(() => {
     if (!profileId) return
     const monday = mondayOf(todayInManilaIso())
@@ -84,7 +100,7 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
       .get<(GivenOvertime & { employeeId: string })[]>(`/hr/overtime?from=${monday}&to=${addDaysIso(monday, 6)}`)
       .then((rows) => setGivenWeek(rows.filter((r) => r.employeeId === profileId)))
       .catch(() => undefined)
-  }, [profileId])
+  }, [profileId, liveTick])
 
   return { leave, reports, events, notifications, profile, employees, teamCount, todayRecords, weekRecords, givenWeek, todos, shift }
 }
@@ -182,10 +198,9 @@ export function DashboardPage() {
     })
 
   const recentNotifications = notifications?.items.slice(0, 5) ?? []
-  const openTodos = todos.filter((t) => t.status === 'open')
-  const doneTodos = todos.length - openTodos.length
-  const overdueTodos = openTodos.filter((t) => t.dueDate !== null && t.dueDate.slice(0, 10) < today)
-  const dueDates = openTodos.filter((t) => t.dueDate).map((t) => (t.dueDate as string).slice(0, 10))
+  const dueDates = todos.dueDates.map((d) => d.slice(0, 10))
+  const overdueCount = dueDates.filter((d) => d < today).length
+  const totalTodos = todos.open + todos.done
   const unread = notifications?.unread ?? 0
   const subtitle = [user?.roles.map((role) => ROLE_LABELS[role]).join(', '), profile?.position, profile?.team].filter(Boolean).join(' · ')
   const todayRecord = weekRecords.find((r) => r.date.slice(0, 10) === today)
@@ -235,10 +250,10 @@ export function DashboardPage() {
         <div className="grid grid-cols-3 gap-2.5 sm:gap-4 lg:col-span-2 xl:col-span-3">
           <Tile
             label="Open to-dos"
-            value={openTodos.length}
-            sub={overdueTodos.length > 0 ? `${overdueTodos.length} overdue` : todos.length === 0 ? 'none yet' : `${doneTodos} of ${todos.length} done`}
-            tone={overdueTodos.length > 0 ? 'red' : undefined}
-            bar={todos.length > 0 ? doneTodos / todos.length : undefined}
+            value={todos.open}
+            sub={overdueCount > 0 ? `${overdueCount} overdue` : totalTodos === 0 ? 'none yet' : `${todos.done} of ${totalTodos} done`}
+            tone={overdueCount > 0 ? 'red' : undefined}
+            bar={totalTodos > 0 ? todos.done / totalTodos : undefined}
             onClick={() => document.getElementById('my-todos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           />
           <Tile label="Notifications" value={unread} sub="unread" dot={unread > 0} to="/notifications" />
