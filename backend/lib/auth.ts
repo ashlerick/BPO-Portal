@@ -2,7 +2,9 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import type { Role } from '@prisma/client'
 
-const JWT_EXPIRES_IN = '8h'
+// A sign-in lasts the whole working day: the shift is 8.5 hours, and someone who signs in a little before it starts and works some
+// overtime must not be logged out in the middle of it.
+const JWT_EXPIRES_IN = '16h'
 
 export interface AuthTokenPayload {
   sub: string
