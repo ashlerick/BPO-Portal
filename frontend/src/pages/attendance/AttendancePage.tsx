@@ -494,19 +494,42 @@ function hoursBetween(a: string | null, b: string | null): number {
 const RANGES = [
   { key: 'today', label: 'Today' },
   { key: 'yesterday', label: 'Yesterday' },
-  { key: '7', label: 'Last 7 days' },
+  { key: 'week', label: 'This week' },
+  { key: 'lastweek', label: 'Last week' },
   { key: 'month', label: 'This month' },
+  { key: 'lastmonth', label: 'Last month' },
   { key: 'custom', label: 'Custom range…' },
 ] as const
 type RangeKey = (typeof RANGES)[number]['key']
+
+// Weeks run Monday to Sunday. A week or month still going is cut off at today, so days that have not happened are never counted.
+const mondayOf = (iso: string) => addDaysIso(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7))
+const endOfPrevMonthIso = (iso: string) => addDaysIso(startOfMonthIso(iso), -1)
 
 function rangeFor(key: RangeKey, customFrom: string, customTo: string): { from: string; to: string } {
   const today = todayInManilaIso()
   if (key === 'today') return { from: today, to: today }
   if (key === 'yesterday') return { from: addDaysIso(today, -1), to: addDaysIso(today, -1) }
-  if (key === '7') return { from: addDaysIso(today, -6), to: today }
+  if (key === 'week') return { from: mondayOf(today), to: today }
+  if (key === 'lastweek') return { from: addDaysIso(mondayOf(today), -7), to: addDaysIso(mondayOf(today), -1) }
   if (key === 'month') return { from: startOfMonthIso(today), to: today }
+  if (key === 'lastmonth') return { from: startOfMonthIso(endOfPrevMonthIso(today)), to: endOfPrevMonthIso(today) }
   return { from: customFrom, to: customTo }
+}
+
+// What the menu shows beside a range, so people can see which days it covers: "This week · Oct 19 – 25". A week is named in full
+// (Monday to Sunday) even while it is still going.
+function rangeLabel(key: RangeKey, label: string): string {
+  if (key === 'today' || key === 'yesterday' || key === 'custom') return label
+  const today = todayInManilaIso()
+  const full =
+    key === 'week' ? { from: mondayOf(today), to: addDaysIso(mondayOf(today), 6) }
+    : key === 'lastweek' ? rangeFor(key, '', '')
+    : key === 'month' ? { from: startOfMonthIso(today), to: addDaysIso(startOfMonthIso(addDaysIso(startOfMonthIso(today), 32)), -1) }
+    : rangeFor(key, '', '')
+  const short = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const sameMonth = full.from.slice(0, 7) === full.to.slice(0, 7)
+  return `${label} · ${short(full.from)} – ${sameMonth ? Number(full.to.slice(8)) : short(full.to)}`
 }
 
 const initials = (name: string) =>
@@ -775,7 +798,7 @@ export function AttendancePage() {
             <select value={rangeKey} onChange={(e) => setRangeKey(e.target.value as RangeKey)} className="field mt-1">
               {RANGES.map((r) => (
                 <option key={r.key} value={r.key}>
-                  {r.label}
+                  {rangeLabel(r.key, r.label)}
                 </option>
               ))}
             </select>
