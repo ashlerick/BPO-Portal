@@ -5,7 +5,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncStat
 import { useApiData } from '../../hooks/useApiData'
 import { api, ApiError } from '../../services/api'
 import type { EmployeeRecord } from '../hris/types'
-import { addDaysIso, formatDateOnly, formatManilaTime, startOfMonthIso, todayInManilaIso } from '../../utils/dates'
+import { addDaysIso, endOfPrevMonthIso, formatDateOnly, formatManilaTime, mondayOfIso, startOfMonthIso, todayInManilaIso } from '../../utils/dates'
 import { zoneLabel } from '../../utils/shiftTime'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -502,9 +502,8 @@ const RANGES = [
 ] as const
 type RangeKey = (typeof RANGES)[number]['key']
 
-// Weeks run Monday to Sunday. A week or month still going is cut off at today, so days that have not happened are never counted.
-const mondayOf = (iso: string) => addDaysIso(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7))
-const endOfPrevMonthIso = (iso: string) => addDaysIso(startOfMonthIso(iso), -1)
+// A week or month still going is cut off at today, so days that have not happened are never counted.
+const mondayOf = mondayOfIso
 
 function rangeFor(key: RangeKey, customFrom: string, customTo: string): { from: string; to: string } {
   const today = todayInManilaIso()

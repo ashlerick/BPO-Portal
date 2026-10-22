@@ -41,6 +41,15 @@ export function startOfMonthIso(iso: string): string {
   return `${iso.slice(0, 7)}-01`
 }
 
+// Weeks run Monday to Sunday.
+export function mondayOfIso(iso: string): string {
+  return addDaysIso(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7))
+}
+
+export function endOfPrevMonthIso(iso: string): string {
+  return addDaysIso(startOfMonthIso(iso), -1)
+}
+
 // Check-in/check-out timestamps should always read as Manila wall-clock
 // time, not the viewer's browser/OS timezone — otherwise the same
 // check-in shows a different time to a reviewer in a different zone
