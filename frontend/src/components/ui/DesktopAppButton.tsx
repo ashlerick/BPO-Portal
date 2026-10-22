@@ -22,6 +22,7 @@ const OPEN_LINK = 'bpotime://open'
 const RELEASES_URL = 'https://github.com/ashlerick/BPO-Time/releases/latest/download/BPO-Time-Setup.exe'
 const SEEN_KEY = 'bpotime:opened'
 const FLAG_KEY = 'bpotime:enabled'
+const CONNECT_KEY = 'bpotime:connect'
 // How long to wait for the browser to hand focus to the app before asking.
 const WAIT_MS = 6000
 
@@ -73,6 +74,21 @@ export function DesktopAppButton({ compact = false }: { compact?: boolean }) {
   const left = useRef(false)
 
   useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  // The app sent the person here to sign in (?connect=app, see main.tsx). Now that they are signed in, connect the app
+  // without another click. If the browser holds the link back, the usual "didn't open?" question follows.
+  useEffect(() => {
+    if (!enabled || !canUseHere()) return
+    let wanted = false
+    try {
+      wanted = sessionStorage.getItem(CONNECT_KEY) === '1'
+      sessionStorage.removeItem(CONNECT_KEY)
+    } catch {
+      // storage blocked
+    }
+    if (wanted) void open()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // close the question on Escape or a click elsewhere
   useEffect(() => {
