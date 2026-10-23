@@ -43,7 +43,7 @@ export function AuditLogsPage() {
   const params = useMemo(() => {
     const p = new URLSearchParams({ from, to })
     if (userId) p.set('userId', userId)
-    if (resource) p.set('resource', resource)
+    if (resource) p.set('area', resource)
     if (kind) p.set('kind', kind)
     if (result) p.set('result', result)
     if (q) p.set('q', q)

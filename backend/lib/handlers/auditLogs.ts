@@ -12,7 +12,7 @@ import { targetLabels } from '../auditTargets.js'
 // GET /audit-logs (admin): the log by date range, newest first, a page at a time.
 //   from, to      YYYY-MM-DD in Philippine time (both ends included); the default is today
 //   userId        who did it
-//   resource      the area (attendance, announcement, ...)
+//   area          the area (attendance, announcement, ...). Not called "resource": the /api/audit-logs rewrite already sets resource=audit-logs.
 //   kind          what kind of action: the first word of the action (create, update, delete, export, view, ...)
 //   result        success | failure
 //   q             text to look for in the action, the details and the area
@@ -75,7 +75,7 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
   const filters: Prisma.AuditLogWhereInput[] = [dateWhere]
   if (!q1(req.query.routine)) filters.push({ NOT: routineWhere })
   if (q1(req.query.userId)) filters.push({ userId: q1(req.query.userId) })
-  if (q1(req.query.resource)) filters.push({ resource: q1(req.query.resource) })
+  if (q1(req.query.area)) filters.push({ resource: q1(req.query.area) })
   if (result === 'success' || result === 'failure') filters.push({ result })
   if (kind) filters.push({ action: { startsWith: kind } })
   if (text) {
