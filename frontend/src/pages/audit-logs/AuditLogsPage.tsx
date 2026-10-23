@@ -13,12 +13,15 @@ import type { AuditFacets, AuditLogEntry, AuditLogPage } from './types'
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' })
 const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' })
+const rangeFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const rangeDay = (iso: string) => rangeFmt.format(new Date(`${iso}T00:00:00Z`))
 const dayKey = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(iso))
 
 export function AuditLogsPage() {
   const today = todayInManilaIso()
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
+  const [customOpen, setCustomOpen] = useState(false)
   const [userId, setUserId] = useState('')
   const [resource, setResource] = useState('')
   const [kind, setKind] = useState('')
@@ -110,6 +113,10 @@ export function AuditLogsPage() {
     { label: 'Last month', from: startOfMonthIso(endOfPrevMonthIso(today)), to: endOfPrevMonthIso(today) },
   ]
 
+  // One date range: the buttons fill it in, "Custom" lets you pick it. The From and To boxes show only for Custom (or when the dates match no button).
+  const matchesPreset = presets.some((p) => p.from === from && p.to === to)
+  const custom = customOpen || !matchesPreset
+
   // Group the loaded entries by day (a heading per day, with how many are shown).
   const days: { key: string; items: AuditLogEntry[] }[] = []
   for (const e of entries) {
@@ -128,7 +135,7 @@ export function AuditLogsPage() {
       <Card className="mb-4 space-y-3">
         <div className="grid grid-cols-2 gap-2 min-[480px]:grid-cols-4 md:flex md:flex-wrap">
           {presets.map((p) => {
-            const active = p.from === from && p.to === to
+            const active = !custom && p.from === from && p.to === to
             return (
               <Button
                 key={p.label}
@@ -138,22 +145,36 @@ export function AuditLogsPage() {
                 onClick={() => {
                   setFrom(p.from)
                   setTo(p.to)
+                  setCustomOpen(false)
                 }}
               >
                 {p.label}
               </Button>
             )
           })}
+          <Button
+            size="sm"
+            aria-pressed={custom}
+            className={`w-full whitespace-nowrap md:w-auto ${custom ? '!border-brand-500 !bg-brand-600/15 !text-brand-700 dark:!text-brand-300' : ''}`}
+            onClick={() => setCustomOpen(true)}
+          >
+            Custom
+          </Button>
         </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{from === to ? rangeDay(from) : `${rangeDay(from)} to ${rangeDay(to)}`}</p>
         <div className="grid grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:flex md:flex-wrap md:items-end">
-          <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
-            From
-            <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
-          </label>
-          <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
-            To
-            <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
-          </label>
+          {custom && (
+            <>
+              <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
+                From
+                <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+              </label>
+              <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
+                To
+                <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className="field mt-1 px-2.5 md:px-3" />
+              </label>
+            </>
+          )}
           <label className="flex min-w-0 flex-col text-sm text-gray-600 dark:text-gray-400">
             Who
             <select value={userId} onChange={(e) => setUserId(e.target.value)} className="field mt-1">
