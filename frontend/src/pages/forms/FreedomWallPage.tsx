@@ -241,7 +241,7 @@ export function FreedomWallPage() {
         </div>
       </form>
 
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 pb-6 pt-2">
+      <div ref={listRef} className="wall-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 pb-6 pt-2">
         {!posts && !error && null}
         {posts && posts.length === 0 && <EmptyState label="No posts yet. Be the first." />}
         {posts && (

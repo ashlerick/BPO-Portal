@@ -426,6 +426,14 @@ body {
   }
 }
 
+/* The Freedom Wall's wall of notes scrolls inside the page, and a bar down the edge of a wall of cards looks out of place. It still scrolls
+   with the wheel, touch and keyboard; only the bar is hidden. */
+.wall-scroll {
+  scrollbar-width: none;
+}
+.wall-scroll::-webkit-scrollbar {
+  display: none;
+}
 
 /* Freedom Wall: a new note pops onto the wall. */
 @keyframes note-pop {
