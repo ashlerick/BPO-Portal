@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import type { Role } from './types'
 
@@ -13,10 +13,11 @@ interface RequireAuthProps {
 export function RequireAuth({ children, roles: rolesProp, restricted }: RequireAuthProps) {
   const { user, loading, effectiveRoles, restrictedRoles } = useAuth()
   const roles = restricted ? restrictedRoles : rolesProp
+  const location = useLocation()
 
   if (loading) return null
 
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
 
   // Route-level role checks honor the simulated "view as" role too, so
   // navigating directly to an admin-only URL while previewing a lower

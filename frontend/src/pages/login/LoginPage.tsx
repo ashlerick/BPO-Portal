@@ -6,6 +6,11 @@ import { Button } from '../../components/ui/Button'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { useTheme } from '../../theme/ThemeContext'
 
+const FROM_KEY = 'bpo:login-from'
+
+// Only a path inside this app counts; "//other.site" or "https://..." would turn a sign-in into a redirect off the portal.
+const safePath = (p: unknown): string | null => (typeof p === 'string' && p.startsWith('/') && !p.startsWith('//') && !p.startsWith('/login') ? p : null)
+
 export function LoginPage() {
   const { user, login } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -16,8 +21,17 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Where the person was heading before the sign-in screen. Kept for the tab too, so a refresh on this screen does not lose it.
+  const stateFrom = safePath((location.state as { from?: string } | null)?.from)
+  if (stateFrom) {
+    try { sessionStorage.setItem(FROM_KEY, stateFrom) } catch { /* storage blocked: only this page load remembers */ }
+  }
+  let storedFrom: string | null = null
+  try { storedFrom = safePath(sessionStorage.getItem(FROM_KEY)) } catch { /* storage blocked */ }
+  const from = stateFrom ?? storedFrom ?? '/'
+
   if (user) {
-    const from = (location.state as { from?: string })?.from ?? '/'
+    try { sessionStorage.removeItem(FROM_KEY) } catch { /* nothing to clear */ }
     return <Navigate to={from} replace />
   }
 
@@ -27,7 +41,7 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate('/', { replace: true })
+      navigate(from, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Unable to log in')
     } finally {
