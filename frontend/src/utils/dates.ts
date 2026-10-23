@@ -41,6 +41,10 @@ export function startOfMonthIso(iso: string): string {
   return `${iso.slice(0, 7)}-01`
 }
 
+export function endOfMonthIso(iso: string): string {
+  return addDaysIso(startOfMonthIso(addDaysIso(startOfMonthIso(iso), 32)), -1)
+}
+
 // Weeks run Monday to Sunday.
 export function mondayOfIso(iso: string): string {
   return addDaysIso(iso, -((new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7))

@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { api, ApiError } from '../../services/api'
-import { addDaysIso, endOfPrevMonthIso, mondayOfIso, startOfMonthIso, todayInManilaIso } from '../../utils/dates'
+import { addDaysIso, endOfMonthIso, endOfPrevMonthIso, mondayOfIso, startOfMonthIso, todayInManilaIso } from '../../utils/dates'
 import { humanize } from '../../utils/text'
 import type { AuditFacets, AuditLogEntry, AuditLogPage } from './types'
 
@@ -107,9 +107,9 @@ export function AuditLogsPage() {
   const presets = [
     { label: 'Today', from: today, to: today },
     { label: 'Yesterday', from: addDaysIso(today, -1), to: addDaysIso(today, -1) },
-    { label: 'This week', from: mondayOfIso(today), to: today },
+    { label: 'This week', from: mondayOfIso(today), to: addDaysIso(mondayOfIso(today), 6) },
     { label: 'Last week', from: addDaysIso(mondayOfIso(today), -7), to: addDaysIso(mondayOfIso(today), -1) },
-    { label: 'This month', from: startOfMonthIso(today), to: today },
+    { label: 'This month', from: startOfMonthIso(today), to: endOfMonthIso(today) },
     { label: 'Last month', from: startOfMonthIso(endOfPrevMonthIso(today)), to: endOfPrevMonthIso(today) },
   ]
 
