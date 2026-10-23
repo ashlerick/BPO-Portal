@@ -215,7 +215,9 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
         },
       ]
     })
-    await logAudit(req.auth.sub, 'view', 'shift_report', requested ?? null)
+    // This is what the Attendance page loads, so it is logged as a view of attendance: which days, and whose.
+    const whose = requested ? (requested === me?.id ? 'own time' : 'one employee') : hr ? 'all employees' : 'own time'
+    await logAudit(req.auth.sub, 'view', 'attendance', requested ?? null, 'success', `${from === to ? from : `${from} to ${to}`}, ${whose}`)
     return res.status(200).json(rows)
   }
 
