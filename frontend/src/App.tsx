@@ -132,7 +132,7 @@ export default function App() {
               <Route
                 path="/seating"
                 element={
-                  <RequireAuth roles={['hr', 'admin']}>
+                  <RequireAuth roles={['admin']}>
                     <SeatingPage />
                   </RequireAuth>
                 }
