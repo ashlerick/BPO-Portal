@@ -138,7 +138,7 @@ export function SeatingPage() {
     <div>
       <PageHeader
         title="Seating"
-        description="Click a seat, then type the name, switch and port. Names are plain text, so nobody needs a user account."
+        description="Who sits where, and which switch port each seat uses."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {dirty && <span className="text-sm text-amber-600 dark:text-amber-300">Unsaved changes</span>}
