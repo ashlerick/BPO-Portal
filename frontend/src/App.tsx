@@ -17,6 +17,7 @@ import { DocumentsPage } from './pages/documents/DocumentsPage'
 import { CareersPage } from './pages/careers/CareersPage'
 import { InventoryItemPage } from './pages/inventory/InventoryItemPage'
 import { InventoryPage } from './pages/inventory/InventoryPage'
+import { SeatingPage } from './pages/seating/SeatingPage'
 import { FreedomWallPage } from './pages/forms/FreedomWallPage'
 import { ForgotPasswordPage } from './pages/forgot-password/ForgotPasswordPage'
 import { HrisPage } from './pages/hris/HrisPage'
@@ -128,6 +129,14 @@ export default function App() {
                 }
               />
               <Route path="/inventory/:tag" element={<InventoryItemPage />} />
+              <Route
+                path="/seating"
+                element={
+                  <RequireAuth roles={['hr', 'admin']}>
+                    <SeatingPage />
+                  </RequireAuth>
+                }
+              />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/forms" element={<Navigate to="/freedom-wall" replace />} />

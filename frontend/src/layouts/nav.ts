@@ -78,6 +78,7 @@ export const defaultNavGroups: NavGroup[] = [
       { to: '/payroll', label: 'Payroll', icon: 'payroll', roles: ['hr', 'admin'] },
       { to: '/benefits-admin', label: 'Benefits Administration', icon: 'shield', roles: ['hr', 'admin'] },
       { to: '/inventory', label: 'Inventory', icon: 'inventory', roles: ['hr', 'admin'] },
+      { to: '/seating', label: 'Seating', icon: 'seating', roles: ['hr', 'admin'] },
       { to: '/employee-relations', label: 'Employee Relations', icon: 'alert', roles: ['hr', 'admin'] },
       { to: '/offboarding', label: 'Offboarding', icon: 'offboarding', roles: ['hr', 'admin'] },
     ],

@@ -13,6 +13,7 @@ import { handler as inventory } from '../lib/handlers/inventory.js'
 import { handler as shifts } from '../lib/handlers/shifts.js'
 import { handler as overtime } from '../lib/handlers/overtime.js'
 import { handler as newHire } from '../lib/handlers/newHire.js'
+import { handler as seating } from '../lib/handlers/seating.js'
 import { handler as careers } from '../lib/handlers/careers.js'
 import { handler as inventoryReminders } from '../lib/handlers/inventoryReminders.js'
 import { handler as weeklyReportTodos } from '../lib/handlers/weeklyReportTodos.js'
@@ -39,6 +40,7 @@ const authed = requireAuth(async (req, res) => {
   if (resource === 'shifts') return shifts(req, res)
   if (resource === 'overtime') return overtime(req, res)
   if (resource === 'new-hire') return newHire(req, res)
+  if (resource === 'seating') return seating(req, res)
   if (resource === 'device-code' && req.method === 'POST') return createCode(req, res)
   if (resource === 'devices' && req.method === 'GET') return listDevices(req, res)
   if (resource === 'devices' && req.method === 'DELETE') return revokeDevice(req, res)

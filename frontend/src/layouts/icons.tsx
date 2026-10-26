@@ -18,6 +18,7 @@ export type IconName =
   | 'offboarding'
   | 'shield'
   | 'inventory'
+  | 'seating'
   | 'wall'
   | 'alert'
   | 'payroll'
@@ -50,6 +51,7 @@ const ICONS: Record<IconName, string> = {
   offboarding: 'M9 4H5v16h4M15 8l4 4-4 4M19 12H9',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   inventory: 'M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10',
+  seating: 'M4 5h4v4H4zM10 5h4v4h-4zM16 5h4v4h-4zM4 15h4v4H4zM10 15h4v4h-4zM16 15h4v4h-4z',
   wall: 'M5 4h14v11l-5 5H5zM14 20v-5h5M8 9h8M8 12.5h5',
   alert: 'M12 4l9 16H3zM12 10v4M12 17v.5',
   payroll: 'M3 7h18v10H3zM12 14a2 2 0 100-4 2 2 0 000 4zM6 10v.01M18 14v.01',
