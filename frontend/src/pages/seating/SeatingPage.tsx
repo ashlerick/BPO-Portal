@@ -8,7 +8,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import { downloadPng, drawPlan } from './exportImage'
-import { counts, DEFAULT_PLAN, EMPTY_SEAT, MAX_SIDE, portText, rowLetter, seatAt, seatKey, seatLabel, type Plan, type Seat } from './plan'
+import { clashKey, counts, DEFAULT_PLAN, EMPTY_EXTRA, EMPTY_SEAT, MAX_EXTRAS, MAX_SIDE, portClashes, portText, rowLetter, seatAt, seatKey, seatLabel, type Extra, type Plan, type Seat } from './plan'
 
 function Stepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const set = (v: number) => onChange(Math.max(1, Math.min(MAX_SIDE, v)))
@@ -91,7 +91,8 @@ export function SeatingPage() {
   useEffect(() => {
     api
       .get<Plan | null>('/hr/seating')
-      .then((saved) => setPlan(saved ?? DEFAULT_PLAN))
+      // A plan saved before "Other ports" existed has no extras.
+      .then((saved) => setPlan(saved ? { ...saved, extras: saved.extras ?? [] } : DEFAULT_PLAN))
       .catch((err) => setLoadError(errorMessage(err, 'Could not load the seating plan')))
   }, [])
 
@@ -117,6 +118,11 @@ export function SeatingPage() {
   const [sr, sc] = key.split('-').map(Number)
   const seat = seatAt(plan, sr, sc)
   const stats = counts(plan)
+  const clashes = portClashes(plan)
+  const clashing = new Set(clashes.map((c) => clashKey(c.sw, c.port)))
+
+  const editExtra = (index: number, field: keyof Extra, value: string) =>
+    change({ ...plan, extras: plan.extras.map((e, i) => (i === index ? { ...e, [field]: value } : e)) })
 
   const edit = (field: keyof Seat) => (value: string) => change({ ...plan, seats: { ...plan.seats, [key]: { ...seat, [field]: value } } })
 
@@ -124,7 +130,7 @@ export function SeatingPage() {
     if (!plan) return
     setSaving(true)
     try {
-      await api.put('/hr/seating', { title: plan.title, rows: plan.rows, cols: plan.cols, seats: plan.seats })
+      await api.put('/hr/seating', { title: plan.title, rows: plan.rows, cols: plan.cols, seats: plan.seats, extras: plan.extras })
       setDirty(false)
       toast.success('Seating plan saved')
     } catch (err) {
@@ -165,6 +171,19 @@ export function SeatingPage() {
         <Stat label="No port logged" value={stats.noPort} warn />
       </div>
 
+      {clashes.length > 0 && (
+        <div className="mb-4 rounded-xl border border-red-300 bg-red-50/90 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/70 dark:text-red-300">
+          <div className="font-semibold">Same port used twice</div>
+          <ul className="mt-1 list-disc pl-5">
+            {clashes.map((c) => (
+              <li key={clashKey(c.sw, c.port)}>
+                {c.sw ? `${c.sw} port ${c.port}` : `Port ${c.port}`}: {c.users.join(' and ')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1">
           <Card className="overflow-x-auto">
@@ -193,7 +212,11 @@ export function SeatingPage() {
                           <span className="text-[13px] font-bold">{seatLabel(r, c)}</span>
                           <span
                             className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
-                              s.port.trim() ? 'bg-black/10 dark:bg-white/10' : 'bg-amber-200/80 text-amber-900 dark:bg-amber-500/20 dark:text-amber-300'
+                              !s.port.trim()
+                                ? 'bg-amber-200/80 text-amber-900 dark:bg-amber-500/20 dark:text-amber-300'
+                                : clashing.has(clashKey(s.sw, s.port))
+                                  ? 'bg-red-200 text-red-900 dark:bg-red-500/25 dark:text-red-200'
+                                  : 'bg-black/10 dark:bg-white/10'
                             }`}
                           >
                             {portText(s)}
@@ -210,6 +233,76 @@ export function SeatingPage() {
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
             Making the grid smaller never deletes what you typed: the names come back when you make it bigger again.
           </p>
+
+          <Card className="mt-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold">Other ports</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Ports that are not a cube: the boss&apos;s office, the balancer.</p>
+              </div>
+              <Button
+                size="sm"
+                disabled={plan.extras.length >= MAX_EXTRAS}
+                onClick={() => change({ ...plan, extras: [...plan.extras, EMPTY_EXTRA] })}
+              >
+                + Add
+              </Button>
+            </div>
+            {plan.extras.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">None yet.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {plan.extras.map((e, i) => (
+                  <div key={i} className="flex flex-col gap-2 rounded-lg border border-black/10 p-3 dark:border-white/10">
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={e.label}
+                        maxLength={60}
+                        placeholder="What is it? (Balancer)"
+                        aria-label="Name of this port"
+                        onChange={(ev) => editExtra(i, 'label', ev.target.value)}
+                        className="field min-w-0 flex-1"
+                      />
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        aria-label={`Remove ${e.label.trim() || `other port ${i + 1}`}`}
+                        onClick={() => change({ ...plan, extras: plan.extras.filter((_, j) => j !== i) })}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        value={e.sw}
+                        maxLength={40}
+                        placeholder="Switch"
+                        aria-label="Switch"
+                        onChange={(ev) => editExtra(i, 'sw', ev.target.value)}
+                        className="field min-w-0 flex-1"
+                      />
+                      <input
+                        value={e.port}
+                        maxLength={20}
+                        placeholder="Port"
+                        aria-label="Port"
+                        onChange={(ev) => editExtra(i, 'port', ev.target.value)}
+                        className={`field w-24 shrink-0 ${e.port.trim() && clashing.has(clashKey(e.sw, e.port)) ? '!border-red-500' : ''}`}
+                      />
+                    </div>
+                    <input
+                      value={e.note}
+                      maxLength={200}
+                      placeholder="Note"
+                      aria-label="Note"
+                      onChange={(ev) => editExtra(i, 'note', ev.target.value)}
+                      className="field"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
 
         <Card className="flex w-full shrink-0 flex-col gap-3 lg:w-80">

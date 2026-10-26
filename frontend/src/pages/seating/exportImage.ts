@@ -9,6 +9,7 @@ const GAP = 12
 const PAD = 28
 const LABEL_W = 78
 const HEADER_H = 64
+const EXTRA_HEAD_H = 40
 const SCALE = 2
 const FONT = 'Inter, system-ui, -apple-system, Segoe UI, sans-serif'
 
@@ -30,8 +31,12 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 export function drawPlan(canvas: HTMLCanvasElement, plan: Plan, showPorts: boolean) {
+  // The blocks outside the grid sit in their own strip under the rows, as many to a line as the rows have seats.
+  const perLine = Math.max(plan.cols, 1)
+  const extraLines = Math.ceil(plan.extras.length / perLine)
+  const extrasH = extraLines ? EXTRA_HEAD_H + extraLines * CELL_H + (extraLines - 1) * GAP : 0
   const width = PAD * 2 + LABEL_W + plan.cols * CELL_W + (plan.cols - 1) * GAP
-  const height = PAD * 2 + HEADER_H + plan.rows * CELL_H + (plan.rows - 1) * GAP
+  const height = PAD * 2 + HEADER_H + plan.rows * CELL_H + (plan.rows - 1) * GAP + extrasH
   canvas.width = width * SCALE
   canvas.height = height * SCALE
   const ctx = canvas.getContext('2d')
@@ -96,6 +101,44 @@ export function drawPlan(canvas: HTMLCanvasElement, plan: Plan, showPorts: boole
       ctx.fillText(fit(ctx, name || 'Open', CELL_W - 24), x + 12, y + 56)
     }
   }
+
+  if (!plan.extras.length) return
+  const top = PAD + HEADER_H + plan.rows * (CELL_H + GAP) + 6
+  ctx.fillStyle = '#4d6a59'
+  ctx.font = `700 13px ${FONT}`
+  ctx.fillText('OTHER PORTS', PAD, top + 14)
+
+  plan.extras.forEach((extra, i) => {
+    const x = PAD + LABEL_W + (i % perLine) * (CELL_W + GAP)
+    const y = top + EXTRA_HEAD_H - 6 + Math.floor(i / perLine) * (CELL_H + GAP)
+    const label = extra.label.trim()
+    const hasPort = extra.port.trim() !== ''
+
+    roundRect(ctx, x, y, CELL_W, CELL_H, 10)
+    ctx.fillStyle = '#e3ede7'
+    ctx.fill()
+    ctx.lineWidth = 1.5
+    ctx.strokeStyle = '#9bb8a6'
+    ctx.stroke()
+
+    if (showPorts) {
+      const text = portText(extra)
+      ctx.font = `700 11px ${FONT}`
+      const w = ctx.measureText(text).width + 14
+      roundRect(ctx, x + CELL_W - w - 10, y + 10, w, 20, 10)
+      ctx.fillStyle = hasPort ? '#ffffff' : '#fde7cc'
+      ctx.fill()
+      ctx.strokeStyle = hasPort ? '#9bb8a6' : '#fde7cc'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.fillStyle = hasPort ? '#2b4a39' : '#8a4b06'
+      ctx.fillText(text, x + CELL_W - w - 3, y + 24)
+    }
+
+    ctx.fillStyle = '#12281c'
+    ctx.font = `600 15px ${FONT}`
+    ctx.fillText(fit(ctx, label || `Other ${i + 1}`, CELL_W - 24), x + 12, y + 56)
+  })
 }
 
 export function downloadPng(canvas: HTMLCanvasElement, fileName: string) {
