@@ -84,6 +84,10 @@ export function SeatingPage() {
   const [plan, setPlan] = useState<Plan | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [picked, setPicked] = useState('0-0')
+  // What is on the server; Cancel goes back to it.
+  const [savedPlan, setSavedPlan] = useState<Plan | null>(null)
+  // The page opens as a preview. Nothing can be typed until Edit is pressed.
+  const [editing, setEditing] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -92,7 +96,11 @@ export function SeatingPage() {
     api
       .get<Plan | null>('/hr/seating')
       // A plan saved before "Other ports" existed has no extras.
-      .then((saved) => setPlan(saved ? { ...saved, extras: saved.extras ?? [] } : DEFAULT_PLAN))
+      .then((saved) => {
+        const loaded = saved ? { ...saved, extras: saved.extras ?? [] } : DEFAULT_PLAN
+        setPlan(loaded)
+        setSavedPlan(loaded)
+      })
       .catch((err) => setLoadError(errorMessage(err, 'Could not load the seating plan')))
   }, [])
 
@@ -126,12 +134,21 @@ export function SeatingPage() {
 
   const edit = (field: keyof Seat) => (value: string) => change({ ...plan, seats: { ...plan.seats, [key]: { ...seat, [field]: value } } })
 
+  function cancel() {
+    if (dirty && !window.confirm('Discard your changes to the seating plan?')) return
+    if (savedPlan) setPlan(savedPlan)
+    setDirty(false)
+    setEditing(false)
+  }
+
   async function save() {
     if (!plan) return
     setSaving(true)
     try {
       await api.put('/hr/seating', { title: plan.title, rows: plan.rows, cols: plan.cols, seats: plan.seats, extras: plan.extras })
+      setSavedPlan(plan)
       setDirty(false)
+      setEditing(false)
       toast.success('Seating plan saved')
     } catch (err) {
       toast.error(errorMessage(err, 'Could not save the seating plan'))
@@ -148,14 +165,28 @@ export function SeatingPage() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {dirty && <span className="text-sm text-amber-600 dark:text-amber-300">Unsaved changes</span>}
-            <Button onClick={() => setExporting(true)}>Export image</Button>
-            <Button variant="primary" onClick={save} disabled={saving || !dirty}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
+            {editing ? (
+              <>
+                <Button onClick={cancel} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button variant="primary" onClick={save} disabled={saving || !dirty}>
+                  {saving ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={() => setExporting(true)}>Export image</Button>
+                <Button variant="primary" onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+              </>
+            )}
           </div>
         }
       />
 
+      {editing ? (
       <Card className="mb-4 flex flex-wrap items-end gap-4">
         <Field label="Plan title" className="min-w-52 flex-1">
           <input value={plan.title} maxLength={80} onChange={(e) => change({ ...plan, title: e.target.value })} className="field" />
@@ -163,6 +194,9 @@ export function SeatingPage() {
         <Stepper label="Rows" value={plan.rows} onChange={(rows) => change({ ...plan, rows })} />
         <Stepper label="Seats per row" value={plan.cols} onChange={(cols) => change({ ...plan, cols })} />
       </Card>
+      ) : (
+        <h2 className="mb-3 text-lg font-semibold">{plan.title}</h2>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-3">
         <Stat label="Seats" value={stats.total} />
@@ -230,10 +264,42 @@ export function SeatingPage() {
               ))}
             </div>
           </Card>
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            Making the grid smaller never deletes what you typed: the names come back when you make it bigger again.
-          </p>
+          {editing && (
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Making the grid smaller never deletes what you typed: the names come back when you make it bigger again.
+            </p>
+          )}
 
+          {!editing && plan.extras.length > 0 && (
+            <Card className="mt-4">
+              <h2 className="mb-3 text-sm font-semibold">Other ports</h2>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {plan.extras.map((e, i) => (
+                  <div key={i} className="rounded-lg border border-black/10 p-3 dark:border-white/10">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 truncate font-semibold">{e.label.trim() || `Other ${i + 1}`}</span>
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                          !e.port.trim()
+                            ? 'bg-amber-200/80 text-amber-900 dark:bg-amber-500/20 dark:text-amber-300'
+                            : clashing.has(clashKey(e.sw, e.port))
+                              ? 'bg-red-200 text-red-900 dark:bg-red-500/25 dark:text-red-200'
+                              : 'bg-black/10 dark:bg-white/10'
+                        }`}
+                      >
+                        {portText(e)}
+                      </span>
+                    </div>
+                    {(e.sw.trim() || e.note.trim()) && (
+                      <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">{[e.sw.trim(), e.note.trim()].filter(Boolean).join(' · ')}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {editing && (
           <Card className="mt-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -303,8 +369,10 @@ export function SeatingPage() {
               </div>
             )}
           </Card>
+          )}
         </div>
 
+        {editing ? (
         <Card className="flex w-full shrink-0 flex-col gap-3 lg:w-80">
           <div>
             <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Seat</div>
@@ -331,6 +399,24 @@ export function SeatingPage() {
             Clear this seat
           </Button>
         </Card>
+        ) : (
+          <Card className="w-full shrink-0 lg:w-80">
+            <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Seat</div>
+            <div className="mb-3 text-2xl font-bold">{seatLabel(sr, sc)}</div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-gray-500 dark:text-gray-400">Name</dt>
+              <dd className="font-semibold">{seat.name.trim() || 'Open'}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">Switch</dt>
+              <dd className="font-semibold">{seat.sw.trim() || '—'}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">Port</dt>
+              <dd className="font-semibold">{seat.port.trim() || 'Not logged'}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">Wall jack</dt>
+              <dd className="font-semibold">{seat.jack.trim() || '—'}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">Notes</dt>
+              <dd>{seat.note.trim() || '—'}</dd>
+            </dl>
+          </Card>
+        )}
       </div>
 
       {exporting && <ExportDialog plan={plan} onClose={() => setExporting(false)} />}
