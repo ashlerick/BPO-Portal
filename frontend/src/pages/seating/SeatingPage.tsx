@@ -270,9 +270,12 @@ export function SeatingPage() {
             </p>
           )}
 
-          {!editing && plan.extras.length > 0 && (
+          {!editing && (
             <Card className="mt-4">
               <h2 className="mb-3 text-sm font-semibold">Other ports</h2>
+              {plan.extras.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">None yet. Press Edit to add ports that are not a cube, like the boss&apos;s office or the balancer.</p>
+              )}
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {plan.extras.map((e, i) => (
                   <div key={i} className="rounded-lg border border-black/10 p-3 dark:border-white/10">
