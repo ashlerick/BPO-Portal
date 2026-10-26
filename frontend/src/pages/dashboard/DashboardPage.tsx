@@ -32,6 +32,8 @@ interface PendingTask {
 interface TodoSummary {
   open: number
   done: number
+  // Finished in the last 7 days; the card counts these, not every to-do ever finished.
+  doneRecent: number
   dueDates: string[]
 }
 
@@ -52,7 +54,7 @@ function useDashboardData(isReviewer: boolean, isElevated: boolean) {
   const [todayRecords, setTodayRecords] = useState<AttendanceRecord[]>([])
   const [weekRecords, setWeekRecords] = useState<AttendanceRecord[]>([])
   const [givenWeek, setGivenWeek] = useState<GivenOvertime[]>([])
-  const [todos, setTodos] = useState<TodoSummary>({ open: 0, done: 0, dueDates: [] })
+  const [todos, setTodos] = useState<TodoSummary>({ open: 0, done: 0, doneRecent: 0, dueDates: [] })
   const [shift, setShift] = useState<ShiftInfo | null>(null)
 
   useEffect(() => {
@@ -200,7 +202,7 @@ export function DashboardPage() {
   const recentNotifications = notifications?.items.slice(0, 5) ?? []
   const dueDates = todos.dueDates.map((d) => d.slice(0, 10))
   const overdueCount = dueDates.filter((d) => d < today).length
-  const totalTodos = todos.open + todos.done
+  const totalTodos = todos.open + todos.doneRecent
   const unread = notifications?.unread ?? 0
   const subtitle = [user?.roles.map((role) => ROLE_LABELS[role]).join(', '), profile?.position, profile?.team].filter(Boolean).join(' · ')
   const todayRecord = weekRecords.find((r) => r.date.slice(0, 10) === today)
@@ -251,9 +253,9 @@ export function DashboardPage() {
           <Tile
             label="Open to-dos"
             value={todos.open}
-            sub={overdueCount > 0 ? `${overdueCount} overdue` : totalTodos === 0 ? 'none yet' : `${todos.done} of ${totalTodos} done`}
+            sub={overdueCount > 0 ? `${overdueCount} overdue` : totalTodos === 0 ? 'nothing open' : todos.open === 0 ? 'All caught up' : `${todos.doneRecent} of ${totalTodos} done`}
             tone={overdueCount > 0 ? 'red' : undefined}
-            bar={totalTodos > 0 ? todos.done / totalTodos : undefined}
+            bar={totalTodos > 0 ? todos.doneRecent / totalTodos : undefined}
             onClick={() => document.getElementById('my-todos')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           />
           <Tile label="Notifications" value={unread} sub="unread" dot={unread > 0} to="/notifications" />

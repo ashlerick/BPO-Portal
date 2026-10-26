@@ -122,17 +122,19 @@ const DEFAULT_ORDER = [{ status: 'desc' }, { dueDate: 'asc' }, { createdAt: 'des
 const MAX_PAGE = 200
 
 // One answer for every way of listing to-dos, so a list that has grown over a year never has to be sent whole:
-//   ?summary=1                  just the counts (open, done) and the due dates of the open ones
+//   ?summary=1                  just the counts (open, done, doneRecent = finished in the last 7 days) and the due dates of the open ones
 //   ?status=open|done&limit=N   a page of N (and whether there are more); &offset= continues it. Finished ones come newest first.
 //   (neither)                   the whole list, as before
 async function respondWithTodos(req: AuthedRequest, res: VercelResponse, where: Prisma.TodoWhereInput) {
   if (queryString(req, 'summary')) {
-    const [open, done, dated] = await Promise.all([
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const [open, done, doneRecent, dated] = await Promise.all([
       prisma.todo.count({ where: { ...where, status: 'open' } }),
       prisma.todo.count({ where: { ...where, status: 'done' } }),
+      prisma.todo.count({ where: { ...where, status: 'done', completedAt: { gte: weekAgo } } }),
       prisma.todo.findMany({ where: { ...where, status: 'open', dueDate: { not: null } }, select: { dueDate: true }, take: MAX_PAGE }),
     ])
-    return res.status(200).json({ open, done, dueDates: dated.map((t) => t.dueDate) })
+    return res.status(200).json({ open, done, doneRecent, dueDates: dated.map((t) => t.dueDate) })
   }
 
   const status = queryString(req, 'status')
