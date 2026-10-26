@@ -236,7 +236,7 @@ export function SeatingPage() {
                         onClick={() => setPicked(seatKey(r, c))}
                         aria-pressed={selected}
                         aria-label={`Seat ${seatLabel(r, c)}, ${name || 'open'}, ${s.port.trim() ? `port ${s.port.trim()}` : 'no port logged'}`}
-                        className={`flex h-16 w-[108px] shrink-0 flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left ${
+                        className={`flex h-16 w-[128px] shrink-0 flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left ${
                           name
                             ? 'border-emerald-500/50 bg-emerald-100/70 dark:bg-emerald-500/15'
                             : 'border-dashed border-gray-400 bg-transparent dark:border-white/30'

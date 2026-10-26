@@ -41,7 +41,7 @@ export const seatAt = (plan: Plan, row: number, col: number): Seat => plan.seats
 export const rowLetter = (row: number) => String.fromCharCode(65 + row)
 export const seatLabel = (row: number, col: number) => `${rowLetter(row)}${col + 1}`
 
-export const portText = (item: { port: string }) => (item.port.trim() ? `P${item.port.trim()}` : 'No port')
+export const portText = (item: { port: string }) => (item.port.trim() ? `Port ${item.port.trim()}` : 'No port')
 
 export function counts(plan: Plan) {
   let filled = 0
