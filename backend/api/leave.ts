@@ -595,6 +595,64 @@ async function handleCorrectAttendance(req: AuthedRequest, res: VercelResponse) 
   })
 }
 
+const reopenAttendanceSchema = z.object({
+  employeeId: z.string().min(1),
+  date: z.string().regex(dateOnlyPattern, 'date must be YYYY-MM-DD'),
+})
+
+// HR/admin: someone clocked out by mistake. Clears the time out so they are clocked in again (the app picks the shift up
+// where it left off). The slots that clock-out closed as "not taken" after the last break actually taken are removed so the
+// rest of the day's breaks can be used. Only today's shift and yesterday's (a night shift) can be reopened; for an older
+// day, edit the time out instead.
+async function handleReopenAttendance(req: AuthedRequest, res: VercelResponse) {
+  if (!isHrOrAdmin(req)) {
+    res.status(403).json({ message: 'Insufficient permissions' })
+    return
+  }
+  const parsed = reopenAttendanceSchema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({ message: parsed.error.issues[0] ? describeIssue(parsed.error.issues[0]) : 'Invalid request' })
+    return
+  }
+  const { employeeId, date: dateStr } = parsed.data
+  const date = new Date(`${dateStr}T00:00:00.000Z`)
+  const before = await prisma.attendanceRecord.findUnique({
+    where: { employeeId_date: { employeeId, date } },
+    include: { employee: { include: { user: { select: { firstName: true, middleName: true, lastName: true } } } } },
+  })
+  if (!before) {
+    res.status(404).json({ message: 'No attendance record for that employee/date' })
+    return
+  }
+  if (!before.checkInAt || !before.checkOutAt) {
+    res.status(409).json({ message: 'That shift is not clocked out, so there is nothing to reopen.' })
+    return
+  }
+  if (date.getTime() < todayInManila().getTime() - 24 * 3_600_000) {
+    res.status(400).json({ message: 'Only today or last night’s shift can be reopened. For an older day, edit the time out.' })
+    return
+  }
+  const entries = readBreaks(before.breaks)
+  const lastTaken = entries.reduce((last, e, i) => (e.status === 'taken' ? i : last), -1)
+  const kept = entries.filter((e, i) => e.status === 'taken' || i < lastTaken)
+  const record = await prisma.attendanceRecord.update({
+    where: { id: before.id },
+    data: { checkOutAt: null, checkOutIp: null, breaks: kept },
+  })
+  const at = (d: Date | null) =>
+    d ? d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' }) : 'none'
+  const u = before.employee.user
+  logAudit(
+    req.auth.sub,
+    'reopen_attendance',
+    'attendance',
+    record.id,
+    'success',
+    `${formatDisplayName(u.firstName, u.middleName, u.lastName)}, ${dateStr}: out ${at(before.checkOutAt)} -> none; breaks ${summarizeBreaks(entries)} -> ${summarizeBreaks(kept)}`,
+  )
+  res.status(200).json({ id: record.id, employeeId, date: record.date, checkInAt: record.checkInAt, checkOutAt: record.checkOutAt })
+}
+
 // Removes an attendance record outright — for the case correct/mark-
 // absent don't cover: a record that shouldn't exist at all (e.g. the
 // night-shift day-boundary bug that split one shift into two rows).
@@ -635,6 +693,7 @@ async function handler(req: AuthedRequest, res: VercelResponse) {
     if (sub === 'mark-absent' && req.method === 'POST') return handleMarkAbsent(req, res)
     if (sub === 'correct' && req.method === 'POST') return handleCorrectAttendance(req, res)
     if (sub === 'add' && req.method === 'POST') return handleAddAttendance(req, res)
+    if (sub === 'reopen' && req.method === 'POST') return handleReopenAttendance(req, res)
     if (sub && req.method === 'DELETE') return handleDeleteAttendance(req, res, sub)
   }
 

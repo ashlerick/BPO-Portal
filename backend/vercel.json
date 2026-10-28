@@ -45,6 +45,7 @@
     { "source": "/api/leave/attendance/mark-absent", "destination": "/api/leave?resource=attendance&sub=mark-absent" },
     { "source": "/api/leave/attendance/correct", "destination": "/api/leave?resource=attendance&sub=correct" },
     { "source": "/api/leave/attendance/add", "destination": "/api/leave?resource=attendance&sub=add" },
+    { "source": "/api/leave/attendance/reopen", "destination": "/api/leave?resource=attendance&sub=reopen" },
     { "source": "/api/leave/attendance/:id", "destination": "/api/leave?resource=attendance&sub=:id" },
     { "source": "/api/directory/departments/:id", "destination": "/api/directory?kind=department&sub=:id" },
     { "source": "/api/directory/teams/:id", "destination": "/api/directory?kind=team&sub=:id" }

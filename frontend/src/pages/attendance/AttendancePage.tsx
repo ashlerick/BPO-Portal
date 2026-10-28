@@ -120,6 +120,24 @@ function EditableTime({
   const [input, setInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmReopen, setConfirmReopen] = useState(false)
+
+  // Clocked out by mistake: clear the time out so the person is clocked in again and can carry on in BPO Time.
+  function reopen() {
+    guardedAction(['hr', 'admin'], async () => {
+      setSaving(true)
+      setError(null)
+      try {
+        await api.post('/leave/attendance/reopen', { employeeId: record.employeeId, date: record.date.slice(0, 10) })
+        setConfirmReopen(false)
+        onSaved()
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Could not reopen the shift')
+      } finally {
+        setSaving(false)
+      }
+    })
+  }
 
   function open() {
     // Start from the current time; for a missing time out, from the time in (which is not valid until it is changed).
@@ -183,6 +201,28 @@ function EditableTime({
                 </svg>
               </button>
             )}
+            {value && field === 'checkOutAt' && !confirmReopen && (
+              <button
+                type="button"
+                onClick={() => setConfirmReopen(true)}
+                title="Clocked out by mistake: clear the time out so they are clocked in again"
+                className="rounded-full border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-black/5 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-white/10"
+              >
+                Reopen
+              </button>
+            )}
+            {confirmReopen && (
+              <span className="inline-flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-gray-600 dark:text-gray-300">Clock them in again?</span>
+                <Button size="sm" variant="primary" disabled={saving} onClick={reopen}>
+                  {saving ? 'Reopening…' : 'Yes, reopen'}
+                </Button>
+                <Button size="sm" disabled={saving} onClick={() => setConfirmReopen(false)}>
+                  Cancel
+                </Button>
+              </span>
+            )}
+            {error && <span className="basis-full text-xs text-red-600 dark:text-red-400">{error}</span>}
           </>
         )}
       </span>
