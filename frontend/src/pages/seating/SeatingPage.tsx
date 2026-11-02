@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { ErrorState, LoadingState } from '../../components/AsyncState'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -265,10 +265,10 @@ export function SeatingPage() {
             </>
           )}
           <Card className={`min-w-0 overflow-x-auto ${editing ? 'col-start-2 row-start-2' : ''}`}>
-            <div className="flex w-max flex-col gap-3">
+            <div className="grid items-center gap-x-2 gap-y-3" style={{ gridTemplateColumns: `3rem repeat(${plan.cols}, minmax(96px, 1fr))` }}>
               {Array.from({ length: plan.rows }, (_, r) => (
-                <div key={r} className="flex items-center gap-2">
-                  <div className="w-14 shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Row {rowLetter(r)}</div>
+                <Fragment key={r}>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Row {rowLetter(r)}</div>
                   {Array.from({ length: plan.cols }, (_, c) => {
                     const s = seatAt(plan, r, c)
                     const name = s.name.trim()
@@ -280,7 +280,7 @@ export function SeatingPage() {
                         onClick={() => setPicked(seatKey(r, c))}
                         aria-pressed={selected}
                         aria-label={`Seat ${seatLabel(r, c)}, ${name || 'open'}, ${s.port.trim() ? `port ${s.port.trim()}` : 'no port logged'}`}
-                        className={`flex h-16 w-[128px] shrink-0 flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left ${
+                        className={`flex h-16 w-full min-w-0 flex-col items-start justify-between rounded-lg border px-2.5 py-2 text-left ${
                           name
                             ? 'border-emerald-500/50 bg-emerald-100/70 dark:bg-emerald-500/15'
                             : 'border-dashed border-gray-400 bg-transparent dark:border-white/30'
@@ -304,7 +304,7 @@ export function SeatingPage() {
                       </button>
                     )
                   })}
-                </div>
+                </Fragment>
               ))}
             </div>
           </Card>
