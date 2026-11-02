@@ -10,37 +10,53 @@ import { api } from '../../services/api'
 import { downloadPng, drawPlan } from './exportImage'
 import { clashKey, counts, DEFAULT_PLAN, EMPTY_EXTRA, EMPTY_SEAT, MAX_EXTRAS, MAX_SIDE, portClashes, portText, rowLetter, seatAt, seatKey, seatLabel, type Extra, type Plan, type Seat } from './plan'
 
-function Stepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  const set = (v: number) => onChange(Math.max(1, Math.min(MAX_SIDE, v)))
+function EdgePair({
+  side,
+  addLabel,
+  text,
+  removeLabel,
+  className,
+  canAdd,
+  canRemove,
+  onAdd,
+  onRemove,
+}: {
+  side: 'top' | 'bottom' | 'left' | 'right'
+  addLabel: string
+  text: string
+  removeLabel: string
+  className: string
+  canAdd: boolean
+  canRemove: boolean
+  onAdd: () => void
+  onRemove: () => void
+}) {
+  const vertical = side === 'left' || side === 'right'
+  const base = 'flex items-center justify-center rounded-lg border-2 border-dashed disabled:cursor-not-allowed disabled:opacity-35'
   return (
-    <div className="flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
-      {label}
-      <div className="flex items-center overflow-hidden rounded-lg border border-gray-300 dark:border-white/15">
-        <button type="button" aria-label={`Fewer ${label.toLowerCase()}`} onClick={() => set(value - 1)} className="h-11 w-11 text-xl hover:bg-black/5 dark:hover:bg-white/10">
-          −
-        </button>
-        <span className="min-w-9 text-center font-bold text-gray-900 dark:text-gray-100">{value}</span>
-        <button type="button" aria-label={`More ${label.toLowerCase()}`} onClick={() => set(value + 1)} className="h-11 w-11 text-xl hover:bg-black/5 dark:hover:bg-white/10">
-          +
-        </button>
-      </div>
+    <div className={`flex min-w-0 gap-1.5 ${vertical ? 'flex-col' : ''} ${className}`}>
+      <button
+        type="button"
+        aria-label={addLabel}
+        title={addLabel}
+        disabled={!canAdd}
+        onClick={onAdd}
+        className={`${base} min-w-0 flex-1 gap-1.5 border-emerald-500/60 text-sm font-semibold text-emerald-700 hover:bg-emerald-100/70 dark:text-emerald-300 dark:hover:bg-emerald-500/15`}
+      >
+        <span className="text-xl leading-none">+</span>
+        <span className="hidden sm:inline">{text}</span>
+      </button>
+      <button
+        type="button"
+        aria-label={removeLabel}
+        title={canRemove ? removeLabel : `${removeLabel} (clear its seats first)`}
+        disabled={!canRemove}
+        onClick={onRemove}
+        className={`${base} shrink-0 border-red-400/60 text-xl leading-none text-red-600 hover:bg-red-100/70 dark:text-red-300 dark:hover:bg-red-500/15 ${vertical ? 'h-9 w-full' : 'h-full w-10'}`}
+      >
+        −
+      </button>
     </div>
-  )
-}
-
-function EdgeButton({ label, text, className, disabled, onClick }: { label: string; text: string; className: string; disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-emerald-500/60 text-sm font-semibold text-emerald-700 hover:bg-emerald-100/70 disabled:cursor-not-allowed disabled:opacity-35 dark:text-emerald-300 dark:hover:bg-emerald-500/15 ${className}`}
-    >
-      <span className="text-xl leading-none">+</span>
-      <span className="hidden sm:inline">{text}</span>
-    </button>
   )
 }
 
@@ -166,6 +182,39 @@ export function SeatingPage() {
     setPicked(seatKey(sr + dr, sc + dc))
   }
 
+  // A side can only go once nothing is typed in it, so a removal never loses data.
+  const canRemove = (side: 'top' | 'bottom' | 'left' | 'right') => {
+    const vertical = side === 'top' || side === 'bottom'
+    if ((vertical ? plan.rows : plan.cols) <= 1) return false
+    const edge = side === 'top' ? 0 : side === 'left' ? 0 : vertical ? plan.rows - 1 : plan.cols - 1
+    const len = vertical ? plan.cols : plan.rows
+    for (let i = 0; i < len; i++) {
+      const s = vertical ? seatAt(plan, edge, i) : seatAt(plan, i, edge)
+      if (s.name.trim() || s.sw.trim() || s.port.trim() || s.jack.trim() || s.note.trim()) return false
+    }
+    return true
+  }
+
+  const removeEdge = (side: 'top' | 'bottom' | 'left' | 'right') => {
+    const dr = side === 'top' ? -1 : 0
+    const dc = side === 'left' ? -1 : 0
+    const seats: Record<string, Seat> = {}
+    for (const [k, v] of Object.entries(plan.seats)) {
+      const [r, c] = k.split('-').map(Number)
+      const nr = r + dr
+      const nc = c + dc
+      if (nr < 0 || nc < 0) continue
+      seats[seatKey(nr, nc)] = v
+    }
+    change({
+      ...plan,
+      seats,
+      rows: plan.rows - (side === 'top' || side === 'bottom' ? 1 : 0),
+      cols: plan.cols - (side === 'left' || side === 'right' ? 1 : 0),
+    })
+    setPicked(seatKey(Math.max(0, sr + dr), Math.max(0, sc + dc)))
+  }
+
   const edit = (field: keyof Seat) => (value: string) => change({ ...plan, seats: { ...plan.seats, [key]: { ...seat, [field]: value } } })
 
   function cancel() {
@@ -225,9 +274,7 @@ export function SeatingPage() {
         <Field label="Plan title" className="min-w-52 flex-1">
           <input value={plan.title} maxLength={80} onChange={(e) => change({ ...plan, title: e.target.value })} className="field" />
         </Field>
-        <Stepper label="Rows" value={plan.rows} onChange={(rows) => change({ ...plan, rows })} />
-        <Stepper label="Seats per row" value={plan.cols} onChange={(cols) => change({ ...plan, cols })} />
-        <p className="basis-full text-xs text-gray-500 dark:text-gray-400">Use the + buttons around the grid to add a row or seat on any side.</p>
+        <p className="basis-full text-xs text-gray-500 dark:text-gray-400">Use the dashed + and − bars around the grid to add or remove a row or seat on any side. A side can only be removed once its seats are empty.</p>
       </Card>
       ) : (
         <h2 className="mb-3 text-lg font-semibold">{plan.title}</h2>
@@ -258,10 +305,10 @@ export function SeatingPage() {
           <div className={editing ? 'grid grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] grid-rows-[2.5rem_auto_2.5rem] gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]' : ''}>
           {editing && (
             <>
-              <EdgeButton label="Add a row above" text="Add row above" className="col-start-2 row-start-1" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('top')} />
-              <EdgeButton label="Add a seat on the left" text="" className="col-start-1 row-start-2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('left')} />
-              <EdgeButton label="Add a seat on the right" text="" className="col-start-3 row-start-2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('right')} />
-              <EdgeButton label="Add a row below" text="Add row below" className="col-start-2 row-start-3" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('bottom')} />
+              <EdgePair side="top" addLabel="Add a row above" text="Add row above" removeLabel="Remove the top row" className="col-start-2 row-start-1" canAdd={plan.rows < MAX_SIDE} canRemove={canRemove('top')} onAdd={() => addEdge('top')} onRemove={() => removeEdge('top')} />
+              <EdgePair side="left" addLabel="Add a seat on the left" text="" removeLabel="Remove the left seat column" className="col-start-1 row-start-2" canAdd={plan.cols < MAX_SIDE} canRemove={canRemove('left')} onAdd={() => addEdge('left')} onRemove={() => removeEdge('left')} />
+              <EdgePair side="right" addLabel="Add a seat on the right" text="" removeLabel="Remove the right seat column" className="col-start-3 row-start-2" canAdd={plan.cols < MAX_SIDE} canRemove={canRemove('right')} onAdd={() => addEdge('right')} onRemove={() => removeEdge('right')} />
+              <EdgePair side="bottom" addLabel="Add a row below" text="Add row below" removeLabel="Remove the bottom row" className="col-start-2 row-start-3" canAdd={plan.rows < MAX_SIDE} canRemove={canRemove('bottom')} onAdd={() => addEdge('bottom')} onRemove={() => removeEdge('bottom')} />
             </>
           )}
           <Card className={`min-w-0 overflow-x-auto sm:overflow-x-visible ${editing ? 'col-start-2 row-start-2' : ''}`}>
