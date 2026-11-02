@@ -264,8 +264,11 @@ export function SeatingPage() {
               <EdgeButton label="Add a row below" text="Add row below" className="col-start-2 row-start-3" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('bottom')} />
             </>
           )}
-          <Card className={`min-w-0 overflow-x-auto ${editing ? 'col-start-2 row-start-2' : ''}`}>
-            <div className="grid items-center gap-x-2 gap-y-3" style={{ gridTemplateColumns: `3rem repeat(${plan.cols}, minmax(96px, 1fr))` }}>
+          <Card className={`min-w-0 overflow-x-auto sm:overflow-x-visible ${editing ? 'col-start-2 row-start-2' : ''}`}>
+            <div
+              className="grid grid-cols-[3rem_repeat(var(--cols),minmax(88px,1fr))] items-center gap-x-2 gap-y-3 sm:grid-cols-[3rem_repeat(var(--cols),minmax(0,1fr))]"
+              style={{ '--cols': plan.cols } as React.CSSProperties}
+            >
               {Array.from({ length: plan.rows }, (_, r) => (
                 <Fragment key={r}>
                   <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Row {rowLetter(r)}</div>
@@ -289,7 +292,7 @@ export function SeatingPage() {
                         <span className="flex w-full items-center justify-between">
                           <span className="text-[13px] font-bold">{seatLabel(r, c)}</span>
                           <span
-                            className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
+                            className={`min-w-0 truncate rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
                               !s.port.trim()
                                 ? 'bg-amber-200/80 text-amber-900 dark:bg-amber-500/20 dark:text-amber-300'
                                 : clashing.has(clashKey(s.sw, s.port))
