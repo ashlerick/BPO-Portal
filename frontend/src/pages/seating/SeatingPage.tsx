@@ -28,7 +28,7 @@ function Stepper({ label, value, onChange }: { label: string; value: number; onC
   )
 }
 
-function EdgeButton({ label, className, disabled, onClick }: { label: string; className: string; disabled: boolean; onClick: () => void }) {
+function EdgeButton({ label, text, className, disabled, onClick }: { label: string; text: string; className: string; disabled: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -36,9 +36,10 @@ function EdgeButton({ label, className, disabled, onClick }: { label: string; cl
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`absolute z-10 flex h-8 w-8 items-center justify-center rounded-full border border-emerald-500/50 bg-emerald-100/80 text-lg font-bold text-emerald-800 hover:bg-emerald-200 disabled:opacity-30 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/30 ${className}`}
+      className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-emerald-500/60 text-sm font-semibold text-emerald-700 hover:bg-emerald-100/70 disabled:cursor-not-allowed disabled:opacity-35 dark:text-emerald-300 dark:hover:bg-emerald-500/15 ${className}`}
     >
-      +
+      <span className="text-xl leading-none">+</span>
+      <span className="hidden sm:inline">{text}</span>
     </button>
   )
 }
@@ -254,16 +255,16 @@ export function SeatingPage() {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1">
-          <Card className="overflow-x-auto">
-            <div className={`relative w-max ${editing ? 'px-10 py-10' : ''}`}>
-              {editing && (
-                <>
-                  <EdgeButton label="Add a row above" className="left-1/2 top-1 -translate-x-1/2" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('top')} />
-                  <EdgeButton label="Add a row below" className="bottom-1 left-1/2 -translate-x-1/2" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('bottom')} />
-                  <EdgeButton label="Add a seat on the left" className="left-1 top-1/2 -translate-y-1/2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('left')} />
-                  <EdgeButton label="Add a seat on the right" className="right-1 top-1/2 -translate-y-1/2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('right')} />
-                </>
-              )}
+          <div className={editing ? 'grid grid-cols-[2.25rem_minmax(0,1fr)_2.25rem] grid-rows-[2.5rem_auto_2.5rem] gap-2 sm:grid-cols-[2.75rem_minmax(0,1fr)_2.75rem]' : ''}>
+          {editing && (
+            <>
+              <EdgeButton label="Add a row above" text="Add row above" className="col-start-2 row-start-1" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('top')} />
+              <EdgeButton label="Add a seat on the left" text="" className="col-start-1 row-start-2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('left')} />
+              <EdgeButton label="Add a seat on the right" text="" className="col-start-3 row-start-2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('right')} />
+              <EdgeButton label="Add a row below" text="Add row below" className="col-start-2 row-start-3" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('bottom')} />
+            </>
+          )}
+          <Card className={`min-w-0 overflow-x-auto ${editing ? 'col-start-2 row-start-2' : ''}`}>
             <div className="flex w-max flex-col gap-3">
               {Array.from({ length: plan.rows }, (_, r) => (
                 <div key={r} className="flex items-center gap-2">
@@ -306,8 +307,8 @@ export function SeatingPage() {
                 </div>
               ))}
             </div>
-            </div>
           </Card>
+          </div>
           {editing && (
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               Making the grid smaller never deletes what you typed: the names come back when you make it bigger again.
