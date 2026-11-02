@@ -28,6 +28,21 @@ function Stepper({ label, value, onChange }: { label: string; value: number; onC
   )
 }
 
+function EdgeButton({ label, className, disabled, onClick }: { label: string; className: string; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`absolute z-10 flex h-8 w-8 items-center justify-center rounded-full border border-emerald-500/50 bg-emerald-100/80 text-lg font-bold text-emerald-800 hover:bg-emerald-200 disabled:opacity-30 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/30 ${className}`}
+    >
+      +
+    </button>
+  )
+}
+
 function Stat({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
   return (
     <div
@@ -132,6 +147,24 @@ export function SeatingPage() {
   const editExtra = (index: number, field: keyof Extra, value: string) =>
     change({ ...plan, extras: plan.extras.map((e, i) => (i === index ? { ...e, [field]: value } : e)) })
 
+  // Adding above or to the left moves every seat down or right, so names and ports stay with their desk.
+  const addEdge = (side: 'top' | 'bottom' | 'left' | 'right') => {
+    const dr = side === 'top' ? 1 : 0
+    const dc = side === 'left' ? 1 : 0
+    const seats: Record<string, Seat> = {}
+    for (const [k, v] of Object.entries(plan.seats)) {
+      const [r, c] = k.split('-').map(Number)
+      seats[seatKey(r + dr, c + dc)] = v
+    }
+    change({
+      ...plan,
+      seats,
+      rows: plan.rows + (side === 'top' || side === 'bottom' ? 1 : 0),
+      cols: plan.cols + (side === 'left' || side === 'right' ? 1 : 0),
+    })
+    setPicked(seatKey(sr + dr, sc + dc))
+  }
+
   const edit = (field: keyof Seat) => (value: string) => change({ ...plan, seats: { ...plan.seats, [key]: { ...seat, [field]: value } } })
 
   function cancel() {
@@ -193,6 +226,7 @@ export function SeatingPage() {
         </Field>
         <Stepper label="Rows" value={plan.rows} onChange={(rows) => change({ ...plan, rows })} />
         <Stepper label="Seats per row" value={plan.cols} onChange={(cols) => change({ ...plan, cols })} />
+        <p className="basis-full text-xs text-gray-500 dark:text-gray-400">Use the + buttons around the grid to add a row or seat on any side.</p>
       </Card>
       ) : (
         <h2 className="mb-3 text-lg font-semibold">{plan.title}</h2>
@@ -221,6 +255,15 @@ export function SeatingPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1">
           <Card className="overflow-x-auto">
+            <div className={`relative w-max ${editing ? 'px-10 py-10' : ''}`}>
+              {editing && (
+                <>
+                  <EdgeButton label="Add a row above" className="left-1/2 top-1 -translate-x-1/2" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('top')} />
+                  <EdgeButton label="Add a row below" className="bottom-1 left-1/2 -translate-x-1/2" disabled={plan.rows >= MAX_SIDE} onClick={() => addEdge('bottom')} />
+                  <EdgeButton label="Add a seat on the left" className="left-1 top-1/2 -translate-y-1/2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('left')} />
+                  <EdgeButton label="Add a seat on the right" className="right-1 top-1/2 -translate-y-1/2" disabled={plan.cols >= MAX_SIDE} onClick={() => addEdge('right')} />
+                </>
+              )}
             <div className="flex w-max flex-col gap-3">
               {Array.from({ length: plan.rows }, (_, r) => (
                 <div key={r} className="flex items-center gap-2">
@@ -262,6 +305,7 @@ export function SeatingPage() {
                   })}
                 </div>
               ))}
+            </div>
             </div>
           </Card>
           {editing && (
