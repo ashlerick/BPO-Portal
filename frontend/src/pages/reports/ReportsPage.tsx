@@ -11,7 +11,6 @@ import { humanize } from '../../utils/text'
 import type { ReportData, ReportStatus, WeeklyReport } from './types'
 import {
   FOA_ATTENDANCE_COLUMNS,
-  FOA_ATTENDANCE_TOKENS,
   FOA_CHECKLIST_DAYS,
   FOA_CHECKLIST_TASKS,
   FOA_TERRITORIES,
@@ -20,6 +19,9 @@ import {
   type FoaReportData,
 } from './foa'
 import type { MyEmployeeProfile } from '../hris/types'
+import { AttendanceGrid } from './AttendanceGrid'
+import { FoaWorkspace } from './FoaWorkspace'
+import { addDays, startFromPrevious } from './foaWeeks.ts'
 
 interface Team {
   id: string
@@ -82,18 +84,18 @@ function ReportDataFields({
   )
 }
 
-const weekdayFmt = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
-
 function FoaReportFields({
   data,
   periodStart,
   periodEnd,
+  previous,
   onChange,
 }: {
   data: FoaReportData
   periodStart: string
   periodEnd: string
+  /** The same author's report for the week before, when there is one. */
+  previous?: FoaReportData
   onChange: (data: FoaReportData) => void
 }) {
   const dates = foaAttendanceDates(periodStart, periodEnd)
@@ -167,66 +169,17 @@ function FoaReportFields({
         </div>
       </div>
 
-      <div>
-        <p className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Attendance Task Sheet</p>
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th className="px-2 py-1.5 text-left font-medium text-gray-500 dark:text-gray-400">Day</th>
-                {FOA_ATTENDANCE_COLUMNS.map((col) => (
-                  <th key={col} className="px-2 py-1.5 text-left font-medium text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center gap-1.5">
-                      {col}
-                      <button
-                        type="button"
-                        onClick={() => fillDown(col)}
-                        className="rounded border border-gray-300 px-1 text-[10px] font-normal text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-                        title={`Copy ${dates[0] ? weekdayFmt(dates[0]) : 'first day'}'s value to every day`}
-                      >
-                        fill ↓
-                      </button>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {dates.map((date) => (
-                <tr key={date} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="whitespace-nowrap px-2 py-1.5 text-gray-600 dark:text-gray-400">
-                    {weekdayFmt(date)}
-                  </td>
-                  {FOA_ATTENDANCE_COLUMNS.map((col) => (
-                    <td key={col} className="px-2 py-1.5">
-                      <select
-                        multiple
-                        size={3}
-                        value={attendance[date]?.[col] ?? []}
-                        onChange={(e) =>
-                          setCell(
-                            date,
-                            col,
-                            Array.from(e.target.selectedOptions).map((o) => o.value),
-                          )
-                        }
-                        className="field min-w-[9rem] text-xs"
-                      >
-                        {FOA_ATTENDANCE_TOKENS.map((token) => (
-                          <option key={token} value={token}>
-                            {token}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">Ctrl/Cmd-click to select more than one.</p>
-      </div>
+      <AttendanceGrid
+        dates={dates}
+        attendance={attendance}
+        onCell={setCell}
+        onFillDown={fillDown}
+        onSameAsLastWeek={
+          previous?.attendance
+            ? () => onChange({ ...data, attendance: startFromPrevious(previous, addDays(periodStart.slice(0, 10), -7), periodStart.slice(0, 10)).attendance })
+            : undefined
+        }
+      />
 
       <div>
         <p className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Task Checklist</p>
@@ -432,79 +385,6 @@ function defaultFoaPeriod(): { start: string; end: string } {
   return { start: priorFriday.toISOString().slice(0, 10), end: lastFriday.toISOString().slice(0, 10) }
 }
 
-function CreateFoaReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (r: WeeklyReport) => void }) {
-  const { guardedAction } = useAuth()
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? '')
-  const defaults = defaultFoaPeriod()
-  const [periodStart, setPeriodStart] = useState(defaults.start)
-  const [periodEnd, setPeriodEnd] = useState(defaults.end)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    guardedAction(['employee'], async () => {
-      setError(null)
-      setSubmitting(true)
-      try {
-        const created = await api.post<WeeklyReport>('/reports', {
-          teamId,
-          periodStart: new Date(periodStart).toISOString(),
-          periodEnd: new Date(periodEnd).toISOString(),
-        })
-        onCreated(created)
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not create report')
-      } finally {
-        setSubmitting(false)
-      }
-    })
-  }
-
-  return (
-    <CardForm onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-      {teams.length > 1 && (
-        <div className="w-full space-y-1 md:w-auto">
-          <label className="text-sm text-gray-600 dark:text-gray-400">FOA team</label>
-          <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field">
-            {teams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <div className="grid w-full grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:contents">
-        <div className="min-w-0 space-y-1">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Week starting (Friday)</label>
-          <input
-            type="date"
-            required
-            value={periodStart}
-            onChange={(e) => setPeriodStart(e.target.value)}
-            className="field px-2.5 md:px-3"
-          />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Week ending (Friday)</label>
-          <input
-            type="date"
-            required
-            value={periodEnd}
-            onChange={(e) => setPeriodEnd(e.target.value)}
-            className="field px-2.5 md:px-3"
-          />
-        </div>
-      </div>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <Button type="submit" variant="primary" disabled={submitting} className="w-full md:w-auto">
-        {submitting ? 'Creating…' : 'New FOA weekly report'}
-      </Button>
-    </CardForm>
-  )
-}
-
 // HR and Admin: create a report for ANY department. The department list comes
 // from the directory, so a department added later shows up here by itself.
 // The report type follows the department (FOA gets its own richer form; every
@@ -620,7 +500,7 @@ function CreateAnyReportForm({
   )
 }
 
-function ReportCard({ report, onUpdated }: { report: WeeklyReport; onUpdated: (r: WeeklyReport) => void }) {
+function ReportCard({ report, previous, onUpdated }: { report: WeeklyReport; previous?: FoaReportData; onUpdated: (r: WeeklyReport) => void }) {
   const { user, effectiveRoles, guardedAction } = useAuth()
   const isFoa = report.schemaKey === 'foa'
   const [editing, setEditing] = useState(false)
@@ -702,6 +582,7 @@ function ReportCard({ report, onUpdated }: { report: WeeklyReport; onUpdated: (r
               data={data as FoaReportData}
               periodStart={report.periodStart}
               periodEnd={report.periodEnd}
+              previous={previous}
               onChange={setData}
             />
           ) : (
@@ -830,18 +711,33 @@ export function ReportsPage() {
   // draft -> submitted -> reviewed flow is split by kind (individually
   // authored FOA reports vs. generic team-wide ones).
   const activeReports = visibleReports?.filter((r) => r.status !== 'approved') ?? []
-  const employeeReports = activeReports.filter((r) => r.schemaKey === 'foa')
+  const foaReports = visibleReports?.filter((r) => r.schemaKey === 'foa') ?? []
   const teamReports = activeReports.filter((r) => r.schemaKey !== 'foa')
-  const historyReports = visibleReports?.filter((r) => r.status === 'approved') ?? []
+  // FOA reports, approved ones included, live in the workspace; the history below keeps the rest.
+  const historyReports = visibleReports?.filter((r) => r.status === 'approved' && r.schemaKey !== 'foa') ?? []
+  const isReviewerRole = effectiveRoles.some((r) => r === 'manager' || r === 'hr' || r === 'admin')
+  const showWorkspace = foaCreateTeams.length > 0 || foaReports.length > 0
 
-  function renderReport(r: WeeklyReport) {
+  function renderReport(r: WeeklyReport, previous?: FoaReportData) {
     return (
       <ReportCard
         key={r.id}
         report={r}
+        previous={previous}
         onUpdated={(updated) => setReports((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
       />
     )
+  }
+
+  // The workspace starts a week's report: the person's own team, the week's two Fridays, and last week's sheet when they ask for it.
+  async function createFoaReport(teamId: string, start: string, end: string, data: FoaReportData | undefined) {
+    const created = await api.post<WeeklyReport>('/reports', {
+      teamId,
+      periodStart: new Date(start).toISOString(),
+      periodEnd: new Date(end).toISOString(),
+      ...(data && Object.keys(data).length ? { data } : {}),
+    })
+    setReports((prev) => (prev ? [created, ...prev] : [created]))
   }
 
   return (
@@ -875,14 +771,6 @@ export function ReportsPage() {
         )
       ) : (
         <>
-          {foaCreateTeams.length > 0 && (
-            <div className="mb-4">
-              <CreateFoaReportForm
-                teams={foaCreateTeams}
-                onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
-              />
-            </div>
-          )}
           {canCreateGeneric && !(department && isFoaDepartment(department)) && (
             <div className="mb-4">
               <CreateReportForm
@@ -896,23 +784,22 @@ export function ReportsPage() {
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
-      {visibleReports && visibleReports.length === 0 && <EmptyState label="No reports yet." />}
+      {visibleReports && visibleReports.length === 0 && !showWorkspace && <EmptyState label="No reports yet." />}
+
+      {visibleReports && showWorkspace && (
+        <div className="mb-6">
+          <FoaWorkspace
+            reports={foaReports}
+            createTeams={foaCreateTeams}
+            startOnSummary={isReviewerRole}
+            renderReport={renderReport}
+            create={createFoaReport}
+          />
+        </div>
+      )}
 
       {visibleReports && visibleReports.length > 0 && (
         <SectionStack>
-          <Section
-            id="reports.employee"
-            title="Employee weekly reports"
-            hint={`${employeeReports.length} in progress`}
-            defaultOpen={employeeReports.length > 0}
-          >
-            {employeeReports.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">No individual reports in progress.</p>
-            ) : (
-              <div className="space-y-3">{employeeReports.map(renderReport)}</div>
-            )}
-          </Section>
-
           <Section
             id="reports.team"
             title="Team reports"
@@ -922,7 +809,7 @@ export function ReportsPage() {
             {teamReports.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">No team reports in progress.</p>
             ) : (
-              <div className="space-y-3">{teamReports.map(renderReport)}</div>
+              <div className="space-y-3">{teamReports.map((r) => renderReport(r))}</div>
             )}
           </Section>
 
@@ -930,7 +817,7 @@ export function ReportsPage() {
             {historyReports.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">No approved reports yet.</p>
             ) : (
-              <div className="space-y-3">{historyReports.map(renderReport)}</div>
+              <div className="space-y-3">{historyReports.map((r) => renderReport(r))}</div>
             )}
           </Section>
         </SectionStack>
