@@ -80,17 +80,17 @@ export function FoaSummary({
           ['Variance investigations', variance],
           ['Motive safety events', safety],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-xl border border-black/5 bg-white/80 px-3 py-2 dark:border-white/10 dark:bg-white/[0.035]">
-            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-            <p className="text-xl font-semibold text-gray-900 dark:text-gray-100">{value}</p>
+          <div key={label} className="rounded-xl border border-gray-300 bg-white px-3 py-2 shadow-sm dark:border-white/15 dark:bg-[#0a1f16]">
+            <p className="text-xs font-medium text-gray-600 dark:text-gray-300">{label}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-black/5 bg-white/80 dark:border-white/10 dark:bg-white/[0.035]">
+      <div className="overflow-x-auto rounded-xl border border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-[#0a1f16]">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            <tr className="border-b border-gray-100 dark:border-white/10">
+          <thead className="bg-gray-100 text-left text-xs uppercase tracking-wide text-gray-700 dark:bg-white/[0.08] dark:text-gray-200">
+            <tr className="border-b border-gray-300 dark:border-white/15">
               <th className="px-3 py-2 font-medium">Week</th>
               <th className="px-3 py-2 font-medium">Reports</th>
               <th className="px-3 py-2 text-center font-medium">Variance</th>
@@ -115,11 +115,11 @@ export function FoaSummary({
                 <tr
                   key={r.week.end}
                   onClick={() => onOpen(r.week.end)}
-                  className={`cursor-pointer border-t border-gray-100 hover:bg-brand-50/60 dark:border-white/5 dark:hover:bg-white/5 ${empty ? 'text-gray-400 dark:text-gray-600' : 'text-gray-800 dark:text-gray-200'}`}
+                  className={`cursor-pointer border-t border-gray-200 hover:bg-brand-50 dark:border-white/10 dark:hover:bg-white/[0.07] ${empty ? 'text-gray-500 dark:text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}
                 >
                   <td className="whitespace-nowrap px-3 py-2">
                     <span className="font-medium">Week {String(r.week.num).padStart(2, '0')}</span>
-                    <span className="ml-2 text-xs text-gray-400">
+                    <span className="ml-2 text-xs text-gray-600 dark:text-gray-300">
                       {shortDate(r.week.start)} to {shortDate(r.week.end)}
                     </span>
                   </td>
@@ -141,7 +141,7 @@ export function FoaSummary({
                   <td className="px-3 py-2 text-center tabular-nums">{empty ? '' : r.safety}</td>
                   <td className="px-3 py-2">
                     {!empty && (
-                      <span className="flex h-2 w-full min-w-[6rem] overflow-hidden rounded-full bg-gray-100 dark:bg-white/10" title={`${r.variance} variance, ${r.safety} Motive`}>
+                      <span className="flex h-2.5 w-full min-w-[6rem] overflow-hidden rounded-full bg-gray-200 dark:bg-white/15" title={`${r.variance} variance, ${r.safety} Motive`}>
                         <span className="h-full bg-brand-500" style={{ width: `${(r.variance / peak) * 100}%` }} />
                         <span className="h-full bg-amber-400" style={{ width: `${(r.safety / peak) * 100}%` }} />
                       </span>
@@ -155,7 +155,7 @@ export function FoaSummary({
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">
+      <p className="text-xs text-gray-600 dark:text-gray-300">
         Green is variance investigations, amber is Motive safety events. Checklist and Attendance are how much of each sheet is filled in.
       </p>
     </div>

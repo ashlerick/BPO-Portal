@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
+import { panel } from './foaUi'
 import { ApiError } from '../../services/api'
 import type { FoaReportData } from './foa'
 import { addDays, foaWeekEnding, foaWeeksOfYear, lastFriday, startFromPrevious, weekKeyOf } from './foaWeeks.ts'
@@ -107,8 +107,8 @@ export function FoaWorkspace({
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Week {week.num}</h2>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Week {week.num}</h2>
+            <span className="text-sm text-gray-700 dark:text-gray-200">
               {long(week.start)} to {long(week.end)}
             </span>
           </div>
@@ -118,8 +118,8 @@ export function FoaWorkspace({
           ))}
 
           {mine.length === 0 && createTeams.length > 0 && (
-            <Card>
-              <p className="text-sm text-gray-600 dark:text-gray-400">{here.length ? 'You have not started a report for this week.' : 'No report for this week yet.'}</p>
+            <div className={panel}>
+              <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{here.length ? 'You have not started a report for this week.' : 'No report for this week yet.'}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {createTeams.length > 1 && (
                   <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field !w-auto" aria-label="FOA team">
@@ -139,12 +139,12 @@ export function FoaWorkspace({
                   </Button>
                 )}
               </div>
-              {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
-            </Card>
+              {error && <p className="mt-2 text-sm font-medium text-red-700 dark:text-red-300">{error}</p>}
+            </div>
           )}
 
           {here.length === 0 && createTeams.length === 0 && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No reports for this week.</p>
+            <p className="text-sm text-gray-700 dark:text-gray-200">No reports for this week.</p>
           )}
         </div>
       )}

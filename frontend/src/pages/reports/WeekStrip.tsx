@@ -59,32 +59,32 @@ export function WeekStrip({
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
-  const chip = 'relative shrink-0 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition'
-  const idle = 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10'
+  const chip = 'relative shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-semibold transition'
+  const idle = 'text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-white/10'
   const on = 'bg-brand-600 text-white shadow-sm'
 
   return (
-    <div className="flex min-w-0 items-center gap-1 rounded-xl border border-black/5 bg-white/80 px-2 py-1.5 dark:border-white/10 dark:bg-white/[0.035]">
+    <div className="flex min-w-0 items-center gap-1 rounded-xl border border-gray-300 bg-white px-2 py-1.5 shadow-sm dark:border-white/15 dark:bg-[#0a1f16]">
       <button
         type="button"
         onClick={() => onYear(-1)}
         disabled={year <= minYear}
         aria-label="Previous year"
-        className="h-6 w-6 shrink-0 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-white/10"
+        className="h-7 w-7 shrink-0 rounded text-base font-bold text-gray-800 hover:bg-gray-100 disabled:opacity-30 dark:text-gray-100 dark:hover:bg-white/10"
       >
         ‹
       </button>
-      <span className="w-10 shrink-0 text-center text-sm font-semibold text-gray-800 dark:text-gray-100">{year}</span>
+      <span className="w-11 shrink-0 text-center text-sm font-bold text-gray-900 dark:text-white">{year}</span>
       <button
         type="button"
         onClick={() => onYear(1)}
         disabled={year >= maxYear}
         aria-label="Next year"
-        className="h-6 w-6 shrink-0 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-white/10"
+        className="h-7 w-7 shrink-0 rounded text-base font-bold text-gray-800 hover:bg-gray-100 disabled:opacity-30 dark:text-gray-100 dark:hover:bg-white/10"
       >
         ›
       </button>
-      <span className="mx-1 h-4 w-px shrink-0 bg-gray-200 dark:bg-white/15" />
+      <span className="mx-1 h-5 w-px shrink-0 bg-gray-300 dark:bg-white/25" />
       <div ref={scrollRef} role="tablist" aria-label={`Weeks of ${year}`} className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
@@ -92,7 +92,7 @@ export function WeekStrip({
           aria-selected={selected === 'summary'}
           ref={selected === 'summary' ? selectedRef : undefined}
           onClick={onSummary}
-          className={`${chip} ${selected === 'summary' ? on : 'text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-white/10'}`}
+          className={`${chip} ${selected === 'summary' ? on : 'border border-brand-600 text-brand-700 hover:bg-brand-50 dark:border-brand-400 dark:text-brand-300 dark:hover:bg-white/10'}`}
         >
           Summary
         </button>
