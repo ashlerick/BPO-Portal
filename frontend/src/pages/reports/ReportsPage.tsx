@@ -9,19 +9,11 @@ import { Badge } from '../../components/ui/Badge'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { humanize } from '../../utils/text'
 import type { ReportData, ReportStatus, WeeklyReport } from './types'
-import {
-  FOA_ATTENDANCE_COLUMNS,
-  FOA_CHECKLIST_DAYS,
-  FOA_CHECKLIST_TASKS,
-  FOA_TERRITORIES,
-  foaAttendanceDates,
-  isFoaDepartment,
-  type FoaReportData,
-} from './foa'
+import { isFoaDepartment, type FoaReportData } from './foa'
 import type { MyEmployeeProfile } from '../hris/types'
-import { AttendanceGrid } from './AttendanceGrid'
+import { FoaReportCard } from './FoaReportCard'
 import { FoaWorkspace } from './FoaWorkspace'
-import { addDays, startFromPrevious } from './foaWeeks.ts'
+import { useReportActions } from './useReportActions'
 
 interface Team {
   id: string
@@ -80,221 +72,6 @@ function ReportDataFields({
           </div>
         )
       })}
-    </div>
-  )
-}
-
-function FoaReportFields({
-  data,
-  periodStart,
-  periodEnd,
-  previous,
-  onChange,
-}: {
-  data: FoaReportData
-  periodStart: string
-  periodEnd: string
-  /** The same author's report for the week before, when there is one. */
-  previous?: FoaReportData
-  onChange: (data: FoaReportData) => void
-}) {
-  const dates = foaAttendanceDates(periodStart, periodEnd)
-  const territories = data.territories ?? []
-  const attendance = data.attendance ?? {}
-  const checklist = data.taskChecklist ?? {}
-  const variance = data.varianceInvestigations ?? {}
-  const safety = data.motiveSafetyEvents ?? {}
-
-  function toggleTerritory(t: string) {
-    onChange({
-      ...data,
-      territories: territories.includes(t) ? territories.filter((x) => x !== t) : [...territories, t],
-    })
-  }
-
-  function setCell(date: string, column: string, tokens: string[]) {
-    onChange({
-      ...data,
-      attendance: { ...attendance, [date]: { ...attendance[date], [column]: tokens } },
-    })
-  }
-
-  function fillDown(column: string) {
-    const first = dates[0]
-    const value = attendance[first]?.[column as (typeof FOA_ATTENDANCE_COLUMNS)[number]] ?? []
-    const next = { ...attendance }
-    for (const date of dates) next[date] = { ...next[date], [column]: value }
-    onChange({ ...data, attendance: next })
-  }
-
-  function setChecked(task: string, day: string, checked: boolean) {
-    onChange({
-      ...data,
-      taskChecklist: { ...checklist, [task]: { ...checklist[task as keyof typeof checklist], [day]: checked } },
-    })
-  }
-
-  function checkAllDays(task: string) {
-    const allChecked = Object.fromEntries(FOA_CHECKLIST_DAYS.map((d) => [d, true]))
-    onChange({ ...data, taskChecklist: { ...checklist, [task]: allChecked } })
-  }
-
-  function setVariance(key: keyof NonNullable<FoaReportData['varianceInvestigations']>, v: string) {
-    onChange({ ...data, varianceInvestigations: { ...variance, [key]: v ? Number(v) : undefined } })
-  }
-
-  function setSafety(key: keyof NonNullable<FoaReportData['motiveSafetyEvents']>, v: string) {
-    onChange({ ...data, motiveSafetyEvents: { ...safety, [key]: v ? Number(v) : undefined } })
-  }
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <p className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Assigned Territory</p>
-        <div className="flex flex-wrap gap-2">
-          {FOA_TERRITORIES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => toggleTerritory(t)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                territories.includes(t)
-                  ? 'border-orange-500 bg-orange-500 text-white'
-                  : 'border-gray-300 text-gray-600 hover:border-gray-400 dark:border-gray-700 dark:text-gray-400'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <AttendanceGrid
-        dates={dates}
-        attendance={attendance}
-        onCell={setCell}
-        onFillDown={fillDown}
-        onSameAsLastWeek={
-          previous?.attendance
-            ? () => onChange({ ...data, attendance: startFromPrevious(previous, addDays(periodStart.slice(0, 10), -7), periodStart.slice(0, 10)).attendance })
-            : undefined
-        }
-      />
-
-      <div>
-        <p className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Task Checklist</p>
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th className="px-2 py-1.5 text-left font-medium text-gray-500 dark:text-gray-400">Task</th>
-                {FOA_CHECKLIST_DAYS.map((d) => (
-                  <th key={d} className="px-2 py-1.5 text-center font-medium text-gray-500 dark:text-gray-400">
-                    {d.slice(0, 3)}
-                  </th>
-                ))}
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {FOA_CHECKLIST_TASKS.map((task) => (
-                <tr key={task} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="px-2 py-1.5 text-gray-700 dark:text-gray-300">{task}</td>
-                  {FOA_CHECKLIST_DAYS.map((day) => (
-                    <td key={day} className="px-2 py-1.5 text-center">
-                      <input
-                        type="checkbox"
-                        checked={checklist[task as keyof typeof checklist]?.[day] ?? false}
-                        onChange={(e) => setChecked(task, day, e.target.checked)}
-                      />
-                    </td>
-                  ))}
-                  <td className="px-2 py-1.5">
-                    <button
-                      type="button"
-                      onClick={() => checkAllDays(task)}
-                      className="whitespace-nowrap rounded border border-gray-300 px-1.5 py-0.5 text-[10px] text-gray-500 hover:bg-gray-100 dark:border-gray-700 dark:hover:bg-gray-800"
-                    >
-                      all done
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Variance Investigations</p>
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ['extendedBreaks', 'Extended Breaks'],
-                ['backToBackBreaks', 'Back-to-Back Breaks'],
-                ['otherInvestigations', 'Other Investigations'],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key} className="space-y-1">
-                <label className="text-xs text-gray-500 dark:text-gray-400">{label}</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={variance[key] ?? ''}
-                  onChange={(e) => setVariance(key, e.target.value)}
-                  className="field"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="mb-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">Motive Safety Events</p>
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ['cellphone', 'Cellphone'],
-                ['seatbelts', 'Seatbelts'],
-                ['incidents', 'Incidents'],
-                ['trackerDascam', 'Tracker/Dascam'],
-                ['speeding', 'Speeding'],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key} className="space-y-1">
-                <label className="text-xs text-gray-500 dark:text-gray-400">{label}</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={safety[key] ?? ''}
-                  onChange={(e) => setSafety(key, e.target.value)}
-                  className="field"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {(
-          [
-            ['additionalTasks', 'Additional Tasks'],
-            ['highlights', 'Highlights'],
-            ['roadblocks', 'Roadblocks'],
-          ] as const
-        ).map(([key, label]) => (
-          <div key={key} className="space-y-1">
-            <label className="text-sm text-gray-600 dark:text-gray-400">{label}</label>
-            <textarea
-              value={data[key] ?? ''}
-              onChange={(e) => onChange({ ...data, [key]: e.target.value })}
-              rows={2}
-              className="field"
-            />
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
@@ -500,54 +277,11 @@ function CreateAnyReportForm({
   )
 }
 
-function ReportCard({ report, previous, onUpdated }: { report: WeeklyReport; previous?: FoaReportData; onUpdated: (r: WeeklyReport) => void }) {
-  const { user, effectiveRoles, guardedAction } = useAuth()
-  const isFoa = report.schemaKey === 'foa'
+function ReportCard({ report, onUpdated }: { report: WeeklyReport; onUpdated: (r: WeeklyReport) => void }) {
   const [editing, setEditing] = useState(false)
-  const [data, setData] = useState<ReportData | FoaReportData>(report.data)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [exporting, setExporting] = useState<string | null>(null)
-
-  const isReviewer = effectiveRoles.some((r) => r === 'manager' || r === 'hr' || r === 'admin')
-  const isOwnReport = report.authorId != null && report.authorId === user?.id
-  const canEdit = report.status === 'draft' || report.status === 'rejected'
-  const canExport = isOwnReport || isReviewer || effectiveRoles.includes('team_leader')
+  const [data, setData] = useState<ReportData>(report.data as ReportData)
+  const { busy, error, exporting, isReviewer, canEdit, canExport, transition, handleExport } = useReportActions(report, onUpdated, () => setEditing(false))
   const hasActions = canEdit || (isReviewer && (report.status === 'submitted' || report.status === 'reviewed'))
-
-  function transition(action: string, extra?: Record<string, unknown>) {
-    const requiredRoles =
-      action === 'review' || action === 'approve' || action === 'reject'
-        ? (['manager', 'hr', 'admin'] as const)
-        : (['team_leader', 'hr', 'admin'] as const)
-
-    guardedAction([...requiredRoles], async () => {
-      setBusy(true)
-      setError(null)
-      try {
-        const updated = await api.put<WeeklyReport>(`/reports/${report.id}`, { action, ...extra })
-        onUpdated(updated)
-        setEditing(false)
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not update report')
-      } finally {
-        setBusy(false)
-      }
-    })
-  }
-
-  async function handleExport(format: 'csv' | 'xlsx' | 'pdf') {
-    setExporting(format)
-    setError(null)
-    try {
-      const { url } = await api.get<{ url: string }>(`/reports/${report.id}/export?format=${format}`)
-      window.open(url, '_blank', 'noopener,noreferrer')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not export report')
-    } finally {
-      setExporting(null)
-    }
-  }
 
   const dateFmt = (d: string) =>
     new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -556,12 +290,7 @@ function ReportCard({ report, previous, onUpdated }: { report: WeeklyReport; pre
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
-            {isFoa ? (report.authorName ?? report.team) : report.team}
-          </span>
-          {isFoa && report.authorName && (
-            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">{report.team}</span>
-          )}
+          <span className="font-medium text-gray-900 dark:text-gray-100">{report.team}</span>
           <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
             {dateFmt(report.periodStart)} – {dateFmt(report.periodEnd)}
           </span>
@@ -577,17 +306,7 @@ function ReportCard({ report, previous, onUpdated }: { report: WeeklyReport; pre
 
       {editing ? (
         <div className="mt-3 space-y-3">
-          {isFoa ? (
-            <FoaReportFields
-              data={data as FoaReportData}
-              periodStart={report.periodStart}
-              periodEnd={report.periodEnd}
-              previous={previous}
-              onChange={setData}
-            />
-          ) : (
-            <ReportDataFields data={data as ReportData} onChange={setData} />
-          )}
+          <ReportDataFields data={data} onChange={setData} />
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => transition('save', { data })} disabled={busy}>
@@ -677,6 +396,7 @@ export function ReportsPage() {
   const [departmentNames, setDepartmentNames] = useState<string[]>([])
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
   const [department, setDepartment] = useState('')
+  const [showNew, setShowNew] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -717,15 +437,16 @@ export function ReportsPage() {
   const historyReports = visibleReports?.filter((r) => r.status === 'approved' && r.schemaKey !== 'foa') ?? []
   const isReviewerRole = effectiveRoles.some((r) => r === 'manager' || r === 'hr' || r === 'admin')
   const showWorkspace = foaCreateTeams.length > 0 || foaReports.length > 0
+  // Starting a report for a team that is not yours (HR and Admin, or a team leader's general report) is tucked behind one button; an FOA
+  // author's own weekly report starts from the week strip.
+  const hasNewForm = canCreateAnyFoa ? departments.length > 0 : canCreateGeneric && !(department && isFoaDepartment(department))
 
   function renderReport(r: WeeklyReport, previous?: FoaReportData) {
-    return (
-      <ReportCard
-        key={r.id}
-        report={r}
-        previous={previous}
-        onUpdated={(updated) => setReports((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)}
-      />
+    const onUpdated = (updated: WeeklyReport) => setReports((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)
+    return r.schemaKey === 'foa' ? (
+      <FoaReportCard key={r.id} report={r} previous={previous} onUpdated={onUpdated} />
+    ) : (
+      <ReportCard key={r.id} report={r} onUpdated={onUpdated} />
     )
   }
 
@@ -744,42 +465,57 @@ export function ReportsPage() {
     <div>
       <PageHeader title="Weekly Reports" />
 
-      {departments.length > 1 && (
-        <div className="mb-4 max-w-xs space-y-1">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Department</label>
-          <select value={department} onChange={(e) => setDepartment(e.target.value)} className="field">
-            <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
+      {(departments.length > 1 || hasNewForm) && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          {departments.length > 1 && (
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
+              Department
+              <select value={department} onChange={(e) => setDepartment(e.target.value)} className="field !w-auto">
+                <option value="">All departments</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <span className="flex-1" />
+          {hasNewForm && (
+            <button
+              type="button"
+              onClick={() => setShowNew((v) => !v)}
+              aria-expanded={showNew}
+              className="rounded-lg border border-gray-400 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 dark:border-white/30 dark:text-gray-100 dark:hover:bg-white/10"
+            >
+              {showNew ? 'Close' : '+ Report for another team'}
+            </button>
+          )}
         </div>
       )}
 
-      {canCreateAnyFoa ? (
-        departments.length > 0 && (
-          <div className="mb-4">
+      {showNew && hasNewForm && (
+        <div className="mb-4">
+          {canCreateAnyFoa ? (
             <CreateAnyReportForm
               departments={departments}
               teams={teams}
               initialDepartment={department}
-              onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
+              onCreated={(r) => {
+                setReports((prev) => (prev ? [r, ...prev] : [r]))
+                setShowNew(false)
+              }}
             />
-          </div>
-        )
-      ) : (
-        <>
-          {canCreateGeneric && !(department && isFoaDepartment(department)) && (
-            <div className="mb-4">
-              <CreateReportForm
-                teams={genericTeams}
-                onCreated={(r) => setReports((prev) => (prev ? [r, ...prev] : [r]))}
-              />
-            </div>
+          ) : (
+            <CreateReportForm
+              teams={genericTeams}
+              onCreated={(r) => {
+                setReports((prev) => (prev ? [r, ...prev] : [r]))
+                setShowNew(false)
+              }}
+            />
           )}
-        </>
+        </div>
       )}
 
       {loading && <LoadingState />}
