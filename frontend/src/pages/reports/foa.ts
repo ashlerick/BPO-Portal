@@ -38,7 +38,10 @@ export const FOA_CHECKLIST_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday',
 
 export type FoaAttendanceColumn = (typeof FOA_ATTENDANCE_COLUMNS)[number]
 export type FoaChecklistTask = (typeof FOA_CHECKLIST_TASKS)[number]
-export type FoaChecklistDay = (typeof FOA_CHECKLIST_DAYS)[number]
+/** A Saturday worked to make up for a weekday off (a holiday, say). It is optional, so it is not one of the five counted days. */
+export const FOA_MAKE_UP_DAY = 'Saturday'
+
+export type FoaChecklistDay = (typeof FOA_CHECKLIST_DAYS)[number] | typeof FOA_MAKE_UP_DAY
 
 export interface FoaReportData {
   territories?: string[]
@@ -68,11 +71,9 @@ export function isFoaDepartment(departmentName: string): boolean {
   return departmentName.trim().toUpperCase() === 'FOA'
 }
 
-// The 8 Friday-to-Friday calendar dates covered by a period (periodStart
-// and periodEnd are both the same weekday, 7 days apart), as ISO date
-// strings — the attendance grid keys on these rather than generic weekday
-// labels so the same weekday appearing twice (the period's two Fridays)
-// isn't ambiguous.
+// Every calendar date from periodStart to periodEnd, as ISO date strings: the five days of a Monday-to-Friday week, or the eight of a
+// report filed before the change to Monday-to-Friday (Friday to Friday). The attendance sheet keys on these dates rather than weekday
+// names, so a weekday that appears twice in an older report isn't ambiguous.
 export function foaAttendanceDates(periodStart: string, periodEnd: string): string[] {
   const start = new Date(periodStart)
   const end = new Date(periodEnd)
@@ -81,4 +82,31 @@ export function foaAttendanceDates(periodStart: string, periodEnd: string): stri
     dates.push(d.toISOString().slice(0, 10))
   }
   return dates
+}
+
+/**
+ * The Saturday after a Monday-to-Friday week, which can be worked to make up for a weekday off; null for an older Friday-to-Friday
+ * report, whose own Saturday is already one of its eight days.
+ */
+export function foaMakeUpSaturday(periodStart: string, periodEnd: string): string | null {
+  if (foaAttendanceDates(periodStart, periodEnd).length !== 5) return null
+  const end = new Date(periodEnd)
+  if (end.getUTCDay() !== 5) return null
+  end.setUTCDate(end.getUTCDate() + 1)
+  return end.toISOString().slice(0, 10)
+}
+
+/** The period's dates, plus its make-up Saturday when that day has anything entered (for showing a filed report). */
+export function foaReportDates(periodStart: string, periodEnd: string, data: FoaReportData): string[] {
+  const dates = foaAttendanceDates(periodStart, periodEnd)
+  const saturday = foaMakeUpSaturday(periodStart, periodEnd)
+  if (saturday && foaMakeUpUsed(data, saturday)) dates.push(saturday)
+  return dates
+}
+
+/** Whether anything was entered for the make-up Saturday: coverage on that date, or a task ticked for it. */
+export function foaMakeUpUsed(data: FoaReportData, saturday: string): boolean {
+  const cells = data.attendance?.[saturday]
+  if (cells && Object.values(cells).some((tokens) => tokens && tokens.length > 0)) return true
+  return Object.values(data.taskChecklist ?? {}).some((days) => days?.[FOA_MAKE_UP_DAY])
 }

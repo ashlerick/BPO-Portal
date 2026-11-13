@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { EmptyState, ErrorState, LoadingState } from '../../components/AsyncState'
 import { api, ApiError } from '../../services/api'
-import { Card, CardForm } from '../../components/ui/Card'
+import { Card } from '../../components/ui/Card'
 import { Section, SectionStack } from '../../components/ui/Section'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -12,7 +12,10 @@ import type { ReportData, ReportStatus, WeeklyReport } from './types'
 import { isFoaDepartment, type FoaReportData } from './foa'
 import type { MyEmployeeProfile } from '../hris/types'
 import { FoaReportCard } from './FoaReportCard'
+import { AccountingReportCard } from './AccountingReportCard'
+import { isAccountingDepartment } from './accounting'
 import { FoaWorkspace } from './FoaWorkspace'
+import { ReportEditor } from './ReportEditor'
 import { useReportActions } from './useReportActions'
 
 interface Team {
@@ -73,207 +76,6 @@ function ReportDataFields({
         )
       })}
     </div>
-  )
-}
-
-function CreateReportForm({ teams, onCreated }: { teams: Team[]; onCreated: (r: WeeklyReport) => void }) {
-  const { guardedAction } = useAuth()
-  const [teamId, setTeamId] = useState('')
-  const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    guardedAction(['team_leader', 'hr', 'admin'], async () => {
-      setError(null)
-      setSubmitting(true)
-      try {
-        const created = await api.post<WeeklyReport>('/reports', {
-          teamId: teamId || teams[0]?.id,
-          periodStart: new Date(periodStart).toISOString(),
-          periodEnd: new Date(periodEnd).toISOString(),
-        })
-        onCreated(created)
-        setPeriodStart('')
-        setPeriodEnd('')
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not create report')
-      } finally {
-        setSubmitting(false)
-      }
-    })
-  }
-
-  return (
-    <CardForm onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-      <div className="w-full space-y-1 md:w-auto">
-        <label className="text-sm text-gray-600 dark:text-gray-400">Team</label>
-        <select required value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field">
-          <option value="">Select…</option>
-          {teams.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="grid w-full grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:contents">
-        <div className="min-w-0 space-y-1">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Period start</label>
-          <input
-            type="date"
-            required
-            value={periodStart}
-            onChange={(e) => setPeriodStart(e.target.value)}
-            className="field px-2.5 md:px-3"
-          />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Period end</label>
-          <input
-            type="date"
-            required
-            value={periodEnd}
-            onChange={(e) => setPeriodEnd(e.target.value)}
-            className="field px-2.5 md:px-3"
-          />
-        </div>
-      </div>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <Button type="submit" variant="primary" disabled={submitting} className="w-full md:w-auto">
-        {submitting ? 'Creating…' : 'New report'}
-      </Button>
-    </CardForm>
-  )
-}
-
-// FOA reports are individually authored (no team dropdown — always your
-// own team) and default to the most recently completed Friday-to-Friday
-// week, matching how the department's Jotform frames its reporting period.
-function defaultFoaPeriod(): { start: string; end: string } {
-  const today = new Date()
-  const lastFriday = new Date(today)
-  const daysSinceFriday = (today.getUTCDay() + 2) % 7
-  lastFriday.setUTCDate(today.getUTCDate() - daysSinceFriday)
-  const priorFriday = new Date(lastFriday)
-  priorFriday.setUTCDate(lastFriday.getUTCDate() - 7)
-  return { start: priorFriday.toISOString().slice(0, 10), end: lastFriday.toISOString().slice(0, 10) }
-}
-
-// HR and Admin: create a report for ANY department. The department list comes
-// from the directory, so a department added later shows up here by itself.
-// The report type follows the department (FOA gets its own richer form; every
-// other department gets the general weekly report).
-function CreateAnyReportForm({
-  departments,
-  teams,
-  initialDepartment,
-  onCreated,
-}: {
-  departments: string[]
-  teams: Team[]
-  initialDepartment: string
-  onCreated: (r: WeeklyReport) => void
-}) {
-  const { guardedAction } = useAuth()
-  const [department, setDepartment] = useState(initialDepartment || departments[0] || '')
-  const [teamId, setTeamId] = useState('')
-  const foa = isFoaDepartment(department)
-  const defaults = defaultFoaPeriod()
-  const [periodStart, setPeriodStart] = useState('')
-  const [periodEnd, setPeriodEnd] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // follow the page's department filter when it changes
-  useEffect(() => {
-    if (initialDepartment) setDepartment(initialDepartment)
-  }, [initialDepartment])
-
-  const deptTeams = teams.filter((t) => t.department === department)
-  useEffect(() => {
-    setTeamId(deptTeams.length === 1 ? deptTeams[0].id : '')
-    // FOA reports default to the last Friday-to-Friday week; others start blank
-    setPeriodStart(foa ? defaults.start : '')
-    setPeriodEnd(foa ? defaults.end : '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [department])
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    guardedAction(['hr', 'admin'], async () => {
-      setError(null)
-      if (!teamId) {
-        setError('Choose a team first.')
-        return
-      }
-      setSubmitting(true)
-      try {
-        const created = await api.post<WeeklyReport>('/reports', {
-          teamId,
-          periodStart: new Date(periodStart).toISOString(),
-          periodEnd: new Date(periodEnd).toISOString(),
-        })
-        onCreated(created)
-        if (!foa) {
-          setPeriodStart('')
-          setPeriodEnd('')
-        }
-      } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Could not create report')
-      } finally {
-        setSubmitting(false)
-      }
-    })
-  }
-
-  return (
-    <CardForm onSubmit={handleSubmit} className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-full space-y-1 md:w-auto">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Department</label>
-          <select required value={department} onChange={(e) => setDepartment(e.target.value)} className="field">
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="w-full space-y-1 md:w-auto">
-          <label className="text-sm text-gray-600 dark:text-gray-400">Team</label>
-          <select required value={teamId} onChange={(e) => setTeamId(e.target.value)} className="field" disabled={deptTeams.length === 0}>
-            <option value="">{deptTeams.length === 0 ? 'No teams yet' : 'Select…'}</option>
-            {deptTeams.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="grid w-full grid-cols-2 gap-3 max-[359px]:grid-cols-1 md:contents">
-          <div className="min-w-0 space-y-1">
-            <label className="text-sm text-gray-600 dark:text-gray-400">{foa ? 'Week starting (Friday)' : 'Period start'}</label>
-            <input type="date" required value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="field px-2.5 md:px-3" />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <label className="text-sm text-gray-600 dark:text-gray-400">{foa ? 'Week ending (Friday)' : 'Period end'}</label>
-            <input type="date" required value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="field px-2.5 md:px-3" />
-          </div>
-        </div>
-        <Button type="submit" variant="primary" disabled={submitting || !teamId} className="w-full md:w-auto">
-          {submitting ? 'Creating…' : foa ? 'New FOA weekly report' : 'New report'}
-        </Button>
-      </div>
-      {department && deptTeams.length === 0 && (
-        <p className="text-sm text-amber-700 dark:text-amber-400">
-          {department} has no teams yet. Add one under Employee Management → Departments & Teams, then come back.
-        </p>
-      )}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-    </CardForm>
   )
 }
 
@@ -396,30 +198,35 @@ export function ReportsPage() {
   const [departmentNames, setDepartmentNames] = useState<string[]>([])
   const [myTeamId, setMyTeamId] = useState<string | null>(null)
   const [department, setDepartment] = useState('')
-  const [showNew, setShowNew] = useState(false)
+  const [editor, setEditor] = useState<{ resume?: WeeklyReport } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // A load that was replaced (React runs effects twice in development) must not report its result: a failure from the first run
+    // would otherwise leave an error banner on top of the second run's good data.
+    let cancelled = false
     Promise.all([
       api.get<WeeklyReport[]>('/reports'),
       api.get<{ departments: { id: string; name: string }[]; teams: Team[] }>('/directory'),
       api.get<MyEmployeeProfile>('/employees/me').catch(() => null),
     ])
       .then(([r, dir, profile]) => {
+        if (cancelled) return
+        setError(null)
         setReports(r)
         setTeams(dir.teams)
         setDepartmentNames(dir.departments.map((d) => d.name).sort())
         setMyTeamId(profile?.teamId ?? null)
       })
-      .catch((err) => setError(err instanceof ApiError ? err.message : 'Something went wrong'))
-      .finally(() => setLoading(false))
+      .catch((err) => !cancelled && setError(err instanceof ApiError ? err.message : 'Something went wrong'))
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const departments = departmentNames
-  const genericTeams = teams.filter(
-    (t) => !isFoaDepartment(t.department) && (!department || t.department === department),
-  )
   const visibleReports = reports?.filter((r) => !department || r.department === department) ?? null
   // Anyone in an FOA team can write their own report. HR and Admin can create
   // one for any FOA team (to test, or on someone's behalf).
@@ -437,17 +244,19 @@ export function ReportsPage() {
   const historyReports = visibleReports?.filter((r) => r.status === 'approved' && r.schemaKey !== 'foa') ?? []
   const isReviewerRole = effectiveRoles.some((r) => r === 'manager' || r === 'hr' || r === 'admin')
   const showWorkspace = foaCreateTeams.length > 0 || foaReports.length > 0
-  // Starting a report for a team that is not yours (HR and Admin, or a team leader's general report) is tucked behind one button; an FOA
-  // author's own weekly report starts from the week strip.
-  const hasNewForm = canCreateAnyFoa ? departments.length > 0 : canCreateGeneric && !(department && isFoaDepartment(department))
+  // Anyone who can file a report (an FOA or Accounting author, a team leader, HR or Admin) gets the button that opens the editor.
+  const isAuthorOfOwnTeam = teams.some((t) => t.id === myTeamId && (isFoaDepartment(t.department) || isAccountingDepartment(t.department)))
+  const canStartReport = !loading && (canCreateAnyFoa || canCreateGeneric || isAuthorOfOwnTeam)
 
-  function renderReport(r: WeeklyReport, previous?: FoaReportData) {
+  const upsertReport = (r: WeeklyReport) =>
+    setReports((prev) => (prev ? (prev.some((x) => x.id === r.id) ? prev.map((x) => (x.id === r.id ? r : x)) : [r, ...prev]) : [r]))
+
+  function renderReport(r: WeeklyReport) {
     const onUpdated = (updated: WeeklyReport) => setReports((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null)
-    return r.schemaKey === 'foa' ? (
-      <FoaReportCard key={r.id} report={r} previous={previous} onUpdated={onUpdated} />
-    ) : (
-      <ReportCard key={r.id} report={r} onUpdated={onUpdated} />
-    )
+    const onEdit = (rep: WeeklyReport) => setEditor({ resume: rep })
+    if (r.schemaKey === 'foa') return <FoaReportCard key={r.id} report={r} onUpdated={onUpdated} onEdit={onEdit} />
+    if (r.schemaKey === 'accounting') return <AccountingReportCard key={r.id} report={r} onUpdated={onUpdated} onEdit={onEdit} />
+    return <ReportCard key={r.id} report={r} onUpdated={onUpdated} />
   }
 
   // The workspace starts a week's report: the person's own team, the week's two Fridays, and last week's sheet when they ask for it.
@@ -463,9 +272,9 @@ export function ReportsPage() {
 
   return (
     <div>
-      <PageHeader title="Weekly Reports" />
+      {!editor && <PageHeader title="Weekly Reports" />}
 
-      {(departments.length > 1 || hasNewForm) && (
+      {!editor && (departments.length > 1 || canStartReport) && (
         <div className="mb-4 flex flex-wrap items-center gap-3">
           {departments.length > 1 && (
             <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
@@ -481,48 +290,35 @@ export function ReportsPage() {
             </label>
           )}
           <span className="flex-1" />
-          {hasNewForm && (
+          {canStartReport && (
             <button
               type="button"
-              onClick={() => setShowNew((v) => !v)}
-              aria-expanded={showNew}
-              className="rounded-lg border border-gray-400 px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 dark:border-white/30 dark:text-gray-100 dark:hover:bg-white/10"
+              onClick={() => setEditor({})}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 dark:bg-brand-500 dark:hover:bg-brand-400"
             >
-              {showNew ? 'Close' : '+ Report for another team'}
+              + New weekly report
             </button>
           )}
         </div>
       )}
 
-      {showNew && hasNewForm && (
-        <div className="mb-4">
-          {canCreateAnyFoa ? (
-            <CreateAnyReportForm
-              departments={departments}
-              teams={teams}
-              initialDepartment={department}
-              onCreated={(r) => {
-                setReports((prev) => (prev ? [r, ...prev] : [r]))
-                setShowNew(false)
-              }}
-            />
-          ) : (
-            <CreateReportForm
-              teams={genericTeams}
-              onCreated={(r) => {
-                setReports((prev) => (prev ? [r, ...prev] : [r]))
-                setShowNew(false)
-              }}
-            />
-          )}
-        </div>
+      {editor && (
+        <ReportEditor
+          teams={teams}
+          reports={reports ?? []}
+          myTeamId={myTeamId}
+          resume={editor.resume}
+          onSaved={upsertReport}
+          onClose={() => setEditor(null)}
+        />
       )}
 
-      {loading && <LoadingState />}
-      {error && <ErrorState message={error} />}
-      {visibleReports && visibleReports.length === 0 && !showWorkspace && <EmptyState label="No reports yet." />}
+      {/* These belong to the list; with the editor open they would only sit under it. */}
+      {!editor && loading && <LoadingState />}
+      {!editor && error && <ErrorState message={error} />}
+      {!editor && visibleReports && visibleReports.length === 0 && !showWorkspace && <EmptyState label="No reports yet." />}
 
-      {visibleReports && showWorkspace && (
+      {!editor && visibleReports && showWorkspace && (
         <div className="mb-6">
           <FoaWorkspace
             reports={foaReports}
@@ -534,7 +330,7 @@ export function ReportsPage() {
         </div>
       )}
 
-      {visibleReports && visibleReports.length > 0 && (
+      {!editor && visibleReports && visibleReports.length > 0 && (
         <SectionStack>
           <Section
             id="reports.team"

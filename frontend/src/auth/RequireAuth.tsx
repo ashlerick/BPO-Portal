@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { LoadingState } from '../components/AsyncState'
 import { useAuth } from './AuthContext'
 import type { Role } from './types'
 
@@ -15,7 +16,14 @@ export function RequireAuth({ children, roles: rolesProp, restricted }: RequireA
   const roles = restricted ? restrictedRoles : rolesProp
   const location = useLocation()
 
-  if (loading) return null
+  // Restoring the session is a request to the server: say so, rather than show an empty screen while it is slow.
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingState label="Signing you in…" />
+      </div>
+    )
+  }
 
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
 

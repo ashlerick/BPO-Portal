@@ -1,9 +1,7 @@
-import { FOA_CHECKLIST_DAYS, FOA_CHECKLIST_TASKS, type FoaReportData } from './foa'
+import { FOA_CHECKLIST_DAYS, FOA_CHECKLIST_TASKS, FOA_MAKE_UP_DAY, type FoaChecklistDay, type FoaReportData } from './foa'
 import { softButton } from './foaUi'
 
 type Checklist = NonNullable<FoaReportData['taskChecklist']>
-
-const SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
 
 // The weekly task checklist: a task by day grid where each cell is one large button, filled when done. "All week" ticks a whole task.
 export function FoaChecklist({
@@ -22,8 +20,11 @@ export function FoaChecklist({
   }
 
   function setWeek(task: string, done: boolean) {
-    onChange({ ...value, [task]: Object.fromEntries(FOA_CHECKLIST_DAYS.map((d) => [d, done])) })
+    onChange({ ...value, [task]: { ...value[task as keyof Checklist], ...Object.fromEntries(FOA_CHECKLIST_DAYS.map((d) => [d, done])) } })
   }
+
+  // The five working days, plus a Saturday column only when a make-up Saturday has something ticked.
+  const days: FoaChecklistDay[] = Object.values(value).some((d) => d?.[FOA_MAKE_UP_DAY]) ? [...FOA_CHECKLIST_DAYS, FOA_MAKE_UP_DAY] : [...FOA_CHECKLIST_DAYS]
 
   return (
     <div className="overflow-x-auto">
@@ -31,9 +32,9 @@ export function FoaChecklist({
         <thead>
           <tr className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
             <th className="px-1 pb-1 text-left">Task</th>
-            {SHORT.map((d) => (
+            {days.map((d) => (
               <th key={d} className="w-12 pb-1 text-center">
-                {d}
+                {d.slice(0, 3)}
               </th>
             ))}
             {!readOnly && <th className="w-24" />}
@@ -45,7 +46,7 @@ export function FoaChecklist({
             return (
               <tr key={task} className="group">
                 <td className="rounded-l-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-900 dark:bg-white/[0.07] dark:text-gray-100">{task}</td>
-                {FOA_CHECKLIST_DAYS.map((day) => {
+                {days.map((day) => {
                   const done = isDone(task, day)
                   return (
                     <td key={day} className="bg-gray-100 px-1 py-1 text-center dark:bg-white/[0.07]">

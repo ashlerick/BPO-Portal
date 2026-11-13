@@ -1,7 +1,8 @@
 // The FOA weekly report's calendar and arithmetic, kept free of React so it can be tested on its own.
 //
-// An FOA week runs Friday to Friday (the attendance sheet has eight rows, the period's two Fridays included). It is named after the
-// Friday it ends on: "Week 46" ends on the Friday of ISO week 46, so the numbers agree with the weekly time sheet's tabs.
+// An FOA week runs Monday to Friday, with an optional Saturday make-up day when a weekday was off (a holiday, say). It is named after the
+// Friday it ends on: "Week 46" ends on the Friday of ISO week 46, so the numbers agree with the weekly time sheet's tabs. Reports filed
+// before this change ran Friday to Friday (eight days); they are keyed by the same Friday, so they still line up.
 // All dates are YYYY-MM-DD strings handled in UTC, so a timezone never moves a day.
 
 import type { FoaReportData } from './foa.ts'
@@ -37,7 +38,7 @@ export interface FoaWeek {
   num: number
   /** The year of that number. */
   year: number
-  /** The Friday it starts on (a week before `end`). */
+  /** The Monday it starts on (four days before `end`). */
   start: string
   /** The Friday it ends on; the report's period end. */
   end: string
@@ -47,10 +48,10 @@ export interface FoaWeek {
 export function foaWeekEnding(endIso: string): FoaWeek {
   const end = endIso.slice(0, 10)
   const { year, num } = isoWeekOf(end)
-  return { num, year, start: addDays(end, -7), end }
+  return { num, year, start: addDays(end, -4), end }
 }
 
-/** Every week of a year, in order: the Friday of each ISO week of that year, with the Friday before it as the start. */
+/** Every week of a year, in order: the Friday of each ISO week of that year, with that week's Monday as the start. */
 export function foaWeeksOfYear(year: number): FoaWeek[] {
   const jan4 = new Date(Date.UTC(year, 0, 4))
   const monday = new Date(jan4)
@@ -73,17 +74,23 @@ export const weekKeyOf = (periodEnd: string): string => periodEnd.slice(0, 10)
 
 /**
  * "Same as last week": what a new report starts with when the person says so. The territories, the attendance sheet (each day moved to
- * the same day of the new week) and the checklist carry over. The counts and the free text do not: they are never the same twice.
+ * the same day of the new week) and the checklist carry over. The counts and the free text do not: they are never the same twice, and a
+ * Saturday make-up day belongs to the week it made up for. With `newEnd`, days that would land outside the new Monday-to-Friday week (the
+ * Friday that opened an older Friday-to-Friday report, its weekend) are left out.
  */
-export function startFromPrevious(previous: FoaReportData | undefined, previousStart: string, newStart: string): FoaReportData {
+export function startFromPrevious(previous: FoaReportData | undefined, previousStart: string, newStart: string, newEnd?: string): FoaReportData {
   if (!previous) return {}
   const out: FoaReportData = {}
   if (previous.territories) out.territories = [...previous.territories]
-  if (previous.taskChecklist) out.taskChecklist = JSON.parse(JSON.stringify(previous.taskChecklist))
+  if (previous.taskChecklist) {
+    out.taskChecklist = JSON.parse(JSON.stringify(previous.taskChecklist))
+    if (newEnd) for (const days of Object.values(out.taskChecklist!)) if (days) delete days.Saturday
+  }
   if (previous.attendance) {
     out.attendance = {}
     for (const [date, cells] of Object.entries(previous.attendance)) {
       const moved = addDays(newStart, daysBetween(previousStart, date))
+      if (newEnd && (moved < newStart || moved > newEnd)) continue
       out.attendance[moved] = Object.fromEntries(Object.entries(cells).map(([col, tokens]) => [col, [...(tokens ?? [])]]))
     }
   }

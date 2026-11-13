@@ -12,16 +12,18 @@ test('ISO week numbers', () => {
   assert.deepEqual(isoWeekOf('2027-01-01'), { year: 2026, num: 53 })
 })
 
-test('a week is named after the Friday it ends on and starts a Friday earlier', () => {
-  assert.deepEqual(foaWeekEnding('2026-09-18'), { num: 38, year: 2026, start: '2026-09-11', end: '2026-09-18' })
-  assert.deepEqual(foaWeekEnding('2026-11-13T00:00:00.000Z'), { num: 46, year: 2026, start: '2026-11-06', end: '2026-11-13' })
+test('a week is named after the Friday it ends on and starts that week’s Monday', () => {
+  assert.deepEqual(foaWeekEnding('2026-09-18'), { num: 38, year: 2026, start: '2026-09-14', end: '2026-09-18' })
+  assert.deepEqual(foaWeekEnding('2026-11-13T00:00:00.000Z'), { num: 46, year: 2026, start: '2026-11-09', end: '2026-11-13' })
+  assert.equal(new Date('2026-11-09T00:00:00Z').getUTCDay(), 1)
 })
 
-test('a year lists its weeks in order, each ending on a Friday', () => {
+test('a year lists its weeks in order, each running Monday to Friday', () => {
   const w = foaWeeksOfYear(2026)
   assert.equal(w.length, 53)
   assert.equal(w[0].end, '2026-01-02')
-  assert.equal(w[0].start, '2025-12-26')
+  assert.equal(w[0].start, '2025-12-29')
+  assert.ok(w.every((x) => new Date(`${x.start}T00:00:00Z`).getUTCDay() === 1))
   assert.equal(w.find((x) => x.num === 46)?.end, '2026-11-13')
   assert.ok(w.every((x) => new Date(`${x.end}T00:00:00Z`).getUTCDay() === 5))
   assert.equal(foaWeeksOfYear(2025).length, 52)
@@ -56,6 +58,20 @@ test('same as last week moves each day of the sheet to the new week and leaves t
   next.territories!.push('X')
   assert.deepEqual(previous.territories, ['CONCORD']) // a copy, not the same list
   assert.deepEqual(startFromPrevious(undefined, '2026-11-06', '2026-11-13'), {})
+})
+
+test('same as last week into a Monday-to-Friday week drops days outside it and the Saturday make-up', () => {
+  const previous = {
+    // an older Friday-to-Friday report: Fri 6, Sat 7, Mon 9, Fri 13, plus a make-up Saturday tick
+    attendance: { '2026-11-06': { Routeboard: ['SAN JOSE'] }, '2026-11-07': { TOP: ['D2D'] }, '2026-11-09': { STOP: ['CONCORD'] }, '2026-11-13': { Routeboard: ['PENINSULA'] } },
+    taskChecklist: { 'WEX Report': { Monday: true, Saturday: true } },
+  }
+  // The new week is Mon Nov 16 to Fri Nov 20; the week before it started Mon Nov 9. Every day moves forward seven days: Mon 9 becomes
+  // Mon 16 and Fri 13 becomes Fri 20 (kept), while Fri 6 and Sat 7 land on Fri 13 and Sat 14 (outside the new week, dropped).
+  const next = startFromPrevious(previous as unknown as FoaReportData, '2026-11-09', '2026-11-16', '2026-11-20')
+  assert.deepEqual(Object.keys(next.attendance ?? {}).sort(), ['2026-11-16', '2026-11-20'])
+  assert.deepEqual(next.attendance?.['2026-11-16'], { STOP: ['CONCORD'] })
+  assert.deepEqual(next.taskChecklist, { 'WEX Report': { Monday: true } })
 })
 
 test('totals count the numbers, the ticks and the filled cells', () => {

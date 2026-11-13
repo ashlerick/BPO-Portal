@@ -1,3 +1,4 @@
+import type { AccountingReportData } from './accounting'
 import type { FoaReportData } from './foa'
 
 export type ReportStatus = 'draft' | 'submitted' | 'reviewed' | 'approved' | 'rejected'
@@ -25,10 +26,10 @@ export interface WeeklyReport {
   periodEnd: string
   status: ReportStatus
   submittedBy: string | null
-  schemaKey: 'generic' | 'foa'
+  schemaKey: 'generic' | 'foa' | 'accounting'
   authorId: string | null
   authorName: string | null
-  data: ReportData | FoaReportData
+  data: ReportData | FoaReportData | AccountingReportData
   createdAt: string
   updatedAt: string
 }
