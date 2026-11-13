@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs'
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import { FOA_ATTENDANCE_COLUMNS, FOA_CHECKLIST_DAYS, type FoaReportData } from './foaReport.js'
+import { buildReportPdf } from './reportPdf.js'
+import { FOA_ATTENDANCE_COLUMNS, FOA_CHECKLIST_DAYS, FOA_MAKE_UP_DAY, type FoaReportData } from './foaReport.js'
+import type { AccountingReportData } from './accountingReport.js'
 
 export interface ReportData {
   client?: string
@@ -23,7 +24,7 @@ export interface ReportExportInput {
   status: string
   schemaKey?: string
   authorName?: string
-  data: ReportData | FoaReportData
+  data: ReportData | FoaReportData | AccountingReportData
 }
 
 const dateFmt = (d: Date) => d.toISOString().slice(0, 10)
@@ -72,7 +73,8 @@ function foaRows(input: ReportExportInput): [string, string][] {
 
   const checklist = data.taskChecklist ?? {}
   for (const task of Object.keys(checklist) as (keyof typeof checklist)[]) {
-    const doneDays = FOA_CHECKLIST_DAYS.filter((day) => checklist[task]?.[day])
+    const days = [...FOA_CHECKLIST_DAYS, FOA_MAKE_UP_DAY] as const
+    const doneDays = days.filter((day) => checklist[task]?.[day])
     out.push([task, doneDays.length > 0 ? doneDays.join(', ') : 'Not done'])
   }
 
@@ -86,12 +88,52 @@ function foaRows(input: ReportExportInput): [string, string][] {
   return out
 }
 
+const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+// One line per row ("Lockbox - $163,706.13"), joined with "; " rather than line breaks: the PDF font cannot draw a newline.
+function entryRows(label: string, list: { name: string; amount?: number }[] | undefined): [string, string][] {
+  const items = list ?? []
+  const total = items.reduce((sum, e) => sum + (e.amount ?? 0), 0)
+  return [
+    [label, items.map((e) => (e.amount != null ? `${e.name} - ${money(e.amount)}` : e.name)).join('; ')],
+    [`${label} total`, money(total)],
+  ]
+}
+
+const names = (list: string[] | undefined) => (list ?? []).filter((n) => n.trim()).join('; ')
+
+function accountingRows(input: ReportExportInput): [string, string][] {
+  const data = input.data as AccountingReportData
+  const invoices = data.invoices ?? []
+  return [
+    ['Reported by', input.authorName ?? ''],
+    ...entryRows('Accounts Receivable Entered', data.receivables),
+    ...entryRows('Accounts Payable Entered', data.payables),
+    ['AR Case Created - CA', names(data.arCases?.CA)],
+    ['AR Case Created - WA', names(data.arCases?.WA)],
+    ['Begin Billing - CA', names(data.beginBilling?.CA)],
+    ['Begin Billing - WA', names(data.beginBilling?.WA)],
+    ['Invoice Created', invoices.map((i) => `${i.name} - ${i.count ?? 0}`).join('; ')],
+    ['Invoices created total', String(invoices.reduce((sum, i) => sum + (i.count ?? 0), 0))],
+    ['Coupa Entered/Ops Merchant/Vendor Cafe', names(data.coupa)],
+    ['CR Fee Increase/Decrease', names(data.crFee)],
+    ['Change Management', names(data.changeManagement)],
+    ['30 Day Notice', names(data.thirtyDayNotice)],
+    ['Parent Account Change', names(data.parentAccountChange)],
+    ['Reimbursement Entered', names(data.reimbursements)],
+    ['Additional Tasks', data.additionalTasks ?? ''],
+    ['Roadblocks', data.roadblocks ?? ''],
+    ['Highlights', data.highlights ?? ''],
+    ['Manager Comments', data.managerComments ?? ''],
+  ]
+}
+
 function rows(input: ReportExportInput): [string, string][] {
   return [
     ['Team', input.teamName],
     ['Period', `${dateFmt(input.periodStart)} to ${dateFmt(input.periodEnd)}`],
     ['Status', input.status],
-    ...(input.schemaKey === 'foa' ? foaRows(input) : genericRows(input)),
+    ...(input.schemaKey === 'foa' ? foaRows(input) : input.schemaKey === 'accounting' ? accountingRows(input) : genericRows(input)),
   ]
 }
 
@@ -120,38 +162,5 @@ export async function buildXlsx(input: ReportExportInput): Promise<Buffer> {
   return Buffer.from(buffer)
 }
 
-export async function buildPdf(input: ReportExportInput): Promise<Buffer> {
-  const doc = await PDFDocument.create()
-  const font = await doc.embedFont(StandardFonts.Helvetica)
-  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold)
-  let page = doc.addPage([612, 792]) // Letter size
-  const marginX = 50
-  let y = 742
-
-  page.drawText('Weekly Report', { x: marginX, y, size: 18, font: boldFont })
-  y -= 30
-
-  for (const [field, value] of rows(input)) {
-    if (y < 60) {
-      page = doc.addPage([612, 792])
-      y = 742
-    }
-    page.drawText(`${field}:`, { x: marginX, y, size: 11, font: boldFont, color: rgb(0.2, 0.2, 0.2) })
-    y -= 16
-
-    const text = value || '—'
-    const maxCharsPerLine = 95
-    for (let i = 0; i < text.length; i += maxCharsPerLine) {
-      if (y < 60) {
-        page = doc.addPage([612, 792])
-        y = 742
-      }
-      page.drawText(text.slice(i, i + maxCharsPerLine), { x: marginX + 10, y, size: 10, font })
-      y -= 14
-    }
-    y -= 6
-  }
-
-  const bytes = await doc.save()
-  return Buffer.from(bytes)
-}
+// The PDF is laid out per report type in reportPdf.ts, in the style of the Accounting weekly summary report.
+export const buildPdf = buildReportPdf

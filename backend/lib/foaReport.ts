@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isAccountingDepartment } from './accountingReport.js'
 
 // Field Operations Admin department's weekly report — a much richer shape
 // than the generic report, modeled on the team's existing Jotform. Fixed
@@ -43,7 +44,9 @@ const territoryEnum = z.enum(FOA_TERRITORIES)
 const attendanceTokenEnum = z.enum(FOA_ATTENDANCE_TOKENS)
 const attendanceColumnEnum = z.enum(FOA_ATTENDANCE_COLUMNS)
 const checklistTaskEnum = z.enum(FOA_CHECKLIST_TASKS)
-const checklistDayEnum = z.enum(FOA_CHECKLIST_DAYS)
+// A Saturday worked to make up for a weekday off can carry ticks too; it is not one of the five counted days.
+export const FOA_MAKE_UP_DAY = 'Saturday'
+const checklistDayEnum = z.enum([...FOA_CHECKLIST_DAYS, FOA_MAKE_UP_DAY])
 
 // attendance[isoDate][column] = tokens selected for that cell
 const attendanceSchema = z.record(z.string(), z.record(attendanceColumnEnum, z.array(attendanceTokenEnum)))
@@ -85,6 +88,15 @@ export function isFoaDepartment(departmentName: string): boolean {
   return departmentName.trim().toUpperCase() === 'FOA'
 }
 
-export function resolveSchemaKey(departmentName: string): 'foa' | 'generic' {
-  return isFoaDepartment(departmentName) ? 'foa' : 'generic'
+export type SchemaKey = 'foa' | 'accounting' | 'generic'
+
+export function resolveSchemaKey(departmentName: string): SchemaKey {
+  if (isFoaDepartment(departmentName)) return 'foa'
+  if (isAccountingDepartment(departmentName)) return 'accounting'
+  return 'generic'
+}
+
+// Report types where each employee files their own report, as opposed to one team-wide report filed by a team leader.
+export function isIndividualSchema(schemaKey: string): boolean {
+  return schemaKey === 'foa' || schemaKey === 'accounting'
 }

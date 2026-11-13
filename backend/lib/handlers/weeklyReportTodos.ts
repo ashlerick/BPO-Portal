@@ -2,11 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from '../prisma.js'
 import { notifyUsers } from '../notify.js'
 import { isFoaDepartment } from '../foaReport.js'
+import { isAccountingDepartment } from '../accountingReport.js'
 import { cronAuthorized } from './inventoryReminders.js'
 
 // The weekly report to-do, called by a Vercel cron on Friday morning in Manila (see vercel.json).
 //   - everyone who has to file a weekly report gets a to-do "Submit weekly report (Oct 19-25)", due the Monday after
-//   - on a team that files one report per person (FOA) that is everyone on the team; on any other team it is the team leader
+//   - on a team that files one report per person (FOA, accounting) that is everyone on the team; on any other team it is the team leader
 // The week range in the title is what stops duplicates: running the job twice adds nothing, and a to-do someone deleted is not made again.
 // Submitting the report completes the to-do (see completeWeeklyReportTodos, called from the reports endpoint).
 
@@ -43,7 +44,9 @@ export async function handler(req: VercelRequest, res: VercelResponse) {
     where: { status: 'active', teamId: { not: null }, user: { active: true } },
     select: { id: true, userId: true, user: { select: { roles: true } }, team: { select: { department: { select: { name: true } } } } },
   })
-  const owners = employees.filter((e) => (e.team && isFoaDepartment(e.team.department.name)) || e.user.roles.includes('team_leader'))
+  const owners = employees.filter(
+    (e) => (e.team && (isFoaDepartment(e.team.department.name) || isAccountingDepartment(e.team.department.name))) || e.user.roles.includes('team_leader'),
+  )
 
   // Deleted ones count too, so a to-do someone removed is not made again.
   const existing = new Set(

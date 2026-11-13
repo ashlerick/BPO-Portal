@@ -6,7 +6,8 @@ import { requireAuth, type AuthedRequest } from '../lib/middleware.js'
 import { logAudit } from '../lib/audit.js'
 import { getDownloadUrl, putObject } from '../lib/s3.js'
 import { buildCsv, buildPdf, buildXlsx, type ReportData } from '../lib/reports.js'
-import { foaReportDataSchema, resolveSchemaKey, type FoaReportData } from '../lib/foaReport.js'
+import { foaReportDataSchema, isIndividualSchema, resolveSchemaKey, type FoaReportData } from '../lib/foaReport.js'
+import { accountingReportDataSchema, type AccountingReportData } from '../lib/accountingReport.js'
 import { formatDisplayName } from '../lib/names.js'
 import { notifyUsers } from '../lib/notify.js'
 import { completeWeeklyReportTodos } from '../lib/handlers/weeklyReportTodos.js'
@@ -49,9 +50,9 @@ const transitionSchema = z.object({
 function parseReportData(
   schemaKey: string,
   data: unknown,
-): { success: true; data: (ReportData | FoaReportData) | undefined } | { success: false } {
+): { success: true; data: (ReportData | FoaReportData | AccountingReportData) | undefined } | { success: false } {
   if (data === undefined) return { success: true, data: undefined }
-  const schema = schemaKey === 'foa' ? foaReportDataSchema : reportDataSchema
+  const schema = schemaKey === 'foa' ? foaReportDataSchema : schemaKey === 'accounting' ? accountingReportDataSchema : reportDataSchema
   const parsed = schema.safeParse(data)
   return parsed.success ? { success: true, data: parsed.data } : { success: false }
 }
@@ -75,8 +76,8 @@ async function canEditTeam(req: AuthedRequest, teamId: string): Promise<boolean>
   return (await myTeamId(req)) === teamId
 }
 
-// Extends canEditTeam for the FOA-style case: a plain employee can create
-// or edit only the individually-authored report they own, never a team
+// Extends canEditTeam for the individually-authored reports (FOA, accounting):
+// a plain employee can create or edit only the report they own, never a team
 // leader/HR/Admin-only action.
 async function canEditReport(
   req: AuthedRequest,
@@ -85,7 +86,7 @@ async function canEditReport(
   authorId: string | null,
 ): Promise<boolean> {
   if (await canEditTeam(req, teamId)) return true
-  if (schemaKey !== 'foa' || authorId !== req.auth.sub) return false
+  if (!isIndividualSchema(schemaKey) || authorId !== req.auth.sub) return false
   return (await myTeamId(req)) === teamId
 }
 
@@ -174,9 +175,9 @@ async function handleCreate(req: AuthedRequest, res: VercelResponse) {
       periodStart: new Date(periodStart),
       periodEnd: new Date(periodEnd),
       schemaKey,
-      // Individually-authored reports (FOA) are owned by whoever created
-      // them; generic team-wide reports have no single author.
-      authorId: schemaKey === 'foa' ? req.auth.sub : null,
+      // Individually-authored reports (FOA, accounting) are owned by whoever
+      // created them; generic team-wide reports have no single author.
+      authorId: isIndividualSchema(schemaKey) ? req.auth.sub : null,
       data: (parsedData.data ?? {}) as Prisma.InputJsonValue,
     },
   })
@@ -344,7 +345,7 @@ async function handleExport(req: AuthedRequest, res: VercelResponse, id: string)
     status: report.status,
     schemaKey: report.schemaKey,
     authorName,
-    data: report.data as ReportData | FoaReportData,
+    data: report.data as ReportData | FoaReportData | AccountingReportData,
   }
 
   let buffer: Buffer
