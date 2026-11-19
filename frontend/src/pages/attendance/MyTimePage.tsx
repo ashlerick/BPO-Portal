@@ -50,10 +50,10 @@ export function MyTimePage() {
   const [anchor, setAnchor] = useState(today)
 
   const range = mode === 'week' ? { from: mondayOf(anchor), to: addDaysIso(mondayOf(anchor), 6) } : monthBounds(anchor)
-  const { data, loading, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?from=${range.from}&to=${range.to}`)
+  const { data, loading, error } = useApiData<AttendanceRecord[]>(`/leave/attendance?from=${range.from}&to=${range.to}&mine=1`)
 
   // Overtime HR gave, by shift day. A day with overtime is listed even if there is no attendance record yet.
-  const { data: given } = useApiData<OvertimeRow[]>(`/hr/overtime?from=${range.from}&to=${range.to}`)
+  const { data: given } = useApiData<OvertimeRow[]>(`/hr/overtime?from=${range.from}&to=${range.to}&mine=1`)
   const overtimeByDate = new Map<string, OvertimeRow[]>()
   for (const g of given ?? []) overtimeByDate.set(g.date.slice(0, 10), [...(overtimeByDate.get(g.date.slice(0, 10)) ?? []), g])
 

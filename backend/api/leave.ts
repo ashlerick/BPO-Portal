@@ -209,7 +209,8 @@ function parseEmployeeFilter(req: AuthedRequest): { employeeId: string } | Recor
 }
 
 async function handleListAttendance(req: AuthedRequest, res: VercelResponse) {
-  const scope = isHrOrAdmin(req) ? {} : { employee: { userId: req.auth.sub } }
+  // `mine=1` is the My Time page: it is always the caller's own rows, even for HR/Admin who otherwise see everyone.
+  const scope = isHrOrAdmin(req) && req.query.mine !== '1' ? {} : { employee: { userId: req.auth.sub } }
   const range = parseDateRange(req)
   const where = { ...scope, ...parseEmployeeFilter(req), ...(range ? { date: range } : {}) }
 

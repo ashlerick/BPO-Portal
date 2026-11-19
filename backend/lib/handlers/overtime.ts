@@ -102,7 +102,8 @@ export async function handler(req: AuthedRequest, res: VercelResponse) {
     }
     const requested = queryString(req, 'employeeId')
     let employeeId: string | undefined
-    if (hr) employeeId = requested
+    // `mine=1` (the My Time page) is the caller's own overtime, even for HR/Admin who otherwise see everyone's.
+    if (hr && queryString(req, 'mine') !== '1') employeeId = requested
     else {
       const me = await myEmployee(req)
       if (!me || (requested && requested !== me.id)) return me ? forbid(res) : res.status(200).json([])
